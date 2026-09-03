@@ -1,0 +1,186 @@
+import type {
+  ActualSession,
+  ChatMessage,
+  FuelLog,
+  MemoryCandidate,
+  PersistedMemory,
+  PlannedSession,
+  Profile,
+  RecoveryLog,
+  Sport,
+} from '../domain/types.js';
+import { newId } from './ids.js';
+import type {
+  NewActualSession,
+  NewFuelLog,
+  NewPlannedSession,
+  NewRecoveryLog,
+  RelevantHistory,
+  Repository,
+} from './repository.js';
+
+export interface InMemoryRepositoryOptions {
+  /** Injectable clock for deterministic tests. */
+  now?: () => Date;
+}
+
+export class InMemoryRepository implements Repository {
+  private profiles = new Map<string, Profile>();
+  private planned = new Map<string, PlannedSession>();
+  private actual = new Map<string, ActualSession>();
+  private fuelLogs: FuelLog[] = [];
+  private recoveryLogs: RecoveryLog[] = [];
+  private messages: ChatMessage[] = [];
+  private memories: PersistedMemory[] = [];
+  private readonly now: () => Date;
+
+  constructor(opts: InMemoryRepositoryOptions = {}) {
+    this.now = opts.now ?? (() => new Date());
+  }
+
+  private iso(): string {
+    return this.now().toISOString();
+  }
+
+  async getProfile(userId: string): Promise<Profile | undefined> {
+    return this.profiles.get(userId);
+  }
+
+  async upsertProfile(profile: Profile): Promise<Profile> {
+    this.profiles.set(profile.user_id, profile);
+    return profile;
+  }
+
+  async savePlannedSession(input: NewPlannedSession): Promise<PlannedSession> {
+    const session: PlannedSession = {
+      ...input,
+      id: newId('plan'),
+      kind: 'planned',
+      created_at: this.iso(),
+    };
+    this.planned.set(session.id, session);
+    return session;
+  }
+
+  async getPlannedSession(id: string): Promise<PlannedSession | undefined> {
+    return this.planned.get(id);
+  }
+
+  async listPlannedSessions(userId: string): Promise<PlannedSession[]> {
+    return [...this.planned.values()]
+      .filter((s) => s.user_id === userId)
+      .sort((a, b) => a.start_at.localeCompare(b.start_at));
+  }
+
+  async findPlannedSessionForDate(
+    userId: string,
+    dateIso: string,
+    sport?: Sport,
+  ): Promise<PlannedSession | undefined> {
+    const day = dateIso.slice(0, 10);
+    const matches = (await this.listPlannedSessions(userId)).filter(
+      (s) => s.start_at.slice(0, 10) === day && (sport ? s.sport === sport : true),
+    );
+    // Most recently created plan for that day wins.
+    return matches.sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  }
+
+  async saveActualSession(input: NewActualSession): Promise<ActualSession> {
+    const session: ActualSession = {
+      ...input,
+      id: newId('act'),
+      kind: 'actual',
+      created_at: this.iso(),
+    };
+    this.actual.set(session.id, session);
+    return session;
+  }
+
+  async getActualSession(id: string): Promise<ActualSession | undefined> {
+    return this.actual.get(id);
+  }
+
+  async listActualSessions(userId: string): Promise<ActualSession[]> {
+    return [...this.actual.values()]
+      .filter((s) => s.user_id === userId)
+      .sort((a, b) => a.start_at.localeCompare(b.start_at));
+  }
+
+  async saveFuelLog(input: NewFuelLog): Promise<FuelLog> {
+    const log: FuelLog = {
+      ...input,
+      id: newId('fuel'),
+      logged_at: this.iso(),
+    };
+    this.fuelLogs.push(log);
+    return log;
+  }
+
+  async listFuelLogs(userId: string, sessionId?: string): Promise<FuelLog[]> {
+    return this.fuelLogs.filter(
+      (l) => l.user_id === userId && (sessionId ? l.session_id === sessionId : true),
+    );
+  }
+
+  async saveRecoveryLog(input: NewRecoveryLog): Promise<RecoveryLog> {
+    const log: RecoveryLog = {
+      ...input,
+      id: newId('rec'),
+      logged_at: this.iso(),
+    };
+    this.recoveryLogs.push(log);
+    return log;
+  }
+
+  async listRecoveryLogs(userId: string): Promise<RecoveryLog[]> {
+    return this.recoveryLogs.filter((l) => l.user_id === userId);
+  }
+
+  async appendMessage(msg: Omit<ChatMessage, 'id' | 'created_at'>): Promise<ChatMessage> {
+    const stored: ChatMessage = { ...msg, id: newId('msg'), created_at: this.iso() };
+    this.messages.push(stored);
+    return stored;
+  }
+
+  async listMessages(conversationId: string): Promise<ChatMessage[]> {
+    return this.messages.filter((m) => m.conversation_id === conversationId);
+  }
+
+  async proposeMemory(candidate: MemoryCandidate): Promise<PersistedMemory> {
+    // Application code owns persistence; the agent only proposes (ARCHITECTURE.md §5).
+    const existing = this.memories.find(
+      (m) => m.user_id === candidate.user_id && m.key === candidate.key,
+    );
+    if (existing) {
+      existing.value = candidate.value;
+      existing.certainty = candidate.certainty;
+      existing.persisted_at = this.iso();
+      return existing;
+    }
+    const persisted: PersistedMemory = {
+      ...candidate,
+      id: newId('mem'),
+      status: 'active',
+      persisted_at: this.iso(),
+    };
+    this.memories.push(persisted);
+    return persisted;
+  }
+
+  async listMemories(userId: string): Promise<PersistedMemory[]> {
+    return this.memories.filter((m) => m.user_id === userId);
+  }
+
+  async getRelevantHistory(
+    userId: string,
+    filter: { sport?: Sport; limit?: number },
+  ): Promise<RelevantHistory> {
+    const limit = filter.limit ?? 5;
+    const sessions = (await this.listActualSessions(userId))
+      .filter((s) => (filter.sport ? s.sport === filter.sport : true))
+      .slice(-limit)
+      .reverse();
+    const recovery = (await this.listRecoveryLogs(userId)).slice(-limit).reverse();
+    return { recent_actual_sessions: sessions, recent_recovery_logs: recovery };
+  }
+}
