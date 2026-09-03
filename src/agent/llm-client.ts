@@ -1,0 +1,66 @@
+import type { ActualSession, PersistedMemory, PlannedSession, Profile } from '../domain/types.js';
+import type { RelevantHistory } from '../data/repository.js';
+
+/**
+ * The LLM's role here is strictly conversational orchestration
+ * (ARCHITECTURE.md, AGENT_SPEC.md): interpret language, pick tools, phrase
+ * results. It never computes fueling numbers — those come from tool results
+ * produced by the deterministic engine.
+ *
+ * This interface lets a real provider (OpenAI/Anthropic function-calling) drop
+ * in later. The vertical slice ships a deterministic rule-based implementation.
+ */
+
+export interface ContextPackage {
+  now_iso: string;
+  profile?: Profile;
+  current_plan?: PlannedSession;
+  last_actual_session?: ActualSession;
+  history: RelevantHistory;
+  memories: PersistedMemory[];
+}
+
+export interface ToolSchema {
+  name: string;
+  description: string;
+}
+
+export interface PlannedToolCall {
+  tool: string;
+  /** Arg values equal to the string "$last" are resolved by the orchestrator to
+   *  the id of the most recent matching saved record. */
+  args: Record<string, unknown>;
+}
+
+export interface InterpretRequest {
+  message: string;
+  context: ContextPackage;
+  tools: ToolSchema[];
+}
+
+export interface InterpretResult {
+  intent: string;
+  tool_calls: PlannedToolCall[];
+  /** When set, the orchestrator skips tools and returns this question. */
+  clarifying_question?: string;
+  notes?: string[];
+}
+
+export interface ToolResult {
+  tool: string;
+  ok: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+export interface ComposeRequest {
+  message: string;
+  context: ContextPackage;
+  intent: string;
+  tool_results: ToolResult[];
+}
+
+export interface LlmClient {
+  interpret(req: InterpretRequest): Promise<InterpretResult>;
+  compose(req: ComposeRequest): Promise<string>;
+}
