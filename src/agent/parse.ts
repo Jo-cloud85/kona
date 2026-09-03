@@ -25,11 +25,23 @@ export function extractDistanceKm(text: string): number | undefined {
 }
 
 export function extractDurationMinutes(text: string): number | undefined {
-  const h = /(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i.exec(text);
-  const min = /(\d+)\s*(?:minutes?|mins?|min)\b/i.exec(text);
+  const t = text.toLowerCase();
   let total = 0;
-  if (h) total += Number(h[1]) * 60;
+
+  // Worded hours: "an hour", "half an hour", "an hour and a half", "a couple of hours".
+  if (/\ban? hour and a half\b/.test(t) || /\b1\.5\s*(?:hours?|hrs?)\b/.test(t)) total += 90;
+  else if (/\bhalf an hour\b/.test(t)) total += 30;
+  else if (/\ba couple (?:of )?hours\b/.test(t)) total += 120;
+  else if (/\b(?:an?|one) hour\b/.test(t)) total += 60;
+
+  if (total === 0) {
+    const h = /(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i.exec(text);
+    if (h) total += Number(h[1]) * 60;
+  }
+  // "N minutes" as a duration, but not "N minutes in/into" (elapsed-time phrasing).
+  const min = /(\d+)\s*(?:minutes?|mins?|min)\b(?!\s+(?:in|into)\b)/i.exec(text);
   if (min) total += Number(min[1]);
+
   return total > 0 ? Math.round(total) : undefined;
 }
 
@@ -85,6 +97,67 @@ export function extractIntensity(text: string): Intensity | undefined {
   if (/\b(moderate|steady)\b/i.test(text)) return 'moderate';
   if (/\b(race|time trial)\b/i.test(text)) return 'race';
   return undefined;
+}
+
+/**
+ * Read perceived exertion from plain language ("I sweat and pant a lot 15 min
+ * in", "could hold a conversation") — used when the user answers a question
+ * about how hard a session feels. Falls back to keyword intensity.
+ */
+export function parsePerceivedIntensity(text: string): Intensity | undefined {
+  const t = text.toLowerCase();
+  if (
+    /\b(race pace|all[- ]?out|flat out|maximal|as hard as)\b/.test(t)
+  ) {
+    return 'race';
+  }
+  if (
+    /\b(pant|panting|gasping|sweat\w* a lot|sweat\w* buckets|out of breath|can'?t talk|brutal|gruelling|grueling|smashed|really hard|very hard|super hard|hardcore|intense|kills? me|wrecked|exhaust\w*)\b/.test(
+      t,
+    )
+  ) {
+    return 'hard';
+  }
+  if (/\b(moderate|steady|some effort|working but|breathing hard but|a bit puffed|challenging)\b/.test(t)) {
+    return 'moderate';
+  }
+  if (
+    /\b(easy|comfortable|chatty|could talk|hold a conversation|conversational|relaxed|gentle|cruise\w*)\b/.test(
+      t,
+    )
+  ) {
+    return 'easy';
+  }
+  return extractIntensity(text);
+}
+
+export interface ClarificationAnswer {
+  intensity?: Intensity;
+  duration_minutes?: number;
+  distance_km?: number;
+  /** 0 = Monday .. 6 = Sunday, if the user named a day. */
+  day_index?: number;
+  sport?: Sport;
+}
+
+/** Parse a reply that fills in missing detail for a planned session. */
+export function parseClarificationAnswer(text: string): ClarificationAnswer {
+  const answer: ClarificationAnswer = {};
+  const intensity = parsePerceivedIntensity(text);
+  if (intensity) answer.intensity = intensity;
+  const duration = extractDurationMinutes(text);
+  if (duration !== undefined) answer.duration_minutes = duration;
+  const distance = extractDistanceKm(text);
+  if (distance !== undefined) answer.distance_km = distance;
+  const sport = extractSport(text);
+  if (sport) answer.sport = sport;
+  for (const { index, re } of DAY_MATCHERS) {
+    if (re.test(text)) {
+      answer.day_index = index;
+      break;
+    }
+  }
+  return answer;
 }
 
 /** Text after "because" / "cause" / "as my ...", used as a modification reason. */

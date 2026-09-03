@@ -21,9 +21,13 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 |---|----------|--------------------|----------|
 | AW1 | "Monday gym, Tuesday 8km run, Wednesday swim, Thursday rest, Friday bike + run, Sunday long run." | Parse 6 sessions across 5 days; save one `WeeklyPlan` with the sessions as linked planned records; Thursday recorded as a rest day; Friday's two sessions share a `session_group_id`. | ✅ `tests/agent/week-plan.test.ts` |
 | AW2 | Same week — analysis | Friday flagged as a double-session ("bigger fueling") day and top preparation priority; Sunday's long run flagged as a key day; day-before prep advice, number-free where the session can't be classified. | ✅ `tests/engine/week.test.ts`, `tests/agent/week-plan.test.ts` |
-| AW3 | Unclassifiable session | Gym / swim entry with no distance or duration → treated as a routine day; **no guessed duration**. | ✅ `tests/engine/week.test.ts` |
+| AW3 | Unclassifiable session | Gym / swim entry with no distance or duration → treated as a routine day; **no guessed duration**; Kona asks instead. | ✅ `tests/engine/week.test.ts`, `tests/agent/week-plan.test.ts` |
 | AW4 | Week remembered for comparison | A later "Actually I only ran 5km on Tuesday…" links to that week's Tuesday planned session; the plan stays 8 km. | ✅ `tests/agent/week-plan.test.ts` |
 | AW5 | Weekly-plan CRUD | `saveWeeklyPlan` replaces an existing plan for the same `(user, week_start)`. | ✅ `tests/data/repository.test.ts` |
+| AW6 | No fake "easy" | Sessions the user didn't rate show "(effort not set)", never an asserted "easy"; the reply asks targeted questions grouped by sport. | ✅ `tests/agent/week-plan.test.ts` |
+| AW7 | Plain-language answer fills gaps | "The gym sessions are about an hour and I sweat and pant a lot 15 minutes in" → those sessions become `hard`, `60 min`; `needs_detail` cleared; analysis re-runs. | ✅ `tests/agent/week-plan.test.ts` |
+| AW8 | Multi-day answer | "Sunday's long run is 22km, and the Saturday swim is 2km" updates each day and is **not** read as a new plan. | ✅ `tests/agent/week-plan.test.ts` |
+| AW9 | Long-run day-before advice | Long-session prep covers carb meals + steady hydration the day before (not right before), post-session protein (~20–40 g), and a conditional warm-weather sodium note that stays non-diagnostic about cramps. | ✅ `tests/engine/week.test.ts` |
 
 ## B. Calculation engine (CALCULATION_ENGINE_SPEC.md §21)
 

@@ -26,4 +26,5 @@ export {
   type WeekDay,
   type WeekDaySession,
   type WeekRecommendation,
+  type WeekQuestion,
 } from './week';

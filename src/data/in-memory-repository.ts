@@ -69,6 +69,19 @@ export class InMemoryRepository implements Repository {
     return this.planned.get(id);
   }
 
+  async updatePlannedSession(
+    id: string,
+    patch: Partial<
+      Pick<PlannedSession, 'intensity' | 'duration_minutes' | 'distance_km' | 'is_long' | 'needs_detail' | 'notes'>
+    >,
+  ): Promise<PlannedSession | undefined> {
+    const existing = this.planned.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...patch };
+    this.planned.set(id, updated);
+    return updated;
+  }
+
   async listPlannedSessions(userId: string): Promise<PlannedSession[]> {
     return [...this.planned.values()]
       .filter((s) => s.user_id === userId)

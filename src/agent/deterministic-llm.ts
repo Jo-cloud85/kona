@@ -12,7 +12,9 @@ import {
   extractIntensity,
   extractReason,
   extractSport,
+  parseClarificationAnswer,
   parseFuelItems,
+  parsePerceivedIntensity,
   parseRecovery,
   parseWeeklyPlan,
   reasonIsPain,
@@ -66,6 +68,77 @@ export class DeterministicLlmClient implements LlmClient {
         ],
         notes: [`Parsed ${items.length} intake item(s).`],
       };
+    }
+
+    // 1.5 Answering a question about an under-specified session in the saved week
+    const strongModification =
+      /\b(actually|only|ended up|instead|stopped|cut (it|the .*?) short|had to stop|didn'?t finish|turned back)\b/i.test(
+        text,
+      );
+    const pd = context.pending_plan_details;
+    if (pd && !futureMarker && !strongModification) {
+      const pendingSports = new Set(pd.groups.map((g) => g.sport));
+      const hasAnswerSignal =
+        /\d/.test(text) ||
+        /\b(easy|moderate|hard|tempo|steady|comfortable|panting?|sweat\w*|gasping|brutal|chatty)\b/i.test(text);
+
+      // Per-day answer ("Sunday's long run is 22km, and the Saturday swim is 2km").
+      const spans = parseWeeklyPlan(text);
+      const spansMatchPending =
+        spans.length >= 1 &&
+        spans.every((d) => d.rest || d.sessions.every((s) => pendingSports.has(s.sport)));
+
+      if (hasAnswerSignal && spansMatchPending) {
+        const calls: PlannedToolCall[] = [];
+        for (const day of spans) {
+          for (const s of day.sessions) {
+            const eff = parsePerceivedIntensity(s.raw) ?? s.intensity;
+            const dur = extractDurationMinutes(s.raw);
+            if (!eff && dur === undefined && s.distance_km === undefined) continue;
+            calls.push({
+              tool: 'update_planned_sessions',
+              args: {
+                week_start: pd.week_start,
+                day_index: day.day_index,
+                sport: s.sport,
+                ...(eff ? { intensity: eff } : {}),
+                ...(dur !== undefined ? { duration_minutes: dur } : {}),
+                ...(s.distance_km !== undefined ? { distance_km: s.distance_km } : {}),
+              },
+            });
+          }
+        }
+        if (calls.length) {
+          return { intent: 'clarify_plan_detail', tool_calls: calls, notes: [`Filling ${calls.length} session(s).`] };
+        }
+      }
+
+      // Whole-group answer ("the gym sessions are hard, about an hour").
+      if (hasAnswerSignal && spans.length < 2) {
+        const ans = parseClarificationAnswer(text);
+        const hasDetail =
+          ans.intensity !== undefined || ans.duration_minutes !== undefined || ans.distance_km !== undefined;
+        if (hasDetail) {
+          const sportFilter = ans.sport ?? (pd.groups.length === 1 ? pd.groups[0]!.sport : undefined);
+          return {
+            intent: 'clarify_plan_detail',
+            tool_calls: [
+              {
+                tool: 'update_planned_sessions',
+                args: {
+                  week_start: pd.week_start,
+                  ...(sportFilter ? { sport: sportFilter } : {}),
+                  ...(ans.day_index !== undefined ? { day_index: ans.day_index } : {}),
+                  ...(ans.intensity ? { intensity: ans.intensity } : {}),
+                  ...(ans.duration_minutes !== undefined ? { duration_minutes: ans.duration_minutes } : {}),
+                  ...(ans.distance_km !== undefined ? { distance_km: ans.distance_km } : {}),
+                },
+              },
+            ],
+            notes: [`Filling in plan detail for ${sportFilter ?? 'pending sessions'}.`],
+          };
+        }
+      }
     }
 
     // 2a. Plan a whole week (several weekday names, each with a session or rest)

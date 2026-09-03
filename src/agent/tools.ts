@@ -1,4 +1,4 @@
-import type { Intensity, Sport } from '../domain/types';
+import type { Intensity, MissingDetail, PlannedSession, Sport } from '../domain/types';
 import type { Repository } from '../data/repository';
 import { getProduct, resolveProductByPhrase } from '../data/products';
 import { newId } from '../data/ids';
@@ -30,6 +30,32 @@ function dateFromWeekStart(weekStart: string, dayIndex: number): string {
 
 /** Deterministic default start time per same-day sequence position. */
 const SEQUENCE_TIMES = ['07:00', '17:00', '18:30', '20:00'];
+
+function plannedToWeekSession(s: PlannedSession): WeekSessionInput {
+  return {
+    sport: s.sport,
+    intensity: s.intensity,
+    start_at: s.start_at,
+    distance_km: s.distance_km,
+    duration_minutes: s.duration_minutes,
+    is_long: s.is_long ?? false,
+    needs_detail: s.needs_detail ?? [],
+  };
+}
+
+/** What the user left unspecified for a planned session, so Kona can ask. */
+function computeNeedsDetail(opts: {
+  intensity_stated: boolean;
+  is_long: boolean;
+  has_duration: boolean;
+  has_distance: boolean;
+}): MissingDetail[] {
+  const needs: MissingDetail[] = [];
+  // A "long" session is conventionally easy/steady — don't nag about effort.
+  if (!opts.intensity_stated && !opts.is_long) needs.push('intensity');
+  if (!opts.has_duration && !opts.has_distance) needs.push('duration_or_distance');
+  return needs;
+}
 
 export interface ToolContext {
   repo: Repository;
@@ -154,11 +180,18 @@ export const TOOLS: Record<string, ToolDefinition> = {
         for (let i = 0; i < day.sessions.length; i++) {
           const s = day.sessions[i]!;
           const sport_ = sport(s, 'sport')!;
+          const intensityStated = s.intensity !== undefined && s.intensity !== null && s.intensity !== '';
           const intensity_ = intensity(s, 'intensity') ?? 'easy';
           const start_at = `${day.date}T${SEQUENCE_TIMES[Math.min(i, SEQUENCE_TIMES.length - 1)]}:00`;
           const distance_km = num(s, 'distance_km');
           const duration_minutes = num(s, 'duration_minutes');
           const isLong = s.is_long === true;
+          const needs_detail = computeNeedsDetail({
+            intensity_stated: intensityStated,
+            is_long: isLong,
+            has_duration: duration_minutes !== undefined,
+            has_distance: distance_km !== undefined,
+          });
 
           saved.push(
             await ctx.repo.savePlannedSession({
@@ -171,7 +204,8 @@ export const TOOLS: Record<string, ToolDefinition> = {
               session_group_id: groupId,
               sequence_index: day.sessions.length > 1 ? i : undefined,
               weekly_plan_id: weeklyPlan.id,
-              notes: isLong ? 'long session' : undefined,
+              is_long: isLong || undefined,
+              needs_detail: needs_detail.length ? needs_detail : undefined,
             }),
           );
           analysisSessions.push({
@@ -181,6 +215,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
             distance_km,
             duration_minutes,
             is_long: isLong,
+            needs_detail,
           });
         }
       }
@@ -215,14 +250,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
       const analysis = analyzeWeek({
         week_start: plan.week_start,
         rest_days: plan.rest_days,
-        sessions: sessions.map((s) => ({
-          sport: s.sport,
-          intensity: s.intensity,
-          start_at: s.start_at,
-          distance_km: s.distance_km,
-          duration_minutes: s.duration_minutes,
-          is_long: s.notes === 'long session',
-        })),
+        sessions: sessions.map(plannedToWeekSession),
         profile: {
           body_weight_kg: profile?.body_weight_kg ?? 0,
           usual_bottle_ml: profile?.usual_bottle_ml,
@@ -230,6 +258,78 @@ export const TOOLS: Record<string, ToolDefinition> = {
         },
       });
       return { weekly_plan: plan, sessions, rest_days: plan.rest_days, analysis };
+    },
+  },
+
+  update_planned_sessions: {
+    description:
+      "Fill in details the athlete left out of a saved weekly plan (how hard a session is, its duration or distance). Match by day and/or sport. Do NOT create a new plan. Re-runs and returns the week analysis.",
+    async run(args, ctx) {
+      const weekStart = str(args, 'week_start', false);
+      const plan = weekStart
+        ? await ctx.repo.getWeeklyPlan(ctx.userId, weekStart)
+        : (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
+      if (!plan) throw new ToolError('No weekly plan on file to update');
+
+      const all = await ctx.repo.listPlannedSessionsForWeeklyPlan(plan.id);
+      const wantSport = sport(args, 'sport', false);
+      const dayIndex = num(args, 'day_index');
+      const wantDate =
+        str(args, 'date', false) ??
+        (typeof dayIndex === 'number' ? dateFromWeekStart(plan.week_start, dayIndex) : undefined);
+
+      let targets = all.filter((s) => (s.needs_detail?.length ?? 0) > 0);
+      if (wantSport) targets = targets.filter((s) => s.sport === wantSport);
+      if (wantDate) targets = targets.filter((s) => s.start_at.slice(0, 10) === wantDate);
+      if (targets.length === 0) {
+        throw new ToolError('Nothing pending in the plan matches that day/sport.');
+      }
+
+      const newIntensity = intensity(args, 'intensity');
+      const newDuration = num(args, 'duration_minutes');
+      const newDistance = num(args, 'distance_km');
+      if (newIntensity === undefined && newDuration === undefined && newDistance === undefined) {
+        throw new ToolError('update_planned_sessions needs an intensity, duration_minutes, or distance_km');
+      }
+
+      const applied_fields: ('intensity' | 'duration_minutes' | 'distance_km')[] = [];
+      if (newIntensity !== undefined) applied_fields.push('intensity');
+      if (newDuration !== undefined) applied_fields.push('duration_minutes');
+      if (newDistance !== undefined) applied_fields.push('distance_km');
+
+      const updated = [];
+      for (const s of targets) {
+        const remaining = new Set(s.needs_detail ?? []);
+        const patch: Parameters<typeof ctx.repo.updatePlannedSession>[1] = {};
+        if (newIntensity !== undefined) {
+          patch.intensity = newIntensity;
+          remaining.delete('intensity');
+        }
+        if (newDuration !== undefined) {
+          patch.duration_minutes = newDuration;
+          remaining.delete('duration_or_distance');
+        }
+        if (newDistance !== undefined) {
+          patch.distance_km = newDistance;
+          remaining.delete('duration_or_distance');
+        }
+        patch.needs_detail = [...remaining];
+        updated.push(await ctx.repo.updatePlannedSession(s.id, patch));
+      }
+
+      const sessions = await ctx.repo.listPlannedSessionsForWeeklyPlan(plan.id);
+      const profile = await ctx.repo.getProfile(ctx.userId);
+      const analysis = analyzeWeek({
+        week_start: plan.week_start,
+        rest_days: plan.rest_days,
+        sessions: sessions.map(plannedToWeekSession),
+        profile: {
+          body_weight_kg: profile?.body_weight_kg ?? 0,
+          usual_bottle_ml: profile?.usual_bottle_ml,
+          known_sweat_data: profile?.known_sweat_data,
+        },
+      });
+      return { weekly_plan: plan, updated, applied_fields, sessions, rest_days: plan.rest_days, analysis };
     },
   },
 
@@ -466,6 +566,20 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
     type: 'object',
     properties: {
       week_start: { type: 'string', description: 'YYYY-MM-DD Monday. Omit for the most recent week.' },
+    },
+    required: [],
+  },
+
+  update_planned_sessions: {
+    type: 'object',
+    properties: {
+      week_start: { type: 'string', description: 'YYYY-MM-DD Monday. Omit for the most recent week.' },
+      day_index: { type: 'number', description: '0 = Monday .. 6 = Sunday. Narrows to one day.' },
+      date: { type: 'string', description: 'YYYY-MM-DD. Narrows to one day.' },
+      sport: { type: 'string', enum: SPORT_ENUM, description: 'Narrows to sessions of this sport.' },
+      intensity: { type: 'string', enum: INTENSITY_ENUM },
+      duration_minutes: { type: 'number' },
+      distance_km: { type: 'number' },
     },
     required: [],
   },

@@ -75,12 +75,68 @@ describe('weekly plan conversation slice', () => {
     expect(planned.every((p) => p.weekly_plan_id === weeks[0]!.id)).toBe(true);
 
     // Reply names the double day and the long run, with day-before prep.
-    expect(turn.reply).toMatch(/Fri: .*cycling \+ .*running — double session/);
+    expect(turn.reply).toMatch(/Fri: .*cycling.*\+.*running.*— double session/);
     expect(turn.reply).toMatch(/Thu: rest/);
-    expect(turn.reply).toMatch(/Sun: .*running/);
+    expect(turn.reply).toMatch(/Sun: .*long running/);
     expect(turn.reply).toMatch(/double-session day/i);
     expect(turn.reply).toMatch(/night before/i);
     expect(turn.reply).not.toMatch(/\bcaused by\b/i);
+
+    // It does NOT assert "easy" for sessions the user didn't rate, and asks.
+    expect(turn.reply).toMatch(/Mon: gym \(effort & distance\/time not set\)/);
+    expect(turn.reply).not.toMatch(/Mon: easy gym/);
+    expect(turn.reply).toMatch(/pin down/i);
+    expect(turn.reply).toMatch(/How hard .*gym/i);
+    expect(turn.reply).toMatch(/How hard .*swimming/i);
+    expect(turn.reply).toMatch(/how long .*\(or what distance\)/i);
+  });
+
+  it('asks about under-specified sessions, then fills them in from a plain-language answer', async () => {
+    await say(SPEC_WEEK);
+
+    // "I sweat and pant a lot 15 min in" => hard; "about an hour" => 60 min.
+    const turn = await say('The gym sessions take about an hour and I sweat and pant a lot 15 minutes in.');
+    expect(turn.intent).toBe('clarify_plan_detail');
+    expect(turn.tool_calls[0]!.tool).toBe('update_planned_sessions');
+
+    const gymSessions = (await repo.listPlannedSessions(DEMO_USER_ID)).filter((p) => p.sport === 'gym');
+    expect(gymSessions).toHaveLength(1); // only Monday in the spec week
+    expect(gymSessions[0]).toMatchObject({ intensity: 'hard', duration_minutes: 60 });
+    expect(gymSessions[0]!.needs_detail ?? []).toEqual([]);
+
+    expect(turn.reply).toMatch(/Updated: Mon gym → .*60 min.*hard/);
+    // still open: swim, running, cycling
+    expect(turn.reply).toMatch(/Still open:/);
+    expect(turn.reply).toMatch(/swimming/i);
+  });
+
+  it('a multi-day answer fills each day and is NOT read as a new plan', async () => {
+    await say('Monday gym, Wednesday swim, Friday gym, Sunday long run.');
+    const before = (await repo.listWeeklyPlans(DEMO_USER_ID)).length;
+
+    const turn = await say("Sunday's long run is usually 22km, and the Wednesday swim is about 2km.");
+    expect(turn.intent).toBe('clarify_plan_detail');
+    // no new weekly plan created
+    expect(await repo.listWeeklyPlans(DEMO_USER_ID)).toHaveLength(before);
+
+    const planned = await repo.listPlannedSessions(DEMO_USER_ID);
+    const sun = planned.find((p) => p.sport === 'running')!;
+    const wed = planned.find((p) => p.sport === 'swimming')!;
+    expect(sun.distance_km).toBe(22);
+    expect(wed.distance_km).toBe(2);
+  });
+
+  it('fills a single day from "Saturday swim is usually 1.5km"', async () => {
+    await say('Monday gym, Wednesday swim, Saturday swim, Sunday long run.');
+    const turn = await say('Saturday swim is usually about 1.5km.');
+    expect(turn.intent).toBe('clarify_plan_detail');
+
+    const swims = (await repo.listPlannedSessions(DEMO_USER_ID)).filter((p) => p.sport === 'swimming');
+    const sat = swims.find((p) => p.start_at.startsWith('2026-09-12'))!;
+    const wed = swims.find((p) => p.start_at.startsWith('2026-09-09'))!;
+    expect(sat.distance_km).toBe(1.5);
+    expect(sat.needs_detail).toEqual(['intensity']); // distance filled, effort still open
+    expect(wed.distance_km).toBeUndefined(); // Wednesday untouched
   });
 
   it('remembers the week so a later actual session links to the plan', async () => {

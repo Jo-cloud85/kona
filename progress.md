@@ -1,9 +1,9 @@
 # Kona — Progress
 
 ## Current milestone
-**M6 complete — weekly multi-day planning.** Next: a persistence backend to
-replace the in-memory store; food-estimation ranges (§14); historical pattern
-surfacing (§12).
+**M7 complete — weekly plan now asks for missing detail instead of assuming
+"easy".** Next: a persistence backend to replace the in-memory store;
+food-estimation ranges (§14); historical pattern surfacing (§12).
 
 ## Completed work
 
@@ -59,6 +59,15 @@ surfacing (§12).
 - Deterministic interpreter: `plan_week` intent when ≥2 weekday names are present. Anthropic client: `save_weekly_plan → plan_week` + a system-prompt bullet.
 - Responder: `composeWeekPlan` — week date range, day-by-day list (incl. rest days), the top 1–2 key-day prep lines, and a "remembered this" close.
 - Tests: +18 (`tests/engine/week.test.ts` ×5, `tests/agent/week-plan.test.ts` ×5 incl. the exact PRODUCT_VISION sentence and a later actual-session linking to the week's Tuesday plan, +8 repo). **49 total**, all green; typecheck + lint clean; verified in the browser.
+
+### M7 — Weekly plan asks for missing detail ✅
+_Prompted by user feedback: Kona was silently defaulting unstated intensity to "easy" and showing it as fact; gym/swim/long-run days got no fueling treatment._
+- `MissingDetail` type + `needs_detail` / `is_long` on `SessionInputCore`. `save_weekly_plan` records, per session, what the user didn't state (`intensity` when no effort word; `duration_or_distance` when neither given). A "long" session is exempt from the effort question (conventionally easy/steady).
+- `analyzeWeek` now returns `open_questions` (grouped by sport) and always keeps a long-session day in the recommendations. `describeWeekSession` shows a stated effort only — never a defaulted "easy" — and flags "(effort / distance/time not set)".
+- Long-session prep line rewritten to the fuller day-before advice the user asked for: normal carb meals + steady hydration *the day before* (not right before), a recovery meal with protein (~20–40 g from the rules table), and a conditional warm-weather sodium note kept non-diagnostic about cramps. Gym key days get an explicit post-session protein note (`resistance_training` is now passed to the engine).
+- New tool `update_planned_sessions` + intent `clarify_plan_detail`: fills effort/duration/distance for pending sessions, matched by day and/or sport, then re-runs the analysis. Parser gained `parsePerceivedIntensity` (RPE language → easy/moderate/hard), worded durations ("about an hour" → 60; "15 minutes in" is *not* a duration), and `parseClarificationAnswer`. `buildContext` exposes `pending_plan_details`; the deterministic and Anthropic interpreters route single-answer and multi-day ("Sunday's long run is 22km, and the Saturday swim is 2km") replies to it.
+- **Known limitation**: the deterministic parser handles one detail at a time or a clean day-prefixed list; a compound answer mixing day-prefixed and bare-sport clauses ("...gym is hard, about an hour. Tuesday run is 8km...") updates the day-prefixed parts and re-asks the rest. The real `AnthropicLlmClient` handles compound answers.
+- Tests: +3 (`tests/agent/week-plan.test.ts` now ×8: questions asked, plain-language answer fills gym, single-day fill, multi-day answer not mis-read as a new plan). **52 total**, all green; typecheck + lint clean; browser-verified against the user's actual message.
 
 ## Known issues / deliberate deferrals
 - **Fluid range**: rules table uses §5.2 (400–800 ml/h); §20's example JSON shows 500. Reconciliation noted in `CALCULATION_ENGINE_SPEC.md` §20.

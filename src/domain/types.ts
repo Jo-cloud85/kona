@@ -70,6 +70,9 @@ export interface Profile {
 // CALCULATION_ENGINE_SPEC.md §10)
 // ---------------------------------------------------------------------------
 
+/** Details the user did not give for a planned session, so Kona can ask. */
+export type MissingDetail = 'intensity' | 'duration_or_distance';
+
 export interface SessionInputCore {
   sport: Sport;
   /** ISO-8601 local datetime for the session start. */
@@ -83,6 +86,10 @@ export interface SessionInputCore {
   sequence_index?: number;
   /** Shared id for same-day linked sessions. */
   session_group_id?: string;
+  /** The user described it as a "long" session (long run, long ride, ...). */
+  is_long?: boolean;
+  /** What the user left unspecified. When non-empty, Kona should ask. */
+  needs_detail?: MissingDetail[];
   notes?: string;
 }
 

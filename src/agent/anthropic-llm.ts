@@ -45,7 +45,8 @@ const INTERPRET_SYSTEM = `You are Kona's conversation router. Kona is a calm, pr
 Your ONLY job this turn: read the athlete's message and call the tools that record what they said and fetch any fueling numbers. Do NOT write a reply to the user now. Do NOT state or compute any fueling, hydration, sodium, carbohydrate or protein numbers yourself — those come only from calculate_fueling_targets.
 
 Guidance:
-- A whole week of sessions (several weekday names, each with a session or "rest") -> save_weekly_plan with a "days" array (one entry per day mentioned; mark rest days). It returns the analysis itself, so do NOT also call calculate_fueling_targets.
+- A whole week of sessions (several weekday names, each with a session or "rest") -> save_weekly_plan with a "days" array (one entry per day mentioned; mark rest days). Only pass intensity/distance/duration the athlete actually stated — omit them otherwise so Kona can ask. It returns the analysis itself, so do NOT also call calculate_fueling_targets.
+- If CONTEXT.pending_plan_details is present and the athlete's message gives an effort level, duration, or distance for one of those sessions (e.g. "the gym sessions are hard, about an hour", "Saturday swim is usually 1.5km") -> update_planned_sessions with what they gave plus a sport and/or day filter. Do NOT create a new plan.
 - A single session they intend to do -> save_planned_session, then calculate_fueling_targets with phase "planning".
 - What actually happened (often different from the plan) -> save_actual_session (NEVER change the plan), then calculate_fueling_targets with phase "post_workout". Put their stated reason in "reason"; when the reason is pain or injury, also set context.injury_or_pain true and context.reason_for_modification.
 - Food, drink or products consumed -> log_fuel_intake with each item and the quantity they stated. Never invent nutrition values.
@@ -80,6 +81,10 @@ function contextForPrompt(ctx: ContextPackage): string {
         : null,
       current_plan: ctx.current_plan ?? null,
       last_actual_session: ctx.last_actual_session ?? null,
+      current_week_plan: ctx.current_week_plan
+        ? { week_start: ctx.current_week_plan.week_start, rest_days: ctx.current_week_plan.rest_days }
+        : null,
+      pending_plan_details: ctx.pending_plan_details ?? null,
       memories: ctx.memories.map((m) => ({ key: m.key, value: m.value })),
     },
     null,
@@ -97,6 +102,7 @@ function textFromMessage(message: Anthropic.Message): string {
 
 const INTENT_BY_TOOL: Record<string, string> = {
   save_weekly_plan: 'plan_week',
+  update_planned_sessions: 'clarify_plan_detail',
   save_planned_session: 'plan_session',
   save_actual_session: 'log_actual',
   log_fuel_intake: 'log_fuel',

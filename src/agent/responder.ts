@@ -191,42 +191,102 @@ interface WeekPlanResult {
   analysis: WeekAnalysis;
 }
 
+interface UpdatePlanResult extends WeekPlanResult {
+  updated: PlannedSession[];
+  applied_fields: ('intensity' | 'duration_minutes' | 'distance_km')[];
+}
+
+function describeWeekSession(s: WeekAnalysis['days'][number]['sessions'][number]): string {
+  const dist = s.distance_km ? `${s.distance_km} km ` : '';
+  // Show a stated effort only. A defaulted "easy" (or an unstated long run) is
+  // not asserted — Kona asks instead.
+  const effort = s.needs_detail.includes('intensity') || s.is_long ? '' : `${s.intensity} `;
+  let base = `${dist}${effort}${s.is_long ? 'long ' : ''}${s.sport}`.trim();
+  const gaps: string[] = [];
+  if (s.needs_detail.includes('intensity')) gaps.push('effort');
+  if (s.needs_detail.includes('duration_or_distance')) gaps.push('distance/time');
+  if (gaps.length) base += ` (${gaps.join(' & ')} not set)`;
+  return base;
+}
+
+function weekDayRows(analysis: WeekAnalysis, restDays: string[]): string[] {
+  const rows = [
+    ...analysis.days.map((d) => ({
+      date: d.date,
+      text: `${d.weekday_label}: ${d.sessions.map(describeWeekSession).join(' + ')}${
+        d.multi_session ? ' — double session' : ''
+      }`,
+    })),
+    ...restDays.map((date) => ({ date, text: `${weekdayShort(date)}: rest` })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+  return rows.map((r) => `- ${r.text}`);
+}
+
+function weekEndIso(weekStart: string): string {
+  const [wy, wm, wd] = weekStart.split('-').map(Number) as [number, number, number];
+  const end = new Date(wy, wm - 1, wd + 6);
+  return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+}
+
 function composeWeekPlan(results: ToolResult[]): string {
   const data = find(results, 'save_weekly_plan')?.data as WeekPlanResult | undefined;
   if (!data) return "I couldn't save that week — could you list the days again?";
   const { analysis, rest_days } = data;
 
-  const [wy, wm, wd] = analysis.week_start.split('-').map(Number) as [number, number, number];
-  const weekEnd = new Date(wy, wm - 1, wd + 6);
-  const endIso = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(
-    weekEnd.getDate(),
-  ).padStart(2, '0')}`;
-
   const sessionCount = analysis.days.reduce((n, d) => n + d.sessions.length, 0);
   const lines = [
-    `Saved your week (${fmtDate(analysis.week_start)}–${fmtDate(endIso)}): ${sessionCount} session${
+    `Saved your week (${fmtDate(analysis.week_start)}–${fmtDate(weekEndIso(analysis.week_start))}): ${sessionCount} session${
       sessionCount === 1 ? '' : 's'
     } across ${analysis.days.length} day${analysis.days.length === 1 ? '' : 's'}.`,
     '',
+    ...weekDayRows(analysis, rest_days),
   ];
-
-  const rows = [
-    ...analysis.days.map((d) => ({
-      date: d.date,
-      text: `${d.weekday_label}: ${d.sessions
-        .map((s) => `${s.distance_km ? `${s.distance_km} km ` : ''}${s.intensity} ${s.sport}`)
-        .join(' + ')}${d.multi_session ? ' — double session' : ''}`,
-    })),
-    ...rest_days.map((date) => ({ date, text: `${weekdayShort(date)}: rest` })),
-  ].sort((a, b) => a.date.localeCompare(b.date));
-  for (const r of rows) lines.push(`- ${r.text}`);
 
   if (analysis.recommendation_inputs.length) {
     lines.push('');
-    for (const rec of analysis.recommendation_inputs.slice(0, 2)) lines.push(rec.action);
+    for (const rec of analysis.recommendation_inputs.slice(0, 3)) lines.push(rec.action);
   }
-  lines.push('');
-  lines.push("I've remembered this — tell me what actually happens each day and I'll compare against the plan.");
+
+  if (analysis.open_questions.length) {
+    lines.push('');
+    lines.push("A few things I'd pin down so the fueling advice is right:");
+    for (const q of analysis.open_questions.slice(0, 4)) lines.push(`- ${q.text}`);
+  } else {
+    lines.push('');
+    lines.push("I've remembered this — tell me what actually happens each day and I'll compare against the plan.");
+  }
+  return lines.join('\n');
+}
+
+function composeClarifyPlanDetail(results: ToolResult[]): string {
+  const all = results.filter((r) => r.tool === 'update_planned_sessions' && r.ok).map((r) => r.data as UpdatePlanResult);
+  if (all.length === 0) return "I couldn't match that to a session in your plan — which day or sport did you mean?";
+  const data = all[all.length - 1]!; // last call has the fully-updated analysis
+  const { analysis, rest_days } = data;
+  // Report only what each call actually changed — don't re-assert defaulted fields.
+  const changed = all
+    .flatMap((d) =>
+      d.updated.map((s) => {
+        const bits: string[] = [];
+        if (d.applied_fields.includes('distance_km') && s.distance_km) bits.push(`${s.distance_km} km`);
+        if (d.applied_fields.includes('duration_minutes') && s.duration_minutes) bits.push(`~${s.duration_minutes} min`);
+        if (d.applied_fields.includes('intensity')) bits.push(s.intensity);
+        return `${weekdayShort(s.start_at.slice(0, 10))} ${s.sport} → ${bits.join(', ') || 'updated'}`;
+      }),
+    )
+    .join('; ');
+
+  const lines = [`Updated: ${changed}.`, '', ...weekDayRows(analysis, rest_days)];
+
+  if (analysis.recommendation_inputs.length) {
+    lines.push('');
+    for (const rec of analysis.recommendation_inputs.slice(0, 3)) lines.push(rec.action);
+  }
+  if (analysis.open_questions.length) {
+    lines.push('');
+    lines.push('Still open:');
+    for (const q of analysis.open_questions.slice(0, 4)) lines.push(`- ${q.text}`);
+  }
   return lines.join('\n');
 }
 
@@ -236,6 +296,8 @@ export function composeResponse(req: ComposeRequest): string {
       return composePlan(req.tool_results);
     case 'plan_week':
       return composeWeekPlan(req.tool_results);
+    case 'clarify_plan_detail':
+      return composeClarifyPlanDetail(req.tool_results);
     case 'log_actual':
       return composeActual(req);
     case 'log_fuel':

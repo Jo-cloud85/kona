@@ -63,6 +63,12 @@ export interface Repository {
   savePlannedSession(input: NewPlannedSession): Promise<PlannedSession>;
   getPlannedSession(id: string): Promise<PlannedSession | undefined>;
   listPlannedSessions(userId: string): Promise<PlannedSession[]>;
+  updatePlannedSession(
+    id: string,
+    patch: Partial<
+      Pick<PlannedSession, 'intensity' | 'duration_minutes' | 'distance_km' | 'is_long' | 'needs_detail' | 'notes'>
+    >,
+  ): Promise<PlannedSession | undefined>;
 
   /** Replaces any existing plan for the same (user, week_start). */
   saveWeeklyPlan(input: NewWeeklyPlan): Promise<WeeklyPlan>;

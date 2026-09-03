@@ -55,7 +55,7 @@ describe('analyzeWeek', () => {
     expect(a.recommendation_inputs).toHaveLength(0);
   });
 
-  it('uses the engine\'s own numbers for a long run that has a distance', () => {
+  it('classifies a long run that has a distance and gives fuller day-before advice', () => {
     const a = analyzeWeek({
       week_start: '2026-09-07',
       sessions: [s('2026-09-13', { distance_km: 20, is_long: true, start_at: '2026-09-13T07:00:00' })],
@@ -64,8 +64,15 @@ describe('analyzeWeek', () => {
     const sun = a.days.find((d) => d.date === '2026-09-13')!.sessions[0]!;
     expect(sun.duration_class).toBe('LONG');
     expect(sun.calc?.estimates.carbohydrate_g_per_hour).toMatchObject({ min: 30, max: 60 });
-    // week recommendation reuses the engine's day-before line
-    expect(a.recommendation_inputs.find((r) => r.date === '2026-09-13')?.action).toMatch(/Sun:/);
+
+    const rec = a.recommendation_inputs.find((r) => r.date === '2026-09-13')!;
+    expect(rec.action).toMatch(/^Sun/);
+    expect(rec.action).toMatch(/day before/i); // carbs + hydration the day before
+    expect(rec.action).toMatch(/not by drinking a lot right before/i);
+    expect(rec.action).toMatch(/protein \(~20–40 g\)/);
+    expect(rec.action).toMatch(/if it's warm.*sodium/i);
+    // stays non-diagnostic about cramps
+    expect(rec.action).toMatch(/cramps have several causes/i);
   });
 
   it('stamps the methodology version', () => {

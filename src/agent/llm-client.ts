@@ -1,5 +1,19 @@
-import type { ActualSession, PersistedMemory, PlannedSession, Profile } from '../domain/types';
+import type {
+  ActualSession,
+  MissingDetail,
+  PersistedMemory,
+  PlannedSession,
+  Profile,
+  Sport,
+  WeeklyPlan,
+} from '../domain/types';
 import type { RelevantHistory } from '../data/repository';
+
+/** Sessions in the current weekly plan the user hasn't fully specified. */
+export interface PendingPlanDetail {
+  week_start: string;
+  groups: { sport: Sport; day_indexes: number[]; weekday_labels: string[]; missing: MissingDetail[] }[];
+}
 
 /**
  * The LLM's role here is strictly conversational orchestration
@@ -16,6 +30,9 @@ export interface ContextPackage {
   profile?: Profile;
   current_plan?: PlannedSession;
   last_actual_session?: ActualSession;
+  current_week_plan?: WeeklyPlan;
+  /** Present when the latest weekly plan has sessions with missing detail. */
+  pending_plan_details?: PendingPlanDetail;
   history: RelevantHistory;
   memories: PersistedMemory[];
 }
