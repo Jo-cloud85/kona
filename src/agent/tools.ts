@@ -254,9 +254,117 @@ export const TOOLS: Record<string, ToolDefinition> = {
   },
 };
 
+const SPORT_ENUM = [...SPORTS];
+const INTENSITY_ENUM = [...INTENSITIES];
+
+/** JSON Schemas for the tool arguments, consumed by real LLM providers.
+ *  The deterministic client ignores these. */
+const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
+  get_user_profile: { type: 'object', properties: {}, required: [] },
+
+  save_planned_session: {
+    type: 'object',
+    properties: {
+      sport: { type: 'string', enum: SPORT_ENUM },
+      start_at: { type: 'string', description: 'ISO-8601 local datetime, e.g. 2026-09-04T06:00:00' },
+      distance_km: { type: 'number' },
+      duration_minutes: { type: 'number' },
+      intensity: { type: 'string', enum: INTENSITY_ENUM },
+      notes: { type: 'string' },
+    },
+    required: ['sport', 'start_at'],
+  },
+
+  save_actual_session: {
+    type: 'object',
+    properties: {
+      status: { type: 'string', enum: ['completed', 'modified', 'skipped', 'stopped_early'] },
+      sport: { type: 'string', enum: SPORT_ENUM },
+      start_at: { type: 'string' },
+      distance_km: { type: 'number' },
+      duration_minutes: { type: 'number' },
+      intensity: { type: 'string', enum: INTENSITY_ENUM },
+      reason: { type: 'string', description: "The athlete's stated reason, in their words" },
+      planned_session_id: { type: 'string' },
+      link_to_plan_date: { type: 'string', description: 'YYYY-MM-DD to link this to an existing plan' },
+    },
+    required: ['status'],
+  },
+
+  calculate_fueling_targets: {
+    type: 'object',
+    properties: {
+      planned_session_id: { type: 'string', description: 'Use "$last" for a plan created earlier this turn' },
+      actual_session_id: { type: 'string', description: 'Use "$last" for an actual session created earlier this turn' },
+      phase: { type: 'string', enum: ['planning', 'post_workout'] },
+      context: {
+        type: 'object',
+        properties: {
+          reason_for_modification: { type: 'string' },
+          injury_or_pain: { type: 'boolean' },
+          resistance_training: { type: 'boolean' },
+          poor_sleep: { type: 'boolean' },
+        },
+      },
+    },
+    required: ['phase'],
+  },
+
+  log_fuel_intake: {
+    type: 'object',
+    properties: {
+      session_id: { type: 'string' },
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            description: { type: 'string', description: 'What the athlete said, e.g. "SIS gel", "750ml bottle"' },
+            quantity: { type: 'number' },
+          },
+          required: ['description'],
+        },
+      },
+    },
+    required: ['items'],
+  },
+
+  save_recovery: {
+    type: 'object',
+    properties: {
+      free_text: { type: 'string', description: "The athlete's own words" },
+      overall_severity: { type: 'string', enum: ['none', 'low', 'moderate', 'high'] },
+      reported_symptoms: { type: 'array', items: { type: 'string' } },
+      sleep_quality: { type: 'string', enum: ['poor', 'ok', 'good', 'unknown'] },
+      session_id: { type: 'string' },
+    },
+    required: ['free_text'],
+  },
+
+  get_relevant_history: {
+    type: 'object',
+    properties: {
+      sport: { type: 'string', enum: SPORT_ENUM },
+      limit: { type: 'number' },
+    },
+    required: [],
+  },
+
+  propose_memory_update: {
+    type: 'object',
+    properties: {
+      key: { type: 'string' },
+      value: { type: 'string' },
+      certainty: { type: 'string', enum: ['user_reported', 'known'] },
+    },
+    required: ['key', 'value'],
+  },
+};
+
 export const TOOL_SCHEMAS: ToolSchema[] = Object.entries(TOOLS).map(([name, def]) => ({
   name,
   description: def.description,
+  input_schema: TOOL_INPUT_SCHEMAS[name] ?? { type: 'object', properties: {}, required: [] },
 }));
 
 export async function runTool(

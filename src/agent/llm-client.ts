@@ -23,6 +23,8 @@ export interface ContextPackage {
 export interface ToolSchema {
   name: string;
   description: string;
+  /** JSON Schema for the tool's arguments (used by real LLM providers). */
+  input_schema: Record<string, unknown>;
 }
 
 export interface PlannedToolCall {
