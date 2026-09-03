@@ -680,6 +680,8 @@ The main calculation tool should return:
 
 The numerical values above are **reference implementation placeholders** for coding/test scaffolding and require expert review before public use. The production engine should be driven from a versioned, reviewable rules table rather than hard-coded UI logic.
 
+> Implementation note (methodology v0.1.0): the `fluid_ml_per_hour` example above shows `min: 500`, but §5.2 gives the fallback planning range as 0.4–0.8 L/hour. The implemented rules table (`src/rules/v0_1_0.ts`) follows §5.2 and uses **400–800 ml/hour**, since §5.2 is the substantive guidance. This example JSON is left unchanged as an illustrative shape only.
+
 ---
 
 # 21. Unit tests
