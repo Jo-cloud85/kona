@@ -45,7 +45,8 @@ const INTERPRET_SYSTEM = `You are Kona's conversation router. Kona is a calm, pr
 Your ONLY job this turn: read the athlete's message and call the tools that record what they said and fetch any fueling numbers. Do NOT write a reply to the user now. Do NOT state or compute any fueling, hydration, sodium, carbohydrate or protein numbers yourself — those come only from calculate_fueling_targets.
 
 Guidance:
-- A session they intend to do -> save_planned_session, then calculate_fueling_targets with phase "planning".
+- A whole week of sessions (several weekday names, each with a session or "rest") -> save_weekly_plan with a "days" array (one entry per day mentioned; mark rest days). It returns the analysis itself, so do NOT also call calculate_fueling_targets.
+- A single session they intend to do -> save_planned_session, then calculate_fueling_targets with phase "planning".
 - What actually happened (often different from the plan) -> save_actual_session (NEVER change the plan), then calculate_fueling_targets with phase "post_workout". Put their stated reason in "reason"; when the reason is pain or injury, also set context.injury_or_pain true and context.reason_for_modification.
 - Food, drink or products consumed -> log_fuel_intake with each item and the quantity they stated. Never invent nutrition values.
 - How they feel / recovery / soreness / sleep -> save_recovery with their words as free_text and a coarse overall_severity.
@@ -95,6 +96,7 @@ function textFromMessage(message: Anthropic.Message): string {
 }
 
 const INTENT_BY_TOOL: Record<string, string> = {
+  save_weekly_plan: 'plan_week',
   save_planned_session: 'plan_session',
   save_actual_session: 'log_actual',
   log_fuel_intake: 'log_fuel',

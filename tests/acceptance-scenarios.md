@@ -15,6 +15,16 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | A4 | "My legs feel tired but okay." | Minimal recovery record (severity `low`, symptom `legs`); reply reflects in plain language, gives a safety-aware next action referencing the prior hip stop-early, asks one useful question. No percentage analytics. | ✅ `tests/agent/acceptance.test.ts` |
 | A5 | Conversation persistence | User + assistant messages stored per conversation. | ✅ `tests/agent/acceptance.test.ts` |
 
+## A-week. Weekly multi-day planning (PRODUCT_VISION.md "Weekly planning")
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AW1 | "Monday gym, Tuesday 8km run, Wednesday swim, Thursday rest, Friday bike + run, Sunday long run." | Parse 6 sessions across 5 days; save one `WeeklyPlan` with the sessions as linked planned records; Thursday recorded as a rest day; Friday's two sessions share a `session_group_id`. | ✅ `tests/agent/week-plan.test.ts` |
+| AW2 | Same week — analysis | Friday flagged as a double-session ("bigger fueling") day and top preparation priority; Sunday's long run flagged as a key day; day-before prep advice, number-free where the session can't be classified. | ✅ `tests/engine/week.test.ts`, `tests/agent/week-plan.test.ts` |
+| AW3 | Unclassifiable session | Gym / swim entry with no distance or duration → treated as a routine day; **no guessed duration**. | ✅ `tests/engine/week.test.ts` |
+| AW4 | Week remembered for comparison | A later "Actually I only ran 5km on Tuesday…" links to that week's Tuesday planned session; the plan stays 8 km. | ✅ `tests/agent/week-plan.test.ts` |
+| AW5 | Weekly-plan CRUD | `saveWeeklyPlan` replaces an existing plan for the same `(user, week_start)`. | ✅ `tests/data/repository.test.ts` |
+
 ## B. Calculation engine (CALCULATION_ENGINE_SPEC.md §21)
 
 | # | Scenario | Coverage |
@@ -44,7 +54,7 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | C1 | "chest pain … felt faint" | Escalate before the LLM; skip fueling flow; direct to medical care | ✅ |
 | C2 | "legs feel tired but okay" | No escalation; normal recovery flow | ✅ |
 
-## Deferred (not in this slice)
+## Deferred (not yet built)
 
-Weekly multi-day planning, food estimation ranges, photo analysis, historical
-pattern surfacing, real LLM provider, web UI, auth, persistence backend.
+Food estimation ranges, photo analysis, historical pattern surfacing, auth,
+persistence backend (state currently resets on server restart).

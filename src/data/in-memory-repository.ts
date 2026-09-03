@@ -8,6 +8,7 @@ import type {
   Profile,
   RecoveryLog,
   Sport,
+  WeeklyPlan,
 } from '../domain/types';
 import { newId } from './ids';
 import type {
@@ -15,6 +16,7 @@ import type {
   NewFuelLog,
   NewPlannedSession,
   NewRecoveryLog,
+  NewWeeklyPlan,
   RelevantHistory,
   Repository,
 } from './repository';
@@ -32,6 +34,7 @@ export class InMemoryRepository implements Repository {
   private recoveryLogs: RecoveryLog[] = [];
   private messages: ChatMessage[] = [];
   private memories: PersistedMemory[] = [];
+  private weeklyPlans: WeeklyPlan[] = [];
   private readonly now: () => Date;
 
   constructor(opts: InMemoryRepositoryOptions = {}) {
@@ -69,6 +72,38 @@ export class InMemoryRepository implements Repository {
   async listPlannedSessions(userId: string): Promise<PlannedSession[]> {
     return [...this.planned.values()]
       .filter((s) => s.user_id === userId)
+      .sort((a, b) => a.start_at.localeCompare(b.start_at));
+  }
+
+  async saveWeeklyPlan(input: NewWeeklyPlan): Promise<WeeklyPlan> {
+    this.weeklyPlans = this.weeklyPlans.filter(
+      (p) => !(p.user_id === input.user_id && p.week_start === input.week_start),
+    );
+    const plan: WeeklyPlan = {
+      id: newId('week'),
+      user_id: input.user_id,
+      week_start: input.week_start,
+      source_text: input.source_text,
+      rest_days: input.rest_days ?? [],
+      created_at: this.iso(),
+    };
+    this.weeklyPlans.push(plan);
+    return plan;
+  }
+
+  async getWeeklyPlan(userId: string, weekStart: string): Promise<WeeklyPlan | undefined> {
+    return this.weeklyPlans.find((p) => p.user_id === userId && p.week_start === weekStart);
+  }
+
+  async listWeeklyPlans(userId: string): Promise<WeeklyPlan[]> {
+    return this.weeklyPlans
+      .filter((p) => p.user_id === userId)
+      .sort((a, b) => a.week_start.localeCompare(b.week_start));
+  }
+
+  async listPlannedSessionsForWeeklyPlan(weeklyPlanId: string): Promise<PlannedSession[]> {
+    return [...this.planned.values()]
+      .filter((s) => s.weekly_plan_id === weeklyPlanId)
       .sort((a, b) => a.start_at.localeCompare(b.start_at));
   }
 

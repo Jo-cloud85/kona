@@ -4,6 +4,7 @@ export type {
   NewActualSession,
   NewFuelLog,
   NewRecoveryLog,
+  NewWeeklyPlan,
   RelevantHistory,
 } from './repository';
 export { InMemoryRepository, type InMemoryRepositoryOptions } from './in-memory-repository';

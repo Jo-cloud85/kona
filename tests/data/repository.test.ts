@@ -74,6 +74,36 @@ describe('InMemoryRepository', () => {
     expect(memories).toHaveLength(1);
     expect(memories[0]?.value).toBe('800');
   });
+
+  it('stores a weekly plan and links its sessions; re-saving the same week replaces it', async () => {
+    const repo = await createSeededRepository();
+    const week = await repo.saveWeeklyPlan({
+      user_id: DEMO_USER_ID,
+      week_start: '2026-09-07',
+      source_text: 'Mon gym, Sun long run',
+      rest_days: ['2026-09-10'],
+    });
+    await repo.savePlannedSession({
+      user_id: DEMO_USER_ID,
+      sport: 'gym',
+      start_at: '2026-09-07T07:00:00',
+      intensity: 'easy',
+      weekly_plan_id: week.id,
+    });
+
+    expect(await repo.getWeeklyPlan(DEMO_USER_ID, '2026-09-07')).toMatchObject({
+      rest_days: ['2026-09-10'],
+    });
+    expect(await repo.listPlannedSessionsForWeeklyPlan(week.id)).toHaveLength(1);
+
+    const replaced = await repo.saveWeeklyPlan({
+      user_id: DEMO_USER_ID,
+      week_start: '2026-09-07',
+      rest_days: [],
+    });
+    expect(replaced.id).not.toBe(week.id);
+    expect(await repo.listWeeklyPlans(DEMO_USER_ID)).toHaveLength(1);
+  });
 });
 
 describe('product catalog', () => {

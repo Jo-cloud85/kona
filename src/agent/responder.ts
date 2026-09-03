@@ -1,6 +1,6 @@
-import type { ActualSession, PlannedSession } from '../domain/types';
+import type { ActualSession, PlannedSession, WeeklyPlan } from '../domain/types';
 import type { FuelLog } from '../domain/types';
-import type { FuelingCalculation, RecommendationInput } from '../engine/index';
+import type { FuelingCalculation, RecommendationInput, WeekAnalysis } from '../engine/index';
 import { getProduct } from '../data/products';
 import type { ComposeRequest, ToolResult } from './llm-client';
 
@@ -29,6 +29,18 @@ function fmtDateTime(iso: string): string {
   hh = hh % 12 || 12;
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}, ${hh}:${mm} ${ampm}`;
+}
+
+/** "Mon 8 Sep" from a YYYY-MM-DD date. */
+function fmtDate(dateIso: string): string {
+  const [y, m, day] = dateIso.split('-').map(Number) as [number, number, number];
+  const d = new Date(y, m - 1, day);
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+function weekdayShort(dateIso: string): string {
+  const [y, m, day] = dateIso.split('-').map(Number) as [number, number, number];
+  return DAYS[new Date(y, m - 1, day).getDay()]!;
 }
 
 function find(results: ToolResult[], tool: string): ToolResult | undefined {
@@ -172,10 +184,58 @@ function composeRecovery(req: ComposeRequest): string {
   return lines.join('\n');
 }
 
+interface WeekPlanResult {
+  weekly_plan: WeeklyPlan;
+  sessions: PlannedSession[];
+  rest_days: string[];
+  analysis: WeekAnalysis;
+}
+
+function composeWeekPlan(results: ToolResult[]): string {
+  const data = find(results, 'save_weekly_plan')?.data as WeekPlanResult | undefined;
+  if (!data) return "I couldn't save that week — could you list the days again?";
+  const { analysis, rest_days } = data;
+
+  const [wy, wm, wd] = analysis.week_start.split('-').map(Number) as [number, number, number];
+  const weekEnd = new Date(wy, wm - 1, wd + 6);
+  const endIso = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(
+    weekEnd.getDate(),
+  ).padStart(2, '0')}`;
+
+  const sessionCount = analysis.days.reduce((n, d) => n + d.sessions.length, 0);
+  const lines = [
+    `Saved your week (${fmtDate(analysis.week_start)}–${fmtDate(endIso)}): ${sessionCount} session${
+      sessionCount === 1 ? '' : 's'
+    } across ${analysis.days.length} day${analysis.days.length === 1 ? '' : 's'}.`,
+    '',
+  ];
+
+  const rows = [
+    ...analysis.days.map((d) => ({
+      date: d.date,
+      text: `${d.weekday_label}: ${d.sessions
+        .map((s) => `${s.distance_km ? `${s.distance_km} km ` : ''}${s.intensity} ${s.sport}`)
+        .join(' + ')}${d.multi_session ? ' — double session' : ''}`,
+    })),
+    ...rest_days.map((date) => ({ date, text: `${weekdayShort(date)}: rest` })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+  for (const r of rows) lines.push(`- ${r.text}`);
+
+  if (analysis.recommendation_inputs.length) {
+    lines.push('');
+    for (const rec of analysis.recommendation_inputs.slice(0, 2)) lines.push(rec.action);
+  }
+  lines.push('');
+  lines.push("I've remembered this — tell me what actually happens each day and I'll compare against the plan.");
+  return lines.join('\n');
+}
+
 export function composeResponse(req: ComposeRequest): string {
   switch (req.intent) {
     case 'plan_session':
       return composePlan(req.tool_results);
+    case 'plan_week':
+      return composeWeekPlan(req.tool_results);
     case 'log_actual':
       return composeActual(req);
     case 'log_fuel':

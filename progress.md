@@ -1,8 +1,9 @@
 # Kona — Progress
 
 ## Current milestone
-**M5 complete — thin Next.js chat UI over `handleMessage`.** Next: weekly
-multi-day planning; later, a persistence backend to replace the in-memory store.
+**M6 complete — weekly multi-day planning.** Next: a persistence backend to
+replace the in-memory store; food-estimation ranges (§14); historical pattern
+surfacing (§12).
 
 ## Completed work
 
@@ -49,6 +50,16 @@ multi-day planning; later, a persistence backend to replace the in-memory store.
 - `next.config.ts` sets `agentRules: false` so `next dev` does not append its managed block to `CLAUDE.md` (that file is the product spec). Flip to `true` to opt into Next's bundled-docs pointer.
 - 38 tests still green; `typecheck`, `lint`, `next build` all clean.
 
+### M6 — Weekly multi-day planning ✅
+- `WeeklyPlan` domain type + `weekly_plan_id` on `PlannedSession` (week membership is derived from that link, so actual-vs-planned comparison works unchanged).
+- `src/engine/week.ts` — `analyzeWeek()`: groups sessions by day, flags double-session days (`multi_session`) and longer/harder "key" sessions, and emits day-before `preparation` recommendations. Sessions it can't classify (gym/swim with no distance or duration) are treated as routine days — **no guessed durations**. Numbers still come only from `calculateFuelingTargets`; the double-session prep line is deliberately number-free (matches PRODUCT_VISION's example).
+- `src/agent/parse.ts` — `parseWeeklyPlan()` (weekday spans → per-day sessions, "rest", "bike + run", "long run"), `resolveWeekStart()` (Monday of the week, `+7` for "next week"), `dateForWeekday()`.
+- Repository: `saveWeeklyPlan` (replaces by `(user, week_start)`), `getWeeklyPlan`, `listWeeklyPlans`, `listPlannedSessionsForWeeklyPlan`.
+- Tools: `save_weekly_plan` (persists the week as linked planned sessions with per-day `session_group_id`/`sequence_index`, then returns the analysis — no separate `calculate_fueling_targets` call) and `get_weekly_plan`.
+- Deterministic interpreter: `plan_week` intent when ≥2 weekday names are present. Anthropic client: `save_weekly_plan → plan_week` + a system-prompt bullet.
+- Responder: `composeWeekPlan` — week date range, day-by-day list (incl. rest days), the top 1–2 key-day prep lines, and a "remembered this" close.
+- Tests: +18 (`tests/engine/week.test.ts` ×5, `tests/agent/week-plan.test.ts` ×5 incl. the exact PRODUCT_VISION sentence and a later actual-session linking to the week's Tuesday plan, +8 repo). **49 total**, all green; typecheck + lint clean; verified in the browser.
+
 ## Known issues / deliberate deferrals
 - **Fluid range**: rules table uses §5.2 (400–800 ml/h); §20's example JSON shows 500. Reconciliation noted in `CALCULATION_ENGINE_SPEC.md` §20.
 - All v0.1.0 numbers are spec placeholders — **require expert review before public launch**.
@@ -59,4 +70,4 @@ multi-day planning; later, a persistence backend to replace the in-memory store.
 - Node 20.12 vs eslint-visitor-keys wanting 20.19+ — warning only.
 
 ## Next recommended task
-Weekly multi-day planning: parse a week ("Mon gym, Tue 8km, ... Sun long run"), save it, flag double-session and longer/harder days, and prepare ahead of key sessions (CALCULATION_ENGINE_SPEC.md §9, §11). Separately, when persistence matters: replace `InMemoryRepository` with a real backend behind the existing `Repository` interface.
+Replace `InMemoryRepository` with a real backend (Postgres/Supabase) behind the existing `Repository` interface so state survives restarts. Then food-estimation ranges for vague meals (§14, scenarios B14/B15) and cautious historical pattern surfacing (§12, B12).

@@ -6,6 +6,7 @@ import type {
   PlannedToolCall,
 } from './llm-client';
 import {
+  dateForWeekday,
   extractDistanceKm,
   extractDurationMinutes,
   extractIntensity,
@@ -13,8 +14,10 @@ import {
   extractSport,
   parseFuelItems,
   parseRecovery,
+  parseWeeklyPlan,
   reasonIsPain,
   resolveStartAt,
+  resolveWeekStart,
 } from './parse';
 import { composeResponse } from './responder';
 
@@ -63,6 +66,31 @@ export class DeterministicLlmClient implements LlmClient {
         ],
         notes: [`Parsed ${items.length} intake item(s).`],
       };
+    }
+
+    // 2a. Plan a whole week (several weekday names, each with a session or rest)
+    if (!modificationMarker) {
+      const week = parseWeeklyPlan(text);
+      if (week.length >= 2) {
+        const weekStart = resolveWeekStart(context.now_iso, text);
+        const days = week.map((day) => ({
+          date: dateForWeekday(weekStart, day.day_index),
+          rest: day.rest,
+          sessions: day.sessions.map((s) => ({
+            sport: s.sport,
+            ...(s.distance_km !== undefined ? { distance_km: s.distance_km } : {}),
+            ...(s.intensity ? { intensity: s.intensity } : {}),
+            ...(s.is_long ? { is_long: true } : {}),
+          })),
+        }));
+        return {
+          intent: 'plan_week',
+          tool_calls: [
+            { tool: 'save_weekly_plan', args: { week_start: weekStart, source_text: text, days } },
+          ],
+          notes: [`Parsed ${week.length} day(s) for week starting ${weekStart}.`],
+        };
+      }
     }
 
     // 2. Plan a session

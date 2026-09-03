@@ -9,10 +9,19 @@ import type {
   RecoveryLog,
   SessionInputCore,
   Sport,
+  WeeklyPlan,
 } from '../domain/types';
 
 export interface NewPlannedSession extends SessionInputCore {
   user_id: string;
+  weekly_plan_id?: string;
+}
+
+export interface NewWeeklyPlan {
+  user_id: string;
+  week_start: string;
+  source_text?: string;
+  rest_days?: string[];
 }
 
 export interface NewActualSession extends SessionInputCore {
@@ -54,6 +63,12 @@ export interface Repository {
   savePlannedSession(input: NewPlannedSession): Promise<PlannedSession>;
   getPlannedSession(id: string): Promise<PlannedSession | undefined>;
   listPlannedSessions(userId: string): Promise<PlannedSession[]>;
+
+  /** Replaces any existing plan for the same (user, week_start). */
+  saveWeeklyPlan(input: NewWeeklyPlan): Promise<WeeklyPlan>;
+  getWeeklyPlan(userId: string, weekStart: string): Promise<WeeklyPlan | undefined>;
+  listWeeklyPlans(userId: string): Promise<WeeklyPlan[]>;
+  listPlannedSessionsForWeeklyPlan(weeklyPlanId: string): Promise<PlannedSession[]>;
   /** Latest plan for a given local calendar date (YYYY-MM-DD), optionally by sport. */
   findPlannedSessionForDate(
     userId: string,

@@ -1,8 +1,35 @@
 import type { Intensity, Sport } from '../domain/types';
 import type { Repository } from '../data/repository';
 import { getProduct, resolveProductByPhrase } from '../data/products';
-import { calculateFuelingTargets, type CalculateInput } from '../engine/index';
+import { newId } from '../data/ids';
+import {
+  analyzeWeek,
+  calculateFuelingTargets,
+  type CalculateInput,
+  type WeekSessionInput,
+} from '../engine/index';
 import type { ToolSchema } from './llm-client';
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/** YYYY-MM-DD of the Monday of the week containing `d`. */
+function mondayOf(d: Date): string {
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  local.setDate(local.getDate() - ((local.getDay() + 6) % 7));
+  return `${local.getFullYear()}-${pad2(local.getMonth() + 1)}-${pad2(local.getDate())}`;
+}
+
+/** Local date (YYYY-MM-DD) for a 0=Mon..6=Sun offset from a Monday week_start. */
+function dateFromWeekStart(weekStart: string, dayIndex: number): string {
+  const [y, m, day] = weekStart.split('-').map(Number) as [number, number, number];
+  const d = new Date(y, m - 1, day + dayIndex);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** Deterministic default start time per same-day sequence position. */
+const SEQUENCE_TIMES = ['07:00', '17:00', '18:30', '20:00'];
 
 export interface ToolContext {
   repo: Repository;
@@ -78,6 +105,131 @@ export const TOOLS: Record<string, ToolDefinition> = {
         environment: (args.environment as CalculateInput['session']['environment']) ?? undefined,
         notes: str(args, 'notes', false),
       });
+    },
+  },
+
+  save_weekly_plan: {
+    description:
+      'Persist a whole week of planned sessions (linked as normal planned sessions), then return an analysis flagging double-session and longer/harder days with day-before preparation advice. Do NOT also call calculate_fueling_targets.',
+    async run(args, ctx) {
+      const weekStart = str(args, 'week_start', false) ?? mondayOf(new Date());
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) throw new ToolError('week_start must be YYYY-MM-DD');
+
+      const rawDays = Array.isArray(args.days) ? (args.days as Record<string, unknown>[]) : [];
+      if (rawDays.length === 0) throw new ToolError('save_weekly_plan needs a non-empty days array');
+      if (rawDays.length > 7) throw new ToolError('a week has at most 7 days');
+
+      const restDays: string[] = [];
+      type DayPlan = { date: string; sessions: Record<string, unknown>[] };
+      const dayPlans: DayPlan[] = [];
+
+      for (const raw of rawDays) {
+        const dayIndex = num(raw, 'day_index');
+        const date =
+          str(raw, 'date', false) ??
+          (typeof dayIndex === 'number' ? dateFromWeekStart(weekStart, dayIndex) : undefined);
+        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          throw new ToolError('each day needs a date (YYYY-MM-DD) or a day_index 0-6 (0 = Monday)');
+        }
+        const sessions = Array.isArray(raw.sessions) ? (raw.sessions as Record<string, unknown>[]) : [];
+        if (raw.rest === true || sessions.length === 0) {
+          restDays.push(date);
+          continue;
+        }
+        if (sessions.length > 4) throw new ToolError('at most 4 sessions per day');
+        dayPlans.push({ date, sessions });
+      }
+
+      const weeklyPlan = await ctx.repo.saveWeeklyPlan({
+        user_id: ctx.userId,
+        week_start: weekStart,
+        source_text: str(args, 'source_text', false),
+        rest_days: restDays,
+      });
+
+      const analysisSessions: WeekSessionInput[] = [];
+      const saved = [];
+      for (const day of dayPlans) {
+        const groupId = day.sessions.length > 1 ? newId('grp') : undefined;
+        for (let i = 0; i < day.sessions.length; i++) {
+          const s = day.sessions[i]!;
+          const sport_ = sport(s, 'sport')!;
+          const intensity_ = intensity(s, 'intensity') ?? 'easy';
+          const start_at = `${day.date}T${SEQUENCE_TIMES[Math.min(i, SEQUENCE_TIMES.length - 1)]}:00`;
+          const distance_km = num(s, 'distance_km');
+          const duration_minutes = num(s, 'duration_minutes');
+          const isLong = s.is_long === true;
+
+          saved.push(
+            await ctx.repo.savePlannedSession({
+              user_id: ctx.userId,
+              sport: sport_,
+              start_at,
+              distance_km,
+              duration_minutes,
+              intensity: intensity_,
+              session_group_id: groupId,
+              sequence_index: day.sessions.length > 1 ? i : undefined,
+              weekly_plan_id: weeklyPlan.id,
+              notes: isLong ? 'long session' : undefined,
+            }),
+          );
+          analysisSessions.push({
+            sport: sport_,
+            intensity: intensity_,
+            start_at,
+            distance_km,
+            duration_minutes,
+            is_long: isLong,
+          });
+        }
+      }
+
+      const profile = await ctx.repo.getProfile(ctx.userId);
+      const analysis = analyzeWeek({
+        week_start: weekStart,
+        sessions: analysisSessions,
+        rest_days: restDays,
+        profile: {
+          body_weight_kg: profile?.body_weight_kg ?? 0,
+          usual_bottle_ml: profile?.usual_bottle_ml,
+          known_sweat_data: profile?.known_sweat_data,
+        },
+      });
+
+      return { weekly_plan: weeklyPlan, sessions: saved, rest_days: restDays, analysis };
+    },
+  },
+
+  get_weekly_plan: {
+    description: 'Return a saved weekly plan (its sessions + the same analysis) for a given week_start, or the most recent week.',
+    async run(args, ctx) {
+      const weekStart = str(args, 'week_start', false);
+      const plan = weekStart
+        ? await ctx.repo.getWeeklyPlan(ctx.userId, weekStart)
+        : (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
+      if (!plan) throw new ToolError('No weekly plan on file for that week');
+
+      const sessions = await ctx.repo.listPlannedSessionsForWeeklyPlan(plan.id);
+      const profile = await ctx.repo.getProfile(ctx.userId);
+      const analysis = analyzeWeek({
+        week_start: plan.week_start,
+        rest_days: plan.rest_days,
+        sessions: sessions.map((s) => ({
+          sport: s.sport,
+          intensity: s.intensity,
+          start_at: s.start_at,
+          distance_km: s.distance_km,
+          duration_minutes: s.duration_minutes,
+          is_long: s.notes === 'long session',
+        })),
+        profile: {
+          body_weight_kg: profile?.body_weight_kg ?? 0,
+          usual_bottle_ml: profile?.usual_bottle_ml,
+          known_sweat_data: profile?.known_sweat_data,
+        },
+      });
+      return { weekly_plan: plan, sessions, rest_days: plan.rest_days, analysis };
     },
   },
 
@@ -273,6 +425,49 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       notes: { type: 'string' },
     },
     required: ['sport', 'start_at'],
+  },
+
+  save_weekly_plan: {
+    type: 'object',
+    properties: {
+      week_start: { type: 'string', description: 'YYYY-MM-DD of the Monday the week starts. Defaults to this week.' },
+      source_text: { type: 'string', description: "The athlete's original sentence, kept verbatim." },
+      days: {
+        type: 'array',
+        description: 'One entry per day the athlete mentioned. Omit days not mentioned.',
+        items: {
+          type: 'object',
+          properties: {
+            day_index: { type: 'number', description: '0 = Monday .. 6 = Sunday. Use this or `date`.' },
+            date: { type: 'string', description: 'YYYY-MM-DD. Use this or `day_index`.' },
+            rest: { type: 'boolean', description: 'True for a rest/off day (no sessions).' },
+            sessions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  sport: { type: 'string', enum: SPORT_ENUM },
+                  distance_km: { type: 'number' },
+                  duration_minutes: { type: 'number' },
+                  intensity: { type: 'string', enum: INTENSITY_ENUM },
+                  is_long: { type: 'boolean', description: 'The athlete called it a "long" session.' },
+                },
+                required: ['sport'],
+              },
+            },
+          },
+        },
+      },
+    },
+    required: ['days'],
+  },
+
+  get_weekly_plan: {
+    type: 'object',
+    properties: {
+      week_start: { type: 'string', description: 'YYYY-MM-DD Monday. Omit for the most recent week.' },
+    },
+    required: [],
   },
 
   save_actual_session: {

@@ -90,6 +90,8 @@ export interface PlannedSession extends SessionInputCore {
   id: string;
   user_id: string;
   kind: 'planned';
+  /** Set when this session belongs to a saved weekly plan. */
+  weekly_plan_id?: string;
   created_at: string;
 }
 
@@ -106,6 +108,27 @@ export interface ActualSession extends SessionInputCore {
 }
 
 export type AnySession = PlannedSession | ActualSession;
+
+// ---------------------------------------------------------------------------
+// Weekly plan (PRODUCT_VISION.md "Weekly planning", ARCHITECTURE.md)
+// ---------------------------------------------------------------------------
+
+/**
+ * A saved week. The individual sessions live as normal PlannedSession records
+ * (linked back via `weekly_plan_id`), so actual-vs-planned comparison works the
+ * same way as for a single planned session.
+ */
+export interface WeeklyPlan {
+  id: string;
+  user_id: string;
+  /** ISO date (YYYY-MM-DD) of the Monday the week starts. */
+  week_start: string;
+  /** The sentence the user gave, kept verbatim for reference. */
+  source_text?: string;
+  /** ISO dates (YYYY-MM-DD) the user explicitly called rest/off days. */
+  rest_days: string[];
+  created_at: string;
+}
 
 // ---------------------------------------------------------------------------
 // Fuel logs (CALCULATION_ENGINE_SPEC.md §3.4, §14)

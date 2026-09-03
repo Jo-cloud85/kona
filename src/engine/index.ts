@@ -18,3 +18,12 @@ export type {
   CarbohydrateEstimate,
   SodiumEstimate,
 } from './types';
+export {
+  analyzeWeek,
+  type WeekAnalysis,
+  type WeekAnalysisInput,
+  type WeekSessionInput,
+  type WeekDay,
+  type WeekDaySession,
+  type WeekRecommendation,
+} from './week';
