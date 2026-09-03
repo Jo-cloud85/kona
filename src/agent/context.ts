@@ -1,5 +1,5 @@
-import type { Repository } from '../data/repository.js';
-import type { ContextPackage } from './llm-client.js';
+import type { Repository } from '../data/repository';
+import type { ContextPackage } from './llm-client';
 
 /**
  * Build the compact context package (ARCHITECTURE.md "Important design rule":

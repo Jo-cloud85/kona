@@ -1,8 +1,8 @@
 # Kona — Progress
 
 ## Current milestone
-**M4 complete — real Anthropic LLM client behind `LlmClient`.** Next: thin web UI
-over `handleMessage`, then weekly multi-day planning.
+**M5 complete — thin Next.js chat UI over `handleMessage`.** Next: weekly
+multi-day planning; later, a persistence backend to replace the in-memory store.
 
 ## Completed work
 
@@ -39,6 +39,16 @@ over `handleMessage`, then weekly multi-day planning.
 - CLI: `npm run chat -- --llm=anthropic` (or `KONA_LLM=anthropic`, or auto when `ANTHROPIC_API_KEY` is set). `.env.example` added.
 - Tests: +5 (`tests/agent/anthropic-llm.test.ts`) — mapper + full plan turn through `handleMessage` with a fake transport + safety-never-reaches-model. 38 total, all green; typecheck + lint clean.
 
+### M5 — Thin Next.js chat UI ✅
+- `next`/`react`/`react-dom` added; co-located in this repo (no workspace split). `app/` router: `layout.tsx`, `page.tsx` (client chat component, plain CSS in `globals.css`, light/dark), `api/chat/route.ts` (Node runtime).
+- `lib/kona-server.ts` — process-wide singleton: the M2 in-memory repo + `AnthropicLlmClient` when `ANTHROPIC_API_KEY` is set, else `DeterministicLlmClient`. State resets on server restart (documented; a persistence backend is a later decision).
+- `POST /api/chat` `{ message, conversationId? }` → `{ reply, intent, safety_escalated, clarifying_question }`, with boundary validation (non-empty, ≤2000 chars, `conversationId` charset). `GET /api/chat?conversationId=` → prior messages so a reload restores the thread within a server session.
+- Verified: `next build` passes; dev server smoke-tested via curl (plan → actual with plan preserved → history restore → 400 on bad input) and in the browser (bubbles, intent tags, Enter-to-send, multi-turn).
+- **Core import change**: relative imports in `src/`/`tests/`/`lib/` are now extensionless (was `.js`). Turbopack doesn't do `.js`→`.ts` resolution the way tsx/vitest/tsc do; extensionless works across all four. No behaviour change.
+- **Orchestrator fix**: after `save_actual_session`, the context's `current_plan` is repointed to the plan the actual was actually linked to, so the composer speaks about "the plan" correctly even with multiple same-day plans (previously it assumed the generic "next upcoming plan").
+- `next.config.ts` sets `agentRules: false` so `next dev` does not append its managed block to `CLAUDE.md` (that file is the product spec). Flip to `true` to opt into Next's bundled-docs pointer.
+- 38 tests still green; `typecheck`, `lint`, `next build` all clean.
+
 ## Known issues / deliberate deferrals
 - **Fluid range**: rules table uses §5.2 (400–800 ml/h); §20's example JSON shows 500. Reconciliation noted in `CALCULATION_ENGINE_SPEC.md` §20.
 - All v0.1.0 numbers are spec placeholders — **require expert review before public launch**.
@@ -49,4 +59,4 @@ over `handleMessage`, then weekly multi-day planning.
 - Node 20.12 vs eslint-visitor-keys wanting 20.19+ — warning only.
 
 ## Next recommended task
-A thin Next.js (or minimal HTTP) chat UI over `handleMessage`, reusing the repo + `AnthropicLlmClient`. Then weekly multi-day planning (parse a week, flag double/long days, prepare ahead).
+Weekly multi-day planning: parse a week ("Mon gym, Tue 8km, ... Sun long run"), save it, flag double-session and longer/harder days, and prepare ahead of key sessions (CALCULATION_ENGINE_SPEC.md §9, §11). Separately, when persistence matters: replace `InMemoryRepository` with a real backend behind the existing `Repository` interface.

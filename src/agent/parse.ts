@@ -1,4 +1,4 @@
-import type { Intensity, Sport } from '../domain/types.js';
+import type { Intensity, Sport } from '../domain/types';
 
 /** Natural-language parsing helpers for the deterministic interpreter.
  *  These do NOT compute anything numerical about fueling — they only extract

@@ -5,8 +5,8 @@ import type {
   Intensity,
   IntensityClass,
   Sport,
-} from '../domain/types.js';
-import type { RulesConfig } from '../rules/index.js';
+} from '../domain/types';
+import type { RulesConfig } from '../rules/index';
 
 export interface ClassifyInput {
   sport: Sport;

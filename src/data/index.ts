@@ -5,9 +5,9 @@ export type {
   NewFuelLog,
   NewRecoveryLog,
   RelevantHistory,
-} from './repository.js';
-export { InMemoryRepository, type InMemoryRepositoryOptions } from './in-memory-repository.js';
-export { createSeededRepository, demoProfile, DEMO_USER_ID } from './seed.js';
+} from './repository';
+export { InMemoryRepository, type InMemoryRepositoryOptions } from './in-memory-repository';
+export { createSeededRepository, demoProfile, DEMO_USER_ID } from './seed';
 export {
   CATALOG,
   getProduct,
@@ -15,5 +15,5 @@ export {
   type CatalogProduct,
   type CatalogNutrition,
   type ProductKind,
-} from './products.js';
-export { newId } from './ids.js';
+} from './products';
+export { newId } from './ids';

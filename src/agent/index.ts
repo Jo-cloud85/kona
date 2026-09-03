@@ -1,14 +1,14 @@
-export { handleMessage, type AgentDeps, type AgentTurn, type HandleMessageInput } from './orchestrator.js';
-export { DeterministicLlmClient } from './deterministic-llm.js';
+export { handleMessage, type AgentDeps, type AgentTurn, type HandleMessageInput } from './orchestrator';
+export { DeterministicLlmClient } from './deterministic-llm';
 export {
   AnthropicLlmClient,
   toInterpretResult,
   type AnthropicLlmOptions,
   type AnthropicLike,
-} from './anthropic-llm.js';
-export { buildContext } from './context.js';
-export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety.js';
-export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools.js';
+} from './anthropic-llm';
+export { buildContext } from './context';
+export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety';
+export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools';
 export type {
   LlmClient,
   ContextPackage,
@@ -17,4 +17,4 @@ export type {
   ComposeRequest,
   ToolResult,
   ToolSchema,
-} from './llm-client.js';
+} from './llm-client';

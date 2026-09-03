@@ -1,0 +1,166 @@
+:root {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --text: #1c1c1a;
+  --muted: #6b6b66;
+  --border: #e4e4df;
+  --accent: #1f6f5c;
+  --accent-text: #ffffff;
+  --user-bubble: #1f6f5c;
+  --assistant-bubble: #f0f0ec;
+  --danger: #a23b2d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17171a;
+    --panel: #1f1f23;
+    --text: #ececea;
+    --muted: #9a9a94;
+    --border: #33333a;
+    --accent: #3f9d86;
+    --user-bubble: #2f6d5e;
+    --assistant-bubble: #2a2a30;
+    --danger: #d9776a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.app {
+  max-width: 680px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.2px;
+}
+
+.header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  margin: auto 0;
+}
+
+.empty code {
+  background: var(--assistant-bubble);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.row {
+  display: flex;
+}
+
+.row.user {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: 82%;
+  padding: 10px 13px;
+  border-radius: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.row.user .bubble {
+  background: var(--user-bubble);
+  color: var(--accent-text);
+  border-bottom-right-radius: 4px;
+}
+
+.row.assistant .bubble {
+  background: var(--assistant-bubble);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.row.assistant .meta.safety {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.composer {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.composer textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 42px;
+  max-height: 140px;
+}
+
+.composer button {
+  border: 0;
+  border-radius: 10px;
+  padding: 0 18px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

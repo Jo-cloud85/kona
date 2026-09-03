@@ -1,13 +1,13 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { createSeededRepository, DEMO_USER_ID } from '../../src/data/index.js';
+import { createSeededRepository, DEMO_USER_ID } from '../../src/data/index';
 import {
   AnthropicLlmClient,
   handleMessage,
   toInterpretResult,
   type AgentDeps,
   type AnthropicLike,
-} from '../../src/agent/index.js';
+} from '../../src/agent/index';
 
 function msg(content: unknown[]): Anthropic.Message {
   return { role: 'assistant', type: 'message', content } as unknown as Anthropic.Message;

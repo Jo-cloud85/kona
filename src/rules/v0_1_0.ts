@@ -1,4 +1,4 @@
-import type { RulesConfig } from './types.js';
+import type { RulesConfig } from './types';
 
 /**
  * Kona calculation methodology v0.1.0.

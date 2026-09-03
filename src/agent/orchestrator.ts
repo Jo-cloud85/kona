@@ -1,8 +1,8 @@
-import type { Repository } from '../data/repository.js';
-import { buildContext } from './context.js';
-import type { LlmClient, ToolResult } from './llm-client.js';
-import { safetyMessage, screenForEscalation, type SafetyScreen } from './safety.js';
-import { runTool, TOOL_SCHEMAS } from './tools.js';
+import type { Repository } from '../data/repository';
+import { buildContext } from './context';
+import type { LlmClient, ToolResult } from './llm-client';
+import { safetyMessage, screenForEscalation, type SafetyScreen } from './safety';
+import { runTool, TOOL_SCHEMAS } from './tools';
 
 export interface AgentDeps {
   repo: Repository;
@@ -90,7 +90,16 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
     if (result.ok && result.data && typeof result.data === 'object') {
       const id = (result.data as { id?: string }).id;
       if (id && call.tool === 'save_planned_session') memo.plannedId = id;
-      if (id && call.tool === 'save_actual_session') memo.actualId = id;
+      if (id && call.tool === 'save_actual_session') {
+        memo.actualId = id;
+        // Make the context reflect the plan this actual session was linked to,
+        // so the composer can speak about "the plan" accurately even when it
+        // isn't the same record as the generic "next upcoming plan".
+        const linkedId = (result.data as { planned_session_id?: string }).planned_session_id;
+        if (linkedId && linkedId !== context.current_plan?.id) {
+          context.current_plan = (await repo.getPlannedSession(linkedId)) ?? context.current_plan;
+        }
+      }
     }
   }
 

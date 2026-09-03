@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createSeededRepository, DEMO_USER_ID } from '../../src/data/index.js';
-import { resolveProductByPhrase, getProduct } from '../../src/data/products.js';
+import { createSeededRepository, DEMO_USER_ID } from '../../src/data/index';
+import { resolveProductByPhrase, getProduct } from '../../src/data/products';
 
 describe('InMemoryRepository', () => {
   it('seeds the demo profile with no measured sweat data', async () => {

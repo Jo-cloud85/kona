@@ -1,5 +1,5 @@
-import type { Profile } from '../domain/types.js';
-import { InMemoryRepository, type InMemoryRepositoryOptions } from './in-memory-repository.js';
+import type { Profile } from '../domain/types';
+import { InMemoryRepository, type InMemoryRepositoryOptions } from './in-memory-repository';
 
 export const DEMO_USER_ID = 'user_demo';
 

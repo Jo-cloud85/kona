@@ -9,7 +9,7 @@ import type {
   RecoveryLog,
   SessionInputCore,
   Sport,
-} from '../domain/types.js';
+} from '../domain/types';
 
 export interface NewPlannedSession extends SessionInputCore {
   user_id: string;

@@ -1,13 +1,13 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { createSeededRepository, DEMO_USER_ID } from '../data/index.js';
+import { createSeededRepository, DEMO_USER_ID } from '../data/index';
 import {
   AnthropicLlmClient,
   DeterministicLlmClient,
   handleMessage,
   type AgentDeps,
   type LlmClient,
-} from '../agent/index.js';
+} from '../agent/index';
 
 /**
  * Minimal chat harness for manual verification of the vertical slice.

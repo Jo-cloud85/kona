@@ -4,7 +4,7 @@ import type {
   InterpretResult,
   LlmClient,
   PlannedToolCall,
-} from './llm-client.js';
+} from './llm-client';
 import {
   extractDistanceKm,
   extractDurationMinutes,
@@ -15,8 +15,8 @@ import {
   parseRecovery,
   reasonIsPain,
   resolveStartAt,
-} from './parse.js';
-import { composeResponse } from './responder.js';
+} from './parse';
+import { composeResponse } from './responder';
 
 /**
  * A deterministic, rule-based stand-in for the conversational LLM.

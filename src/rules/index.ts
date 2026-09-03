@@ -1,7 +1,7 @@
-import type { RulesConfig } from './types.js';
-import { RULES_V0_1_0 } from './v0_1_0.js';
+import type { RulesConfig } from './types';
+import { RULES_V0_1_0 } from './v0_1_0';
 
-export type { RulesConfig } from './types.js';
+export type { RulesConfig } from './types';
 
 /** Registry of every published methodology version. */
 const REGISTRY: Record<string, RulesConfig> = {

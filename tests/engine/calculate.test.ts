@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateFuelingTargets, type CalculateInput } from '../../src/engine/index.js';
+import { calculateFuelingTargets, type CalculateInput } from '../../src/engine/index';
 
 const baseProfile = { body_weight_kg: 64, usual_bottle_ml: 750 };
 

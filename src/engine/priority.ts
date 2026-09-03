@@ -1,4 +1,4 @@
-import type { PriorityLevel } from '../domain/types.js';
+import type { PriorityLevel } from '../domain/types';
 
 /** 0..3 numeric priority used internally; mapped to PriorityLevel on output. */
 export type PriorityScore = 0 | 1 | 2 | 3;

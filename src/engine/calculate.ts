@@ -1,14 +1,14 @@
-import type { Confidence, Environment, Intensity, Range, Sport } from '../domain/types.js';
-import { getRules, type RulesConfig } from '../rules/index.js';
-import { classifySession, type ClassificationResult } from './classify.js';
-import { atLeast, clampScore, toLevel, type PriorityScore } from './priority.js';
+import type { Confidence, Environment, Intensity, Range, Sport } from '../domain/types';
+import { getRules, type RulesConfig } from '../rules/index';
+import { classifySession, type ClassificationResult } from './classify';
+import { atLeast, clampScore, toLevel, type PriorityScore } from './priority';
 import type {
   CarbohydrateEstimate,
   FluidEstimate,
   FuelingCalculation,
   RecommendationInput,
   SodiumEstimate,
-} from './types.js';
+} from './types';
 
 export interface CalculateProfile {
   body_weight_kg: number;

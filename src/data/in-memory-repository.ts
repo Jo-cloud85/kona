@@ -8,8 +8,8 @@ import type {
   Profile,
   RecoveryLog,
   Sport,
-} from '../domain/types.js';
-import { newId } from './ids.js';
+} from '../domain/types';
+import { newId } from './ids';
 import type {
   NewActualSession,
   NewFuelLog,
@@ -17,7 +17,7 @@ import type {
   NewRecoveryLog,
   RelevantHistory,
   Repository,
-} from './repository.js';
+} from './repository';
 
 export interface InMemoryRepositoryOptions {
   /** Injectable clock for deterministic tests. */

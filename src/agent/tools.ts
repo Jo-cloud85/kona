@@ -1,8 +1,8 @@
-import type { Intensity, Sport } from '../domain/types.js';
-import type { Repository } from '../data/repository.js';
-import { getProduct, resolveProductByPhrase } from '../data/products.js';
-import { calculateFuelingTargets, type CalculateInput } from '../engine/index.js';
-import type { ToolSchema } from './llm-client.js';
+import type { Intensity, Sport } from '../domain/types';
+import type { Repository } from '../data/repository';
+import { getProduct, resolveProductByPhrase } from '../data/products';
+import { calculateFuelingTargets, type CalculateInput } from '../engine/index';
+import type { ToolSchema } from './llm-client';
 
 export interface ToolContext {
   repo: Repository;

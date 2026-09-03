@@ -1,4 +1,4 @@
-import type { Range, Sport, Intensity } from '../domain/types.js';
+import type { Range, Sport, Intensity } from '../domain/types';
 
 /**
  * A versioned, reviewable rules/config table for the calculation engine.

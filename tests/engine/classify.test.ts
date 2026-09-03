@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { classifySession, ClassificationInputError } from '../../src/engine/index.js';
-import { getRules } from '../../src/rules/index.js';
+import { classifySession, ClassificationInputError } from '../../src/engine/index';
+import { getRules } from '../../src/rules/index';
 
 const rules = getRules();
 

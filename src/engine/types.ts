@@ -5,7 +5,7 @@ import type {
   IntensityClass,
   PriorityLevel,
   Range,
-} from '../domain/types.js';
+} from '../domain/types';
 
 /** Structured recommendation the LLM turns into natural language (§17). */
 export interface RecommendationInput {

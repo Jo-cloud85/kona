@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createSeededRepository, DEMO_USER_ID } from '../../src/data/index.js';
-import { DeterministicLlmClient, handleMessage, type AgentDeps } from '../../src/agent/index.js';
-import type { InMemoryRepository } from '../../src/data/in-memory-repository.js';
-import type { FuelingCalculation } from '../../src/engine/index.js';
+import { createSeededRepository, DEMO_USER_ID } from '../../src/data/index';
+import { DeterministicLlmClient, handleMessage, type AgentDeps } from '../../src/agent/index';
+import type { InMemoryRepository } from '../../src/data/in-memory-repository';
+import type { FuelingCalculation } from '../../src/engine/index';
 
 const CONV = 'conv_test';
 const NOW = new Date(2026, 8, 3, 20, 0, 0); // Wed 3 Sep 2026, 8pm local

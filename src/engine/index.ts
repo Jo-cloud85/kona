@@ -5,16 +5,16 @@ export {
   ClassificationInputError,
   type ClassifyInput,
   type ClassificationResult,
-} from './classify.js';
+} from './classify';
 export {
   calculateFuelingTargets,
   type CalculateInput,
   type CalculateProfile,
-} from './calculate.js';
+} from './calculate';
 export type {
   FuelingCalculation,
   RecommendationInput,
   FluidEstimate,
   CarbohydrateEstimate,
   SodiumEstimate,
-} from './types.js';
+} from './types';

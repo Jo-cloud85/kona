@@ -6,7 +6,7 @@ import type {
   InterpretResult,
   LlmClient,
   PlannedToolCall,
-} from './llm-client.js';
+} from './llm-client';
 
 /**
  * Real conversational LLM behind {@link LlmClient}, using the Anthropic Messages

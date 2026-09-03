@@ -1,5 +1,5 @@
-import type { ActualSession, PersistedMemory, PlannedSession, Profile } from '../domain/types.js';
-import type { RelevantHistory } from '../data/repository.js';
+import type { ActualSession, PersistedMemory, PlannedSession, Profile } from '../domain/types';
+import type { RelevantHistory } from '../data/repository';
 
 /**
  * The LLM's role here is strictly conversational orchestration

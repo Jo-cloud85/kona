@@ -1,8 +1,8 @@
-import type { ActualSession, PlannedSession } from '../domain/types.js';
-import type { FuelLog } from '../domain/types.js';
-import type { FuelingCalculation, RecommendationInput } from '../engine/index.js';
-import { getProduct } from '../data/products.js';
-import type { ComposeRequest, ToolResult } from './llm-client.js';
+import type { ActualSession, PlannedSession } from '../domain/types';
+import type { FuelLog } from '../domain/types';
+import type { FuelingCalculation, RecommendationInput } from '../engine/index';
+import { getProduct } from '../data/products';
+import type { ComposeRequest, ToolResult } from './llm-client';
 
 /**
  * Deterministic natural-language composer. Turns structured tool results into a
