@@ -274,7 +274,9 @@ function buildRecommendations(
       timing: 'day_before',
       category: 'preparation',
       action: `Prepare ${bottle}${
-        priorities.carbohydrate > 0 ? ' and an easy carbohydrate option' : ''
+        priorities.carbohydrate > 0
+          ? ' and an easy-to-digest carbohydrate source (a banana, toast, a sports drink, or a couple of gels)'
+          : ''
       } the night before${early ? ', and decide your breakfast in advance' : ''}. Have a familiar recovery meal available for afterwards, and avoid trying several new products at once.`,
       reason_codes: [long ? 'long_session' : 'session_prep', ...(early ? ['early_start'] : [])],
     });

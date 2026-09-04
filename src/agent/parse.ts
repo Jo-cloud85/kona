@@ -113,6 +113,13 @@ export function extractIntensity(text: string): Intensity | undefined {
  */
 export function parsePerceivedIntensity(text: string): Intensity | undefined {
   const t = text.toLowerCase();
+
+  // Ambiguous: the text rates more than one thing at different efforts
+  // ("gym is hard ... bike is easy"). Don't guess a single value.
+  const easyish = /\b(easy|comfortable|chatty|relaxed|gentle)\b/.test(t);
+  const hardish = /\b(hard|tough|brutal|intense|gruelling|grueling|hardcore|pant\w*|gasping|sweat\w* a lot)\b/.test(t);
+  if (easyish && hardish) return undefined;
+
   if (
     /\b(race pace|all[- ]?out|flat out|maximal|as hard as)\b/.test(t)
   ) {
@@ -296,6 +303,28 @@ function parseOneSession(chunk: string): ParsedWeekSession | undefined {
 }
 
 /**
+ * Split a day's span into individual sessions. Strong separators (+, &, /,
+ * "then", "plus") always split. A comma / "and" splits only when it produces
+ * two or more sport-bearing pieces — so "gym is hard, about an hour" stays one
+ * session while "swim, gym" and "bike + run" become two.
+ */
+function splitSpanSessions(span: string): string[] {
+  const out: string[] = [];
+  for (const strong of span.split(/\s*(?:\+|&|\/|\bthen\b|\bplus\b)\s*/i)) {
+    const sub = strong
+      .split(/\s*(?:,|\band\b)\s*/i)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (sub.length >= 2 && sub.filter((s) => parseOneSession(s) !== undefined).length >= 2) {
+      out.push(...sub);
+    } else {
+      out.push(strong);
+    }
+  }
+  return out;
+}
+
+/**
  * Parse "Mon gym, Tue 8km run, Wed swim, Thu rest, Fri bike + run, Sun long run"
  * into per-day sessions. Returns [] when fewer than two weekdays are named
  * (i.e. it isn't a weekly plan).
@@ -336,8 +365,7 @@ export function parseWeeklyPlan(text: string): ParsedWeekDay[] {
       continue;
     }
 
-    const sessions = span
-      .split(/\s*(?:\+|&|\/|,|\bthen\b|\band\b|\bplus\b)\s*/i)
+    const sessions = splitSpanSessions(span)
       .map(parseOneSession)
       .filter((s): s is ParsedWeekSession => s !== undefined);
 

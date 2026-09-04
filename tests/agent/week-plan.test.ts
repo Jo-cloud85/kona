@@ -168,6 +168,20 @@ describe('weekly plan conversation slice', () => {
     expect(mon.needs_detail).toContain('intensity');
   });
 
+  it('keeps a comma-joined effort+duration together, and different efforts per clause', async () => {
+    await say('Monday gym, Wednesday gym, Thursday bike + easy run, Friday gym, Sunday long run.');
+    const turn = await say('Wed and Fri gym are hard, about an hour. Thursday bike is easy.');
+    expect(turn.intent).toBe('clarify_plan_detail');
+
+    const planned = await repo.listPlannedSessions(DEMO_USER_ID);
+    const wed = planned.find((p) => p.sport === 'gym' && p.start_at.startsWith('2026-09-09'))!;
+    const fri = planned.find((p) => p.sport === 'gym' && p.start_at.startsWith('2026-09-11'))!;
+    const bike = planned.find((p) => p.sport === 'cycling')!;
+    expect(wed).toMatchObject({ intensity: 'hard', duration_minutes: 60 }); // "hard, about an hour" kept whole
+    expect(fri).toMatchObject({ intensity: 'hard', duration_minutes: 60 });
+    expect(bike.intensity).toBe('easy'); // not smeared with the gym's "hard"
+  });
+
   it('fills a single day from "Saturday swim is usually 1.5km"', async () => {
     await say('Monday gym, Wednesday swim, Saturday swim, Sunday long run.');
     const turn = await say('Saturday swim is usually about 1.5km.');

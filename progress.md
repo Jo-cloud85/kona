@@ -73,8 +73,12 @@ _Prompted by user feedback: Kona was silently defaulting unstated intensity to "
 2. **`parseWeeklyPlan` only saw the first mention of each weekday**, so "For Thu … Thu cycling …" merged the second clause into the wrong span. Now finds every occurrence (global match); `plan_week` requires ≥2 *distinct* days.
 3. **"Wed and Fri sessions feel hard"** — an empty/connective span before another day now shares that day's parsed sessions; a shared detail across ≥2 named days emits one `update_planned_sessions` per day (sport inferred per day).
 4. `extractDistanceKm` reads ranges ("5-7km", "12km to 18km") as the midpoint; `update_planned_sessions` reports only the fields a call actually changed (no re-asserting a defaulted "easy").
+#### M7 fixes from a simulated conversation round
+5. **Comma-split dropped detail**: "gym is hard, about an hour" was split into two pieces and the duration lost. Session splitting now only breaks on `+ & / then plus` always; a comma / "and" splits only when it yields ≥2 sport-bearing pieces (so "swim, gym" still becomes two).
+6. **One intensity smeared across a mixed-effort sentence**: "Wed gym is hard … Thu bike is easy" applied one global intensity. The span path no longer needs *every* clause to match a pending sport — it fills the matching ones and ignores the rest; `parsePerceivedIntensity` returns `undefined` when a sentence contains both easy- and hard-family words.
+7. Recovery reflection now distinguishes soreness ("sounds like some soreness, but you're moving okay") from generic tiredness. `calculate.ts`'s day-before prep line uses the same concrete carb examples as `week.ts`.
 - **Known limitation**: still a rule-based parser — very tangled phrasing may need a follow-up; the real `AnthropicLlmClient` handles compound answers natively.
-- **54 tests** total, all green; typecheck + lint clean; browser-verified against the user's exact compound message (7 sessions filled from one reply, no phantom workout).
+- **55 tests** total, all green; typecheck + lint clean; an 8-turn simulated conversation (weekly plan → clarify → single session → modification → fuel → recovery → safety escalation) runs correctly end to end.
 
 ## Known issues / deliberate deferrals
 - **Fluid range**: rules table uses §5.2 (400–800 ml/h); §20's example JSON shows 500. Reconciliation noted in `CALCULATION_ENGINE_SPEC.md` §20.

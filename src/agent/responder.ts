@@ -158,13 +158,19 @@ function composeRecovery(req: ComposeRequest): string {
   const part = bodyPartFromReason(painReason);
 
   const text = req.message.toLowerCase();
+  const soreness = /\b(sore|soreness|aching|achy|tight|stiff|niggle)\b/.test(text);
+  const okWithIt = /\b(fine|okay|ok|manageable|not bad|can (still )?(walk|move))\b/.test(text);
   let reflection: string;
-  if (/\b(fine|good|great|fresh|no issues|all good)\b/.test(text) && !/\btired|sore\b/.test(text)) {
+  if (/\b(fine|good|great|fresh|no issues|all good)\b/.test(text) && !/\btired|sore|aching|tight|stiff\b/.test(text)) {
     reflection = "sounds like you're recovering well.";
   } else if (/\b(limping|can'?t walk|severe|worst)\b/.test(text)) {
     reflection = 'that sounds rough — worth keeping an eye on.';
   } else if (/\b(really|very|super)\s+(sore|tired)|bad|badly|terrible|rough|wrecked\b/.test(text)) {
     reflection = 'sounds like that one took a lot out of you.';
+  } else if (soreness) {
+    reflection = okWithIt
+      ? 'sounds like some soreness, but you\'re moving okay.'
+      : 'noting the soreness.';
   } else {
     reflection = 'a bit of tiredness but nothing alarming.';
   }

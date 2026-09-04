@@ -88,16 +88,16 @@ export class DeterministicLlmClient implements LlmClient {
         /\d/.test(text) ||
         /\b(easy|moderate|hard|tempo|steady|comfortable|panting?|sweat\w*|gasping|brutal|chatty)\b/i.test(text);
 
-      // Per-day answer ("Sunday's long run is 22km, and the Saturday swim is 2km").
+      // Per-day answer ("Sunday's long run is 22km, and the Saturday swim is 2km",
+      // or "Wed and Fri gym are hard, about an hour. Thu bike is easy").
       const spans = parseWeeklyPlan(text);
-      const spansMatchPending =
-        spans.length >= 1 &&
-        spans.every((d) => d.rest || d.sessions.every((s) => pendingSports.has(s.sport)));
+      const anySpanMatchesPending = spans.some((d) => d.sessions.some((s) => pendingSports.has(s.sport)));
 
-      if (hasAnswerSignal && spansMatchPending) {
+      if (hasAnswerSignal && anySpanMatchesPending) {
         const calls: PlannedToolCall[] = [];
         for (const day of spans) {
           for (const s of day.sessions) {
+            if (!pendingSports.has(s.sport)) continue; // ignore clauses about non-pending sessions
             const eff = parsePerceivedIntensity(s.raw) ?? s.intensity;
             const dur = extractDurationMinutes(s.raw);
             if (!eff && dur === undefined && s.distance_km === undefined) continue;
