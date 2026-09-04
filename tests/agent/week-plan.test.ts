@@ -126,6 +126,48 @@ describe('weekly plan conversation slice', () => {
     expect(wed.distance_km).toBe(2);
   });
 
+  it('a compound answer containing "only"/"because" is NOT logged as a modified workout', async () => {
+    await say(
+      'Monday rest, Tuesday intervals run, Wednesday gym, Thursday bike + easy run, Friday gym, Saturday swim, Sunday long run.',
+    );
+
+    const turn = await say(
+      'For Tue the intervals are about 5-7km, roughly an hour. Wednesday and Friday gym feel hard, about an hour. ' +
+        'Thursday cycling feels easy because I only ride about 20km. Saturday swim is hard even though I only swim about 1km, because I am new to freestyle.',
+    );
+
+    // must not create an actual session
+    expect(turn.intent).not.toBe('log_actual');
+    expect(await repo.listActualSessions(DEMO_USER_ID)).toHaveLength(0);
+    expect(turn.reply).not.toMatch(/Logged the actual/i);
+    expect(turn.reply).not.toMatch(/new to freestyle/i);
+
+    // it should have filled in some plan detail
+    expect(turn.intent).toBe('clarify_plan_detail');
+    const planned = await repo.listPlannedSessions(DEMO_USER_ID);
+    const cycling = planned.find((p) => p.sport === 'cycling')!;
+    expect(cycling.distance_km).toBe(20);
+    expect(cycling.intensity).toBe('easy');
+    const swim = planned.find((p) => p.sport === 'swimming')!;
+    expect(swim.distance_km).toBe(1);
+    expect(swim.intensity).toBe('hard');
+  });
+
+  it('"Wed and Fri sessions feel hard" fills both days', async () => {
+    await say('Monday gym, Wednesday gym, Friday gym, Sunday long run.');
+    const turn = await say('Wed and Fri sessions usually feel hard and take about an hour.');
+    expect(turn.intent).toBe('clarify_plan_detail');
+
+    const gyms = (await repo.listPlannedSessions(DEMO_USER_ID)).filter((p) => p.sport === 'gym');
+    const wed = gyms.find((p) => p.start_at.startsWith('2026-09-09'))!;
+    const fri = gyms.find((p) => p.start_at.startsWith('2026-09-11'))!;
+    expect(wed).toMatchObject({ intensity: 'hard', duration_minutes: 60 });
+    expect(fri).toMatchObject({ intensity: 'hard', duration_minutes: 60 });
+    // Monday gym (not mentioned) is untouched
+    const mon = gyms.find((p) => p.start_at.startsWith('2026-09-07'))!;
+    expect(mon.needs_detail).toContain('intensity');
+  });
+
   it('fills a single day from "Saturday swim is usually 1.5km"', async () => {
     await say('Monday gym, Wednesday swim, Saturday swim, Sunday long run.');
     const turn = await say('Saturday swim is usually about 1.5km.');

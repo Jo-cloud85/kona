@@ -12,6 +12,7 @@ import {
   extractIntensity,
   extractReason,
   extractSport,
+  namedWeekdayIndexes,
   parseClarificationAnswer,
   parseFuelItems,
   parsePerceivedIntensity,
@@ -70,13 +71,18 @@ export class DeterministicLlmClient implements LlmClient {
       };
     }
 
-    // 1.5 Answering a question about an under-specified session in the saved week
-    const strongModification =
-      /\b(actually|only|ended up|instead|stopped|cut (it|the .*?) short|had to stop|didn'?t finish|turned back)\b/i.test(
+    // 1.5 Answering a question about an under-specified session in the saved week.
+    // Only a *genuine* past-tense deviation log should block this path — a
+    // clarification like "I only ride about 20km" or "because I'm new to it"
+    // must not be mistaken for logging a modified workout.
+    const genuineActualLog =
+      /\bi\s+(only\s+|just\s+|ended up\s+)?(ran|did|rode|cycled|swam|completed|finished|managed)\b/i.test(text) ||
+      /\b(instead of|rather than|cut (it|the .{0,20}?) short|had to stop|stopped (after|early|at|because)|turned back|didn'?t finish|couldn'?t (finish|complete)|ended up (only|doing|with))\b/i.test(
         text,
-      );
+      ) ||
+      /\bactually\b/i.test(text);
     const pd = context.pending_plan_details;
-    if (pd && !futureMarker && !strongModification) {
+    if (pd && !futureMarker && !genuineActualLog) {
       const pendingSports = new Set(pd.groups.map((g) => g.sport));
       const hasAnswerSignal =
         /\d/.test(text) ||
@@ -113,12 +119,28 @@ export class DeterministicLlmClient implements LlmClient {
         }
       }
 
-      // Whole-group answer ("the gym sessions are hard, about an hour").
-      if (hasAnswerSignal && spans.length < 2) {
+      // Group / shared answer: "the gym sessions are hard, about an hour" or
+      // "Wed and Fri sessions feel hard and take about an hour".
+      if (hasAnswerSignal) {
         const ans = parseClarificationAnswer(text);
-        const hasDetail =
-          ans.intensity !== undefined || ans.duration_minutes !== undefined || ans.distance_km !== undefined;
-        if (hasDetail) {
+        const detail = {
+          ...(ans.intensity ? { intensity: ans.intensity } : {}),
+          ...(ans.duration_minutes !== undefined ? { duration_minutes: ans.duration_minutes } : {}),
+          ...(ans.distance_km !== undefined ? { distance_km: ans.distance_km } : {}),
+        };
+        if (Object.keys(detail).length > 0) {
+          const namedDays = namedWeekdayIndexes(text);
+          if (namedDays.length >= 2) {
+            // One shared detail across several named days (sport inferred per day).
+            return {
+              intent: 'clarify_plan_detail',
+              tool_calls: namedDays.map((di) => ({
+                tool: 'update_planned_sessions',
+                args: { week_start: pd.week_start, day_index: di, ...detail },
+              })),
+              notes: [`Shared detail across ${namedDays.length} days.`],
+            };
+          }
           const sportFilter = ans.sport ?? (pd.groups.length === 1 ? pd.groups[0]!.sport : undefined);
           return {
             intent: 'clarify_plan_detail',
@@ -129,9 +151,7 @@ export class DeterministicLlmClient implements LlmClient {
                   week_start: pd.week_start,
                   ...(sportFilter ? { sport: sportFilter } : {}),
                   ...(ans.day_index !== undefined ? { day_index: ans.day_index } : {}),
-                  ...(ans.intensity ? { intensity: ans.intensity } : {}),
-                  ...(ans.duration_minutes !== undefined ? { duration_minutes: ans.duration_minutes } : {}),
-                  ...(ans.distance_km !== undefined ? { distance_km: ans.distance_km } : {}),
+                  ...detail,
                 },
               },
             ],
@@ -139,12 +159,24 @@ export class DeterministicLlmClient implements LlmClient {
           };
         }
       }
+
+      // It looks like an answer to the open questions but we couldn't pin the
+      // specifics down. Ask for a per-session breakdown rather than misrouting
+      // it to a workout log or a new plan.
+      if (hasAnswerSignal) {
+        return {
+          intent: 'clarify_plan_detail',
+          tool_calls: [],
+          clarifying_question:
+            'I want to slot that into your plan but couldn\'t quite pin it to each session. Could you give it per session? e.g. "Wednesday gym: hard, about an hour" or "Sunday long run: 15 km".',
+        };
+      }
     }
 
-    // 2a. Plan a whole week (several weekday names, each with a session or rest)
+    // 2a. Plan a whole week (several DISTINCT weekday names, each with a session or rest)
     if (!modificationMarker) {
       const week = parseWeeklyPlan(text);
-      if (week.length >= 2) {
+      if (new Set(week.map((d) => d.day_index)).size >= 2) {
         const weekStart = resolveWeekStart(context.now_iso, text);
         const days = week.map((day) => ({
           date: dateForWeekday(weekStart, day.day_index),

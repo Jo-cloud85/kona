@@ -20,6 +20,13 @@ function pad(n: number): string {
 }
 
 export function extractDistanceKm(text: string): number | undefined {
+  // Ranges first: "5-7km", "12km to 18km", "6–10 km" -> midpoint (a "typical" value).
+  const range =
+    /(\d+(?:\.\d+)?)\s*(?:-|to|–|~)\s*(\d+(?:\.\d+)?)\s*k(?:m|ilomet\w*)?\b/i.exec(text) ??
+    /(\d+(?:\.\d+)?)\s*k(?:m|ilomet\w*)?\s*(?:-|to|–)\s*(\d+(?:\.\d+)?)\s*k(?:m|ilomet\w*)?\b/i.exec(text);
+  if (range) {
+    return Math.round(((Number(range[1]) + Number(range[2])) / 2) * 10) / 10;
+  }
   const m = /(\d+(?:\.\d+)?)\s*k(?:m|ilomet\w*)?\b/i.exec(text);
   return m ? Number(m[1]) : undefined;
 }
@@ -235,6 +242,11 @@ function mondayIndex(d: Date): number {
   return (d.getDay() + 6) % 7;
 }
 
+/** Distinct weekday indexes (0=Mon..6=Sun) named anywhere in `text`. */
+export function namedWeekdayIndexes(text: string): number[] {
+  return [...new Set(DAY_MATCHERS.filter(({ re }) => re.test(text)).map((d) => d.index))];
+}
+
 /** YYYY-MM-DD of the Monday of the week containing `nowIso` (+7 for "next week"). */
 export function resolveWeekStart(nowIso: string, text: string): string {
   const now = new Date(nowIso);
@@ -289,16 +301,27 @@ function parseOneSession(chunk: string): ParsedWeekSession | undefined {
  * (i.e. it isn't a weekly plan).
  */
 export function parseWeeklyPlan(text: string): ParsedWeekDay[] {
-  const hits = DAY_MATCHERS.map(({ index, re }) => {
-    const m = re.exec(text);
-    return m ? { index, at: m.index, len: m[0].length } : undefined;
-  })
-    .filter((h): h is { index: number; at: number; len: number } => h !== undefined)
-    .sort((a, b) => a.at - b.at);
+  // Find EVERY occurrence of each weekday (a day can be mentioned twice, e.g.
+  // "For Thu it's 8km ... Thu cycling is easy") so each gets its own span.
+  const hits: { index: number; at: number; len: number }[] = [];
+  for (const { index, re } of DAY_MATCHERS) {
+    const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+    for (const m of text.matchAll(g)) {
+      hits.push({ index, at: m.index, len: m[0].length });
+    }
+  }
+  hits.sort((a, b) => a.at - b.at);
 
   if (hits.length < 2) return [];
 
-  const days: ParsedWeekDay[] = [];
+  interface Raw {
+    day_index: number;
+    rest: boolean;
+    sessions: ParsedWeekSession[];
+    /** span was only a connective ("Wed and Fri ...") — share the next day's sessions. */
+    share_next: boolean;
+  }
+  const raws: Raw[] = [];
   for (let i = 0; i < hits.length; i++) {
     const start = hits[i]!.at + hits[i]!.len;
     const end = i + 1 < hits.length ? hits[i + 1]!.at : text.length;
@@ -309,7 +332,7 @@ export function parseWeeklyPlan(text: string): ParsedWeekDay[] {
       .trim();
 
     if (/\b(rest|off|nothing|recovery day)\b/i.test(span) && !extractSport(span)) {
-      days.push({ day_index: hits[i]!.index, rest: true, sessions: [] });
+      raws.push({ day_index: hits[i]!.index, rest: true, sessions: [], share_next: false });
       continue;
     }
 
@@ -318,7 +341,25 @@ export function parseWeeklyPlan(text: string): ParsedWeekDay[] {
       .map(parseOneSession)
       .filter((s): s is ParsedWeekSession => s !== undefined);
 
-    if (sessions.length > 0) days.push({ day_index: hits[i]!.index, rest: false, sessions });
+    // "Wed and Fri sessions feel hard ..." — an empty/connective span before
+    // another day means the two days share that description.
+    const connectiveOnly = /^(?:and|&|\+|\/|,|\bplus\b|\bwith\b|\s|-)*$/i.test(span) || span.toLowerCase() === 's';
+    raws.push({ day_index: hits[i]!.index, rest: false, sessions, share_next: sessions.length === 0 && connectiveOnly });
+  }
+
+  const days: ParsedWeekDay[] = [];
+  for (let i = 0; i < raws.length; i++) {
+    const r = raws[i]!;
+    if (r.rest) {
+      days.push({ day_index: r.day_index, rest: true, sessions: [] });
+      continue;
+    }
+    let sessions = r.sessions;
+    if (r.share_next) {
+      const next = raws.slice(i + 1).find((n) => n.sessions.length > 0);
+      if (next) sessions = next.sessions.map((s) => ({ ...s }));
+    }
+    if (sessions.length > 0) days.push({ day_index: r.day_index, rest: false, sessions });
   }
   return days;
 }
