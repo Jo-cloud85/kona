@@ -50,9 +50,13 @@ export async function POST(req: Request): Promise<Response> {
     });
   } catch (err) {
     console.error('kona chat error', err);
-    return Response.json(
-      { error: 'Kona hit an error handling that message.', detail: err instanceof Error ? err.message : undefined },
-      { status: 500 },
-    );
+    const raw = err instanceof Error ? err.message : String(err);
+    // The Anthropic SDK throws with a `status` field for API errors.
+    const status = typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : undefined;
+    const apiIssue = status !== undefined || /anthropic|credit balance|invalid_request_error|authentication_error|rate.?limit|overloaded/i.test(raw);
+    const error = apiIssue
+      ? `The AI service returned an error${status ? ` (${status})` : ''}. Check the server console — for a billing or API-key problem, fix that or run without ANTHROPIC_API_KEY to use the built-in deterministic mode.`
+      : 'Kona hit an error handling that message.';
+    return Response.json({ error, detail: raw }, { status: 502 });
   }
 }

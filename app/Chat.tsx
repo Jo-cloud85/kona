@@ -7,6 +7,7 @@ interface ChatEntry {
   content: string;
   intent?: string;
   safety?: boolean;
+  detail?: string;
 }
 
 const CONV_KEY = 'kona.conversationId';
@@ -66,7 +67,12 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
         ...prev,
         res.ok
           ? { role: 'assistant', content: data.reply, intent: data.intent, safety: data.safety_escalated }
-          : { role: 'assistant', content: data.error ?? 'Something went wrong.', intent: 'error' },
+          : {
+              role: 'assistant',
+              content: data.error ?? 'Something went wrong.',
+              intent: 'error',
+              detail: typeof data.detail === 'string' ? data.detail : undefined,
+            },
       ]);
     } catch {
       setEntries((prev) => [...prev, { role: 'assistant', content: 'Network error — try again.', intent: 'error' }]);
@@ -93,14 +99,13 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
         )}
         {entries.map((e, i) => (
           <div key={i} className={`row ${e.role}`}>
-            <div>
-              <div className="bubble">{e.content}</div>
-              {e.role === 'assistant' && (e.intent || e.safety) && (
-                <div className={`meta${e.safety ? ' safety' : ''}`}>
-                  {e.safety ? 'safety escalation' : e.intent}
-                </div>
-              )}
-            </div>
+            <div className="bubble">{e.content}</div>
+            {e.role === 'assistant' && e.detail && <div className="detail">{e.detail}</div>}
+            {e.role === 'assistant' && (e.intent || e.safety) && (
+              <div className={`meta${e.safety ? ' safety' : ''}`}>
+                {e.safety ? 'safety escalation' : e.intent}
+              </div>
+            )}
           </div>
         ))}
         {busy && (
