@@ -95,6 +95,7 @@ export function extractSport(text: string): Sport | undefined {
   if (/\b(ride|rode|cycl\w*|bike|biking|spin)\b/i.test(text)) return 'cycling';
   if (/\b(swim|swam|swimming)\b/i.test(text)) return 'swimming';
   if (/\b(gym|weights|strength|lifting|core)\b/i.test(text)) return 'gym';
+  if (/\b(climb|climbing|bouldering|boulder)\b/i.test(text)) return 'climbing';
   return undefined;
 }
 

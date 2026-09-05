@@ -1,9 +1,9 @@
 # Kona — Progress
 
 ## Current milestone
-**M7 complete — weekly plan now asks for missing detail instead of assuming
-"easy".** Next: a persistence backend to replace the in-memory store;
-food-estimation ranges (§14); historical pattern surfacing (§12).
+**M8 complete — onboarding (Get Started → profile form).** Next: a persistence
+backend to replace the in-memory store (onboarding data currently resets on
+server restart); food-estimation ranges (§14); historical pattern surfacing (§12).
 
 ## Completed work
 
@@ -59,6 +59,15 @@ food-estimation ranges (§14); historical pattern surfacing (§12).
 - Deterministic interpreter: `plan_week` intent when ≥2 weekday names are present. Anthropic client: `save_weekly_plan → plan_week` + a system-prompt bullet.
 - Responder: `composeWeekPlan` — week date range, day-by-day list (incl. rest days), the top 1–2 key-day prep lines, and a "remembered this" close.
 - Tests: +18 (`tests/engine/week.test.ts` ×5, `tests/agent/week-plan.test.ts` ×5 incl. the exact PRODUCT_VISION sentence and a later actual-session linking to the week's Tuesday plan, +8 repo). **49 total**, all green; typecheck + lint clean; verified in the browser.
+
+### M8 — Onboarding ✅
+- `Get Started` landing → profile form → chat. `app/page.tsx` orchestrates three views (`loading | onboarding | chat`); `app/Onboarding.tsx` (landing hero + form), `app/Chat.tsx` (the chat, extracted from `page.tsx`, now greets by name).
+- Form fields: username, gender, age, **body weight (kg)** — added because the calc engine needs it for protein targets (CALCULATION_ENGINE_SPEC.md §3.1) — multi-select workout types (running/swimming/cycling/gym/**climbing**, new `Sport` value), sessions/week, an optional recent-injuries note, and three 1–5 self-ratings (sleep, hydration, sweat).
+- `Profile` type gained `username / gender / age / recent_injuries_note / self_perception / onboarded_at` (all optional except the pre-existing `body_weight_kg`). `Gender` + `SelfPerception` types added.
+- `src/domain/profile-input.ts` — pure `validateProfileInput()` (boundary validation, ranges, sport whitelist, dedup) reused by the API route. 16 tests.
+- `app/api/profile/route.ts` — `GET` (returns `{ profile }` or null) + `POST` (validate → `upsertProfile`). `lib/kona-server.ts` no longer seeds a demo profile for the web app — the user onboards first; chat is unreachable until then (the calc tool requires a profile).
+- Self-perception and the injury note are passed to the LLM as **context, not calc inputs** — a high self-rated sweat level is not a sweat-rate measurement, so the engine stays in reference-range mode. `contextForPrompt` + `COMPOSE_SYSTEM` updated.
+- Tests: +17 (`tests/domain/profile-input.test.ts` ×16, +1 repo round-trip). **72 total**, all green; `next build` clean; full landing → form → submit → chat flow verified in the browser.
 
 ### M7 — Weekly plan asks for missing detail ✅
 _Prompted by user feedback: Kona was silently defaulting unstated intensity to "easy" and showing it as fact; gym/swim/long-run days got no fueling treatment._

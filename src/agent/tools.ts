@@ -89,7 +89,7 @@ function num(args: Record<string, unknown>, key: string): number | undefined {
   return n;
 }
 
-const SPORTS: Sport[] = ['running', 'cycling', 'swimming', 'gym', 'hyrox', 'triathlon', 'other'];
+const SPORTS: Sport[] = ['running', 'cycling', 'swimming', 'gym', 'climbing', 'hyrox', 'triathlon', 'other'];
 const INTENSITIES: Intensity[] = ['easy', 'moderate', 'hard', 'race'];
 
 function sport(args: Record<string, unknown>, key: string, required = true): Sport | undefined {

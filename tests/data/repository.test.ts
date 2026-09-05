@@ -75,6 +75,30 @@ describe('InMemoryRepository', () => {
     expect(memories[0]?.value).toBe('800');
   });
 
+  it('round-trips a full onboarding profile', async () => {
+    const repo = await createSeededRepository();
+    const saved = await repo.upsertProfile({
+      user_id: DEMO_USER_ID,
+      username: 'joan',
+      gender: 'female',
+      age: 34,
+      body_weight_kg: 58,
+      usual_sports: ['running', 'climbing'],
+      typical_weekly_sessions: 6,
+      recent_injuries_note: 'calf cramp on a hot day',
+      self_perception: { sleep_quality: 4, hydration: 3, sweat_level: 5 },
+      onboarded_at: '2026-09-06T00:00:00Z',
+    });
+    expect(saved.username).toBe('joan');
+    const back = await repo.getProfile(DEMO_USER_ID);
+    expect(back).toMatchObject({
+      gender: 'female',
+      usual_sports: ['running', 'climbing'],
+      self_perception: { sweat_level: 5 },
+      onboarded_at: '2026-09-06T00:00:00Z',
+    });
+  });
+
   it('stores a weekly plan and links its sessions; re-saving the same week replaces it', async () => {
     const repo = await createSeededRepository();
     const week = await repo.saveWeeklyPlan({

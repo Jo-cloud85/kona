@@ -1,5 +1,7 @@
 import 'server-only';
-import { createSeededRepository, DEMO_USER_ID } from '../src/data/index';
+import { InMemoryRepository, DEMO_USER_ID } from '../src/data/index';
+import type { Profile } from '../src/domain/types';
+import type { ProfileFormData } from '../src/domain/profile-input';
 import {
   AnthropicLlmClient,
   DeterministicLlmClient,
@@ -12,13 +14,19 @@ import {
 /**
  * Process-wide Kona instance for the web app.
  *
- * The repository is the in-memory implementation from the core (M2). That means
- * state lives only in this Node process and resets on server restart — fine for
- * the thin UI milestone; a persistence backend is a separate, later decision.
+ * The repository is the in-memory implementation from the core (M2). State lives
+ * only in this Node process and resets on server restart — fine for now; a
+ * persistence backend is a separate, later decision. Unlike the CLI, the web
+ * app does NOT seed a demo profile: the user completes onboarding first.
  */
 
-let repoPromise: ReturnType<typeof createSeededRepository> | undefined;
+let repo: InMemoryRepository | undefined;
 let llm: LlmClient | undefined;
+
+function getRepo(): InMemoryRepository {
+  if (!repo) repo = new InMemoryRepository();
+  return repo;
+}
 
 function getLlm(): LlmClient {
   if (!llm) {
@@ -33,16 +41,28 @@ export function llmName(): string {
     : 'deterministic';
 }
 
-async function deps(): Promise<AgentDeps> {
-  if (!repoPromise) repoPromise = createSeededRepository();
-  return { repo: await repoPromise, llm: getLlm() };
+function deps(): AgentDeps {
+  return { repo: getRepo(), llm: getLlm() };
+}
+
+export async function getProfile(): Promise<Profile | undefined> {
+  return getRepo().getProfile(DEMO_USER_ID);
+}
+
+export async function saveProfile(data: ProfileFormData): Promise<Profile> {
+  const existing = await getRepo().getProfile(DEMO_USER_ID);
+  return getRepo().upsertProfile({
+    ...existing,
+    ...data,
+    user_id: DEMO_USER_ID,
+    onboarded_at: existing?.onboarded_at ?? new Date().toISOString(),
+  });
 }
 
 export async function sendMessage(conversationId: string, message: string): Promise<AgentTurn> {
-  return handleMessage(await deps(), { userId: DEMO_USER_ID, conversationId, message });
+  return handleMessage(deps(), { userId: DEMO_USER_ID, conversationId, message });
 }
 
 export async function listMessages(conversationId: string) {
-  const { repo } = await deps();
-  return repo.listMessages(conversationId);
+  return getRepo().listMessages(conversationId);
 }

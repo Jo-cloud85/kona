@@ -22,7 +22,15 @@ export type Certainty =
 // Session vocabulary (CALCULATION_ENGINE_SPEC.md §3, §4)
 // ---------------------------------------------------------------------------
 
-export type Sport = 'running' | 'cycling' | 'swimming' | 'gym' | 'hyrox' | 'triathlon' | 'other';
+export type Sport =
+  | 'running'
+  | 'cycling'
+  | 'swimming'
+  | 'gym'
+  | 'climbing'
+  | 'hyrox'
+  | 'triathlon'
+  | 'other';
 
 export type Intensity = 'easy' | 'moderate' | 'hard' | 'race';
 
@@ -54,8 +62,19 @@ export interface KnownSweatData {
   sweat_sodium_mg_per_l?: number;
 }
 
+export type Gender = 'female' | 'male' | 'nonbinary' | 'other' | 'prefer_not_to_say';
+
+/** Subjective 1–5 self-ratings from onboarding. 5 = excellent for sleep/hydration;
+ *  5 = a lot / excessive for sweat. Context for the companion, NOT a calc input. */
+export interface SelfPerception {
+  sleep_quality: number; // 1–5
+  hydration: number; // 1–5
+  sweat_level: number; // 1–5 (5 = heavy sweater)
+}
+
 export interface Profile {
   user_id: string;
+  /** Required for the calculation engine (protein targets). */
   body_weight_kg: number;
   usual_sports: Sport[];
   usual_bottle_ml?: number;
@@ -63,6 +82,16 @@ export interface Profile {
   known_sweat_data?: KnownSweatData[];
   /** Product ids (see data/products.ts) the user commonly uses. */
   preferred_product_ids?: string[];
+
+  // Onboarding background — helps the companion, not the numbers.
+  username?: string;
+  gender?: Gender;
+  age?: number;
+  /** Free text: injuries or cramps in the last month, or empty. */
+  recent_injuries_note?: string;
+  self_perception?: SelfPerception;
+  /** Set once the user has completed onboarding. */
+  onboarded_at?: string;
 }
 
 // ---------------------------------------------------------------------------

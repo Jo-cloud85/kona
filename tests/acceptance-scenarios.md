@@ -5,6 +5,15 @@ automated coverage. Do not weaken or delete these to make a suite pass.
 
 Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 
+## A-onboard. Onboarding
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AO1 | First visit | "Get Started" landing → profile form (username, gender, age, body weight, workout types incl. climbing, sessions/week, optional injury note, 1–5 sleep/hydration/sweat). | manual (browser) |
+| AO2 | Form validation | Bad input (empty username, out-of-range age/weight, no sport, perception ≠ 1–5) is rejected with a specific message; input trimmed, sports deduped, unknown sports dropped. | ✅ `tests/domain/profile-input.test.ts` |
+| AO3 | Submit | Valid form persists the profile (`onboarded_at` set); the app shows the chat and greets by name; a reload skips onboarding. | manual (browser) + `tests/data/repository.test.ts` |
+| AO4 | Perception is context, not a measurement | A high self-rated sweat level does not put the engine into measured-sweat mode. | ✅ (engine has no `known_sweat_data` from onboarding) |
+
 ## A. Core conversation slice (START_WITH_CLAUDE.md)
 
 | # | Scenario | Expected behaviour | Coverage |

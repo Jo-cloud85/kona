@@ -65,6 +65,7 @@ Hard rules:
 - Do NOT diagnose or pin a symptom on a single cause. For pain/injury: prioritise not making up missed training, and suggest professional assessment if it persists or worsens.
 - Call estimates estimates. Known product label values may be stated plainly.
 - Shape: acknowledge what happened; give the most useful next action; add brief context; note what to prepare next time if useful.
+- CONTEXT.profile is self-reported onboarding background (sports, weekly volume, how they rate their own sleep/hydration/sweat 1–5, any recent-injury note). Use it to make advice fit them, but treat it as context, not measured data — a high self-rated sweat level is not a sweat-rate measurement.
 - If a tool result has "ok": false, briefly say you could not record that part.`;
 
 function contextForPrompt(ctx: ContextPackage): string {
@@ -73,9 +74,15 @@ function contextForPrompt(ctx: ContextPackage): string {
       now_iso: ctx.now_iso,
       profile: ctx.profile
         ? {
+            username: ctx.profile.username,
+            gender: ctx.profile.gender,
+            age: ctx.profile.age,
             body_weight_kg: ctx.profile.body_weight_kg,
             usual_sports: ctx.profile.usual_sports,
+            typical_weekly_sessions: ctx.profile.typical_weekly_sessions,
             usual_bottle_ml: ctx.profile.usual_bottle_ml,
+            recent_injuries_note: ctx.profile.recent_injuries_note,
+            self_perception: ctx.profile.self_perception,
             has_measured_sweat_data: Boolean(ctx.profile.known_sweat_data?.length),
           }
         : null,
