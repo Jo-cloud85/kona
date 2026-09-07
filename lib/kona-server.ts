@@ -70,8 +70,20 @@ export async function saveProfile(data: ProfileFormData): Promise<Profile> {
   });
 }
 
-export async function sendMessage(conversationId: string, message: string): Promise<AgentTurn> {
-  return handleMessage(deps(), { userId: DEMO_USER_ID, conversationId, message });
+export interface SentMessage {
+  turn: AgentTurn;
+  /** Structured per-session prompts from a weekly-plan / clarify turn, if any. */
+  session_prompts: unknown[];
+}
+
+export async function sendMessage(conversationId: string, message: string): Promise<SentMessage> {
+  const turn = await handleMessage(deps(), { userId: DEMO_USER_ID, conversationId, message });
+  let session_prompts: unknown[] = [];
+  for (const r of turn.tool_results) {
+    const analysis = (r.data as { analysis?: { session_prompts?: unknown[] } } | undefined)?.analysis;
+    if (r.ok && Array.isArray(analysis?.session_prompts)) session_prompts = analysis.session_prompts;
+  }
+  return { turn, session_prompts };
 }
 
 export async function listMessages(conversationId: string) {

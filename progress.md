@@ -1,9 +1,11 @@
 # Kona — Progress
 
 ## Current milestone
-**M9 complete — chat starter (greeting + daily baseline + conversation prompts)
-and a typing indicator.** Next: a persistence backend to replace the in-memory
-store; food-estimation ranges (§14); historical pattern surfacing (§12).
+**M10 in progress — 3 requested features.**
+- ✅ (1) Day-by-day advice for the whole week + structured per-session prompts with option buttons.
+- ⏳ (2) History sidebar: multiple conversations, switch / new chat.
+- ⏳ (3) Dashboard button → per-day nutrition charts.
+Next after: a persistence backend; food-estimation ranges (§14).
 
 ## Completed work
 
@@ -59,6 +61,14 @@ store; food-estimation ranges (§14); historical pattern surfacing (§12).
 - Deterministic interpreter: `plan_week` intent when ≥2 weekday names are present. Anthropic client: `save_weekly_plan → plan_week` + a system-prompt bullet.
 - Responder: `composeWeekPlan` — week date range, day-by-day list (incl. rest days), the top 1–2 key-day prep lines, and a "remembered this" close.
 - Tests: +18 (`tests/engine/week.test.ts` ×5, `tests/agent/week-plan.test.ts` ×5 incl. the exact PRODUCT_VISION sentence and a later actual-session linking to the week's Tuesday plan, +8 repo). **49 total**, all green; typecheck + lint clean; verified in the browser.
+
+### M10.1 — Advice for every day + option-button prompts ✅
+- `analyzeWeek` now emits a `recommendation_inputs` line for **every** session day (key days keep the detailed prep; routine days get a low-priority "nothing special to prepare" line). No more top-3 cap.
+- New `session_prompts: SessionPrompt[]` — one per under-specified session, each carrying `intensity_options` (easy/moderate/hard) and `size_options` (~30 min … ~2 hr). `Chat.tsx` renders them as an inline option-button panel; picking options + "Save N sessions" builds a parseable message (`"Wed gym: hard, ~60 min. …"`) that flows through the existing clarification path. Remaining gaps get a fresh panel.
+- Responder: `planAdviceLines()` shared by the plan and clarify composers — lists every day, then nudges to the buttons (or, for CLI, the free-text `open_questions`).
+- `POST /api/chat` returns `session_prompts` extracted from the turn's tool results.
+- Fix: a message framed as a whole new week ("Next week: …", "new plan", "my week is …") is no longer misread as clarifications to an existing plan — `newPlanFraming` bails out of the clarify path so `plan_week` replaces the week.
+- Tests: +3, updated 4 for the new behavior. **82 total**, all green; `next build` clean; full flow (plan → day-by-day advice → option panel → save → updated) verified in the browser.
 
 ### M9 — Chat starter + typing indicator ✅
 - `src/engine/profile-baseline.ts` — `profileDailyBaseline({ body_weight_kg })`: daily protein range from body weight + the post-session serving, both from the rules table. Deliberately reports fluid/sodium as **per-session training references, not daily totals** (the spec has no daily fluid/sodium formula — not invented).

@@ -15,6 +15,24 @@ interface Starter {
   prompts: { label: string; prefill: string }[];
 }
 
+interface SPOption {
+  label: string;
+  value: string;
+  minutes?: number;
+}
+
+interface SessionPrompt {
+  date: string;
+  weekday_label: string;
+  sport: string;
+  session_index: number;
+  label: string;
+  ask_intensity: boolean;
+  ask_size: boolean;
+  intensity_options: SPOption[];
+  size_options: SPOption[];
+}
+
 const CONV_KEY = 'kona.conversationId';
 
 function getConversationId(): string {
@@ -35,6 +53,8 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
   const [conversationId, setConversationId] = useState('web');
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [starter, setStarter] = useState<Starter | null>(null);
+  const [prompts, setPrompts] = useState<SessionPrompt[]>([]);
+  const [picks, setPicks] = useState<Record<string, { intensity?: string; size?: string }>>({});
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [llm, setLlm] = useState('');
@@ -59,7 +79,7 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' });
-  }, [entries, busy]);
+  }, [entries, busy, prompts]);
 
   const send = useCallback(
     async (text?: string) => {
@@ -67,6 +87,8 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
       if (!message || busy) return;
       setDraft('');
       setStarter(null);
+      setPrompts([]);
+      setPicks({});
       setEntries((prev) => [...prev, { role: 'user', content: message }]);
       setBusy(true);
       try {
@@ -87,6 +109,9 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
                 detail: typeof data.detail === 'string' ? data.detail : undefined,
               },
         ]);
+        if (res.ok && Array.isArray(data.session_prompts) && data.session_prompts.length) {
+          setPrompts(data.session_prompts as SessionPrompt[]);
+        }
       } catch {
         setEntries((prev) => [...prev, { role: 'assistant', content: 'Network error — try again.', intent: 'error' }]);
       } finally {
@@ -105,6 +130,30 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
         el.setSelectionRange(prefill.length, prefill.length);
       }
     });
+  };
+
+  const key = (p: SessionPrompt) => `${p.date}#${p.session_index}`;
+  const pick = (p: SessionPrompt, field: 'intensity' | 'size', value: string) =>
+    setPicks((prev) => {
+      const cur = prev[key(p)] ?? {};
+      return { ...prev, [key(p)]: { ...cur, [field]: cur[field] === value ? undefined : value } };
+    });
+
+  const answeredCount = prompts.filter((p) => {
+    const s = picks[key(p)];
+    return s && (s.intensity || s.size);
+  }).length;
+
+  const submitPicks = () => {
+    const clauses = prompts
+      .map((p) => {
+        const s = picks[key(p)];
+        if (!s || (!s.intensity && !s.size)) return null;
+        const bits = [s.intensity, s.size ? `~${s.size}` : ''].filter(Boolean).join(', ');
+        return `${p.weekday_label} ${p.sport}: ${bits}`;
+      })
+      .filter(Boolean);
+    if (clauses.length) void send(clauses.join('. ') + '.');
   };
 
   return (
@@ -148,6 +197,48 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
             )}
           </div>
         ))}
+
+        {prompts.length > 0 && !busy && (
+          <div className="row assistant">
+            <div className="prompt-panel">
+              <p className="prompt-panel-title">Set the effort and length for each session:</p>
+              {prompts.map((p) => (
+                <div key={key(p)} className="prompt-row">
+                  <span className="prompt-label">{p.label}</span>
+                  {p.ask_intensity && (
+                    <div className="opts">
+                      {p.intensity_options.map((o) => (
+                        <button
+                          key={o.value}
+                          className={picks[key(p)]?.intensity === o.value ? 'on' : ''}
+                          onClick={() => pick(p, 'intensity', o.value)}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {p.ask_size && (
+                    <div className="opts">
+                      {p.size_options.map((o) => (
+                        <button
+                          key={o.value}
+                          className={picks[key(p)]?.size === o.value ? 'on' : ''}
+                          onClick={() => pick(p, 'size', o.value)}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button className="cta prompt-save" disabled={answeredCount === 0} onClick={submitPicks}>
+                {answeredCount === 0 ? 'Pick some options above' : `Save ${answeredCount} session${answeredCount === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        )}
 
         {busy && (
           <div className="row assistant">

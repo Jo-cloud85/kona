@@ -248,20 +248,33 @@ function composeWeekPlan(results: ToolResult[]): string {
     ...weekDayRows(analysis, rest_days),
   ];
 
+  lines.push(...planAdviceLines(analysis));
+  return lines.join('\n');
+}
+
+/** Per-day advice for the whole week + the "fill in the gaps" nudge. Shared by
+ *  the plan and clarify composers. */
+function planAdviceLines(analysis: WeekAnalysis): string[] {
+  const out: string[] = [];
   if (analysis.recommendation_inputs.length) {
-    lines.push('');
-    for (const rec of analysis.recommendation_inputs.slice(0, 3)) lines.push(rec.action);
+    out.push('', 'Day by day:');
+    for (const rec of analysis.recommendation_inputs) out.push(`- ${rec.action}`);
   }
 
-  if (analysis.open_questions.length) {
-    lines.push('');
-    lines.push("A few things I'd pin down so the fueling advice is right:");
-    for (const q of analysis.open_questions.slice(0, 4)) lines.push(`- ${q.text}`);
+  if (analysis.session_prompts.length) {
+    out.push(
+      '',
+      `I still need the effort and length for ${analysis.session_prompts.length} session${
+        analysis.session_prompts.length === 1 ? '' : 's'
+      } — use the buttons below, or just tell me.`,
+    );
+  } else if (analysis.open_questions.length) {
+    out.push('', "A few things I'd pin down so the fueling advice is right:");
+    for (const q of analysis.open_questions.slice(0, 4)) out.push(`- ${q.text}`);
   } else {
-    lines.push('');
-    lines.push("I've remembered this — tell me what actually happens each day and I'll compare against the plan.");
+    out.push('', "That's the full picture — tell me what actually happens each day and I'll compare against the plan.");
   }
-  return lines.join('\n');
+  return out;
 }
 
 function composeClarifyPlanDetail(results: ToolResult[]): string {
@@ -282,17 +295,7 @@ function composeClarifyPlanDetail(results: ToolResult[]): string {
     )
     .join('; ');
 
-  const lines = [`Updated: ${changed}.`, '', ...weekDayRows(analysis, rest_days)];
-
-  if (analysis.recommendation_inputs.length) {
-    lines.push('');
-    for (const rec of analysis.recommendation_inputs.slice(0, 3)) lines.push(rec.action);
-  }
-  if (analysis.open_questions.length) {
-    lines.push('');
-    lines.push('Still open:');
-    for (const q of analysis.open_questions.slice(0, 4)) lines.push(`- ${q.text}`);
-  }
+  const lines = [`Updated: ${changed}.`, '', ...weekDayRows(analysis, rest_days), ...planAdviceLines(analysis)];
   return lines.join('\n');
 }
 

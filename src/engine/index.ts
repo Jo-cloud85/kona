@@ -28,4 +28,6 @@ export {
   type WeekDaySession,
   type WeekRecommendation,
   type WeekQuestion,
+  type SessionPrompt,
+  type SessionPromptOption,
 } from './week';

@@ -74,14 +74,51 @@ export interface WeekQuestion {
   text: string;
 }
 
+export interface SessionPromptOption {
+  label: string;
+  value: string;
+  minutes?: number;
+}
+
+/** One under-specified session, with option sets a UI can render as buttons. */
+export interface SessionPrompt {
+  date: string;
+  weekday_label: string;
+  sport: Sport;
+  /** 0-based index within its day (for same-day double sessions). */
+  session_index: number;
+  label: string;
+  ask_intensity: boolean;
+  ask_size: boolean;
+  intensity_options: SessionPromptOption[];
+  size_options: SessionPromptOption[];
+}
+
+const INTENSITY_OPTIONS: SessionPromptOption[] = [
+  { label: 'Easy', value: 'easy' },
+  { label: 'Moderate', value: 'moderate' },
+  { label: 'Hard', value: 'hard' },
+];
+
+const SIZE_OPTIONS: SessionPromptOption[] = [
+  { label: '~30 min', value: '30 min', minutes: 30 },
+  { label: '~45 min', value: '45 min', minutes: 45 },
+  { label: '~1 hr', value: '60 min', minutes: 60 },
+  { label: '~1.5 hr', value: '90 min', minutes: 90 },
+  { label: '~2 hr', value: '120 min', minutes: 120 },
+];
+
 export interface WeekAnalysis {
   week_start: string;
   days: WeekDay[];
   rest_days: string[];
   key_days: string[];
+  /** A day-before / preparation line for EVERY day with a session. */
   recommendation_inputs: WeekRecommendation[];
-  /** Questions Kona should ask about sessions the user didn't fully specify. */
+  /** Free-text questions about under-specified sessions (CLI / text clients). */
   open_questions: WeekQuestion[];
+  /** Structured per-session prompts a UI renders as option buttons. */
+  session_prompts: SessionPrompt[];
   methodology_version: string;
 }
 
@@ -206,11 +243,51 @@ function singleKeyPrep(day: WeekDay, bottle: string, rules: RulesConfig): WeekRe
   };
 }
 
+function lightDayPrep(day: WeekDay): WeekRecommendation {
+  const primary = day.sessions[0]!;
+  return {
+    date: day.date,
+    weekday_label: day.weekday_label,
+    priority: 'low',
+    timing: 'day_before',
+    category: 'preparation',
+    action: `${day.weekday_label}: ${describeSession(primary)} — nothing special to prepare. Normal meals and fluids cover it; put some carbohydrate and protein in the meal afterwards.`,
+    reason_codes: ['routine_day'],
+  };
+}
+
 function prepAction(day: WeekDay, profile: CalculateProfile, rules: RulesConfig): WeekRecommendation {
   const bottle = profile.usual_bottle_ml ? `your usual ${profile.usual_bottle_ml} ml bottle` : 'your bottle';
   if (day.multi_session) return doubleSessionPrep(day, bottle, rules);
   if (day.sessions.some((s) => s.is_long)) return longSessionPrep(day, bottle, rules);
-  return singleKeyPrep(day, bottle, rules);
+  if (day.is_key_day) return singleKeyPrep(day, bottle, rules);
+  return lightDayPrep(day);
+}
+
+// --- structured per-session prompts --------------------------------------
+
+const ORDINAL = ['1st', '2nd', '3rd', '4th'];
+
+function buildSessionPrompts(days: WeekDay[]): SessionPrompt[] {
+  const prompts: SessionPrompt[] = [];
+  for (const day of days) {
+    day.sessions.forEach((s, i) => {
+      if (s.needs_detail.length === 0) return;
+      const suffix = day.sessions.length > 1 ? ` (${ORDINAL[i] ?? `#${i + 1}`})` : '';
+      prompts.push({
+        date: day.date,
+        weekday_label: day.weekday_label,
+        sport: s.sport,
+        session_index: i,
+        label: `${day.weekday_label} ${s.sport}${suffix}`,
+        ask_intensity: s.needs_detail.includes('intensity'),
+        ask_size: s.needs_detail.includes('duration_or_distance'),
+        intensity_options: INTENSITY_OPTIONS,
+        size_options: SIZE_OPTIONS,
+      });
+    });
+  }
+  return prompts;
 }
 
 // --- open questions --------------------------------------------------------
@@ -298,13 +375,10 @@ export function analyzeWeek(input: WeekAnalysisInput): WeekAnalysis {
     });
   }
 
-  const keyDays = days.filter((d) => d.is_key_day);
-  const ranked = [...keyDays].sort((a, b) => rankDay(b) - rankDay(a));
-  // Top 3 by importance, but never drop a long-session day.
-  const chosen = new Map<string, WeekDay>();
-  for (const d of ranked.slice(0, 3)) chosen.set(d.date, d);
-  for (const d of keyDays) if (d.sessions.some((s) => s.is_long)) chosen.set(d.date, d);
-  const recommendation_inputs = [...chosen.values()]
+  // A preparation line for EVERY day that has a session (key days get the
+  // detailed advice, the rest get a short "nothing special" line).
+  const recommendation_inputs = days
+    .filter((d) => d.sessions.length > 0)
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((d) => prepAction(d, input.profile, rules));
 
@@ -312,18 +386,10 @@ export function analyzeWeek(input: WeekAnalysisInput): WeekAnalysis {
     week_start: input.week_start,
     days,
     rest_days: input.rest_days ?? [],
-    key_days: keyDays.map((d) => d.date),
+    key_days: days.filter((d) => d.is_key_day).map((d) => d.date),
     recommendation_inputs,
     open_questions: buildOpenQuestions(days),
+    session_prompts: buildSessionPrompts(days),
     methodology_version: rules.methodology_version,
   };
-}
-
-function rankDay(d: WeekDay): number {
-  let score = 0;
-  if (d.multi_session) score += 4;
-  if (d.sessions.some((s) => s.duration_class === 'VERY_LONG')) score += 3;
-  if (d.sessions.some((s) => s.duration_class === 'LONG' || s.is_long || s.is_key)) score += 2;
-  if (d.sessions.some((s) => s.intensity === 'hard' || s.intensity === 'race')) score += 1;
-  return score;
 }

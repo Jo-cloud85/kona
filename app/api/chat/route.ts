@@ -42,12 +42,13 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const turn = await sendMessage(convId, message.trim());
+    const { turn, session_prompts } = await sendMessage(convId, message.trim());
     return Response.json({
       reply: turn.reply,
       intent: turn.intent,
       safety_escalated: turn.safety.escalate,
       clarifying_question: turn.clarifying_question ?? null,
+      session_prompts,
     });
   } catch (err) {
     console.error('kona chat error', err);

@@ -81,7 +81,12 @@ export class DeterministicLlmClient implements LlmClient {
         text,
       ) ||
       /\bactually\b/i.test(text);
-    const pd = context.pending_plan_details;
+    // A message framed as a whole new week is a plan, not an answer to gaps.
+    const newPlanFraming =
+      /\b(next week|new plan|new week|this week|weekly plan|(my|the) (training )?week (is|will be|looks like)|here'?s my week|revamp|redo (my|the) (plan|week)|chang(e|ing) (my|the) (plan|week))\b/i.test(
+        text,
+      );
+    const pd = newPlanFraming ? undefined : context.pending_plan_details;
     if (pd && !futureMarker && !genuineActualLog) {
       const pendingSports = new Set(pd.groups.map((g) => g.sport));
       const hasAnswerSignal =

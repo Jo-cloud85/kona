@@ -88,10 +88,22 @@ describe('weekly plan conversation slice', () => {
     // It does NOT assert "easy" for sessions the user didn't rate, and asks.
     expect(turn.reply).toMatch(/Mon: gym \(effort & distance\/time not set\)/);
     expect(turn.reply).not.toMatch(/Mon: easy gym/);
-    expect(turn.reply).toMatch(/pin down/i);
-    expect(turn.reply).toMatch(/How hard .*gym/i);
-    expect(turn.reply).toMatch(/How hard .*swimming/i);
-    expect(turn.reply).toMatch(/how long .*\(or what distance\)/i);
+    // advice for every day, plus a nudge to fill the gaps via the option buttons
+    expect(turn.reply).toMatch(/Day by day:/);
+    expect(turn.reply).toMatch(/effort and length for \d+ sessions/i);
+
+    // structured per-session prompts are produced for the UI to render as buttons
+    const analysis = turn.tool_results.find((r) => r.tool === 'save_weekly_plan')!.data as {
+      analysis: { session_prompts: { label: string; ask_intensity: boolean; ask_size: boolean }[] };
+    };
+    const promptLabels = analysis.analysis.session_prompts.map((p) => p.label);
+    expect(promptLabels).toEqual(
+      expect.arrayContaining(['Mon gym', 'Wed swimming', 'Fri cycling (1st)', 'Fri running (2nd)']),
+    );
+    expect(analysis.analysis.session_prompts.find((p) => p.label === 'Mon gym')).toMatchObject({
+      ask_intensity: true,
+      ask_size: true,
+    });
   });
 
   it('asks about under-specified sessions, then fills them in from a plain-language answer', async () => {
@@ -108,9 +120,22 @@ describe('weekly plan conversation slice', () => {
     expect(gymSessions[0]!.needs_detail ?? []).toEqual([]);
 
     expect(turn.reply).toMatch(/Updated: Mon gym → .*60 min.*hard/);
-    // still open: swim, running, cycling
-    expect(turn.reply).toMatch(/Still open:/);
+    // still gaps: swim, running, cycling
+    expect(turn.reply).toMatch(/effort and length for \d+ session/i);
     expect(turn.reply).toMatch(/swimming/i);
+  });
+
+  it('a fresh "Next week: ..." plan replaces the existing week (not read as clarifications)', async () => {
+    await say('Monday gym, Tuesday 8km run, Wednesday swim, Sunday long run.');
+    const turn = await say(
+      'Next week: Monday rest, Tuesday 6km tempo run, Wednesday gym, Thursday swim, Friday gym, Saturday easy run, Sunday long run',
+    );
+    expect(turn.intent).toBe('plan_week');
+    expect(turn.tool_calls.map((c) => c.tool)).toEqual(['save_weekly_plan', 'propose_memory_update']);
+    // exactly one weekly plan record (the new one for next week)
+    const weeks = await repo.listWeeklyPlans(DEMO_USER_ID);
+    expect(weeks).toHaveLength(2); // this week + next week are different week_starts
+    expect(turn.reply).toMatch(/^Saved your week/);
   });
 
   it('a multi-day answer fills each day and is NOT read as a new plan', async () => {
