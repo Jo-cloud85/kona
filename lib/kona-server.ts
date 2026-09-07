@@ -90,6 +90,10 @@ export async function listMessages(conversationId: string) {
   return getRepo().listMessages(conversationId);
 }
 
+export async function listConversations() {
+  return getRepo().listConversations(DEMO_USER_ID);
+}
+
 /** The one-time opening message + conversation starters (only meaningful before
  *  the conversation has any messages). Null until the user has onboarded. */
 export async function getStarter(): Promise<ChatStarter | null> {

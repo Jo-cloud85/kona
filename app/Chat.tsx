@@ -33,24 +33,17 @@ interface SessionPrompt {
   size_options: SPOption[];
 }
 
-const CONV_KEY = 'kona.conversationId';
-
-function getConversationId(): string {
-  if (typeof window === 'undefined') return 'web';
-  try {
-    let id = window.localStorage.getItem(CONV_KEY);
-    if (!id) {
-      id = `web-${Math.random().toString(36).slice(2, 10)}`;
-      window.localStorage.setItem(CONV_KEY, id);
-    }
-    return id;
-  } catch {
-    return `web-${Math.random().toString(36).slice(2, 10)}`;
-  }
-}
-
-export default function Chat({ greetingName }: { greetingName?: string }) {
-  const [conversationId, setConversationId] = useState('web');
+export default function Chat({
+  conversationId,
+  greetingName,
+  onActivity,
+  onMenu,
+}: {
+  conversationId: string;
+  greetingName?: string;
+  onActivity?: () => void;
+  onMenu?: () => void;
+}) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [starter, setStarter] = useState<Starter | null>(null);
   const [prompts, setPrompts] = useState<SessionPrompt[]>([]);
@@ -62,9 +55,11 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const id = getConversationId();
-    setConversationId(id);
-    fetch(`/api/chat?conversationId=${encodeURIComponent(id)}`)
+    setEntries([]);
+    setStarter(null);
+    setPrompts([]);
+    setPicks({});
+    fetch(`/api/chat?conversationId=${encodeURIComponent(conversationId)}`)
       .then((r) => r.json())
       .then((data: { llm?: string; messages?: ChatEntry[]; starter?: Starter | null }) => {
         if (data.llm) setLlm(data.llm);
@@ -75,7 +70,7 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
         }
       })
       .catch(() => undefined);
-  }, []);
+  }, [conversationId]);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' });
@@ -112,13 +107,14 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
         if (res.ok && Array.isArray(data.session_prompts) && data.session_prompts.length) {
           setPrompts(data.session_prompts as SessionPrompt[]);
         }
+        onActivity?.();
       } catch {
         setEntries((prev) => [...prev, { role: 'assistant', content: 'Network error — try again.', intent: 'error' }]);
       } finally {
         setBusy(false);
       }
     },
-    [draft, busy, conversationId],
+    [draft, busy, conversationId, onActivity],
   );
 
   const usePrompt = (prefill: string) => {
@@ -157,13 +153,20 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
   };
 
   return (
-    <div className="app">
+    <div className="chat">
       <header className="header">
-        <h1>Kona</h1>
-        <p>
-          {greetingName ? `Hi ${greetingName} — ` : ''}your AI fueling companion for training
-          {llm ? ` · ${llm}` : ''}
-        </p>
+        {onMenu && (
+          <button className="menu-btn" aria-label="Conversations" onClick={onMenu}>
+            ☰
+          </button>
+        )}
+        <div>
+          <h1>Kona</h1>
+          <p>
+            {greetingName ? `Hi ${greetingName} — ` : ''}your AI fueling companion for training
+            {llm ? ` · ${llm}` : ''}
+          </p>
+        </div>
       </header>
 
       <div className="thread" ref={threadRef}>
@@ -234,7 +237,9 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
                 </div>
               ))}
               <button className="cta prompt-save" disabled={answeredCount === 0} onClick={submitPicks}>
-                {answeredCount === 0 ? 'Pick some options above' : `Save ${answeredCount} session${answeredCount === 1 ? '' : 's'}`}
+                {answeredCount === 0
+                  ? 'Pick some options above'
+                  : `Save ${answeredCount} session${answeredCount === 1 ? '' : 's'}`}
               </button>
             </div>
           </div>

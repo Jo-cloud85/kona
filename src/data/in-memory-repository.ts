@@ -1,6 +1,7 @@
 import type {
   ActualSession,
   ChatMessage,
+  ConversationSummary,
   FuelLog,
   MemoryCandidate,
   PersistedMemory,
@@ -192,6 +193,28 @@ export class InMemoryRepository implements Repository {
 
   async listMessages(conversationId: string): Promise<ChatMessage[]> {
     return this.messages.filter((m) => m.conversation_id === conversationId);
+  }
+
+  async listConversations(_userId?: string): Promise<ConversationSummary[]> {
+    const byConv = new Map<string, ChatMessage[]>();
+    for (const m of this.messages) {
+      const list = byConv.get(m.conversation_id);
+      if (list) list.push(m);
+      else byConv.set(m.conversation_id, [m]);
+    }
+    const rows: ConversationSummary[] = [];
+    for (const [id, msgs] of byConv) {
+      const ordered = [...msgs].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const firstUser = ordered.find((m) => m.role === 'user');
+      rows.push({
+        id,
+        title: firstUser ? firstUser.content.slice(0, 60) : 'New chat',
+        message_count: ordered.length,
+        created_at: ordered[0]!.created_at,
+        updated_at: ordered[ordered.length - 1]!.created_at,
+      });
+    }
+    return rows.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   }
 
   async proposeMemory(candidate: MemoryCandidate): Promise<PersistedMemory> {

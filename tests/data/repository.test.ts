@@ -75,6 +75,18 @@ describe('InMemoryRepository', () => {
     expect(memories[0]?.value).toBe('800');
   });
 
+  it('summarises conversations, newest activity first, titled from the first user message', async () => {
+    let t = Date.UTC(2026, 8, 6, 12, 0, 0);
+    const repo = await createSeededRepository({ now: () => new Date((t += 1000)) });
+    await repo.appendMessage({ conversation_id: 'c-a', role: 'user', content: 'Tomorrow I run 10km' });
+    await repo.appendMessage({ conversation_id: 'c-a', role: 'assistant', content: 'Saved.' });
+    await repo.appendMessage({ conversation_id: 'c-b', role: 'user', content: 'My next race is Berlin' });
+
+    const rows = await repo.listConversations('user_demo');
+    expect(rows.map((r) => r.id)).toEqual(['c-b', 'c-a']); // c-b touched last
+    expect(rows.find((r) => r.id === 'c-a')).toMatchObject({ title: 'Tomorrow I run 10km', message_count: 2 });
+  });
+
   it('round-trips a full onboarding profile', async () => {
     const repo = await createSeededRepository();
     const saved = await repo.upsertProfile({

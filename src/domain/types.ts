@@ -248,6 +248,16 @@ export interface ChatMessage {
   created_at: string;
 }
 
+/** A row for the conversation history list. */
+export interface ConversationSummary {
+  id: string;
+  /** Derived from the first user message. */
+  title: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Engine value objects
 // ---------------------------------------------------------------------------

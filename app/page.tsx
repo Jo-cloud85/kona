@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Chat from './Chat';
+import Workspace from './Workspace';
 import Onboarding from './Onboarding';
 
 type View = 'loading' | 'onboarding' | 'chat';
@@ -43,5 +43,5 @@ export default function Page() {
     return <Onboarding onDone={() => void loadProfile()} />;
   }
 
-  return <Chat greetingName={name} />;
+  return <Workspace greetingName={name} />;
 }

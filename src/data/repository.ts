@@ -1,6 +1,7 @@
 import type {
   ActualSession,
   ChatMessage,
+  ConversationSummary,
   FuelLog,
   MemoryCandidate,
   PersistedMemory,
@@ -94,6 +95,8 @@ export interface Repository {
 
   appendMessage(msg: Omit<ChatMessage, 'id' | 'created_at'>): Promise<ChatMessage>;
   listMessages(conversationId: string): Promise<ChatMessage[]>;
+  /** One summary row per conversation that has messages, newest activity first. */
+  listConversations(userId: string): Promise<ConversationSummary[]>;
 
   proposeMemory(candidate: MemoryCandidate): Promise<PersistedMemory>;
   listMemories(userId: string): Promise<PersistedMemory[]>;

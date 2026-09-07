@@ -3,7 +3,7 @@
 ## Current milestone
 **M10 in progress — 3 requested features.**
 - ✅ (1) Day-by-day advice for the whole week + structured per-session prompts with option buttons.
-- ⏳ (2) History sidebar: multiple conversations, switch / new chat.
+- ✅ (2) History sidebar: multiple conversations, switch / new chat / continue.
 - ⏳ (3) Dashboard button → per-day nutrition charts.
 Next after: a persistence backend; food-estimation ranges (§14).
 
@@ -69,6 +69,12 @@ Next after: a persistence backend; food-estimation ranges (§14).
 - `POST /api/chat` returns `session_prompts` extracted from the turn's tool results.
 - Fix: a message framed as a whole new week ("Next week: …", "new plan", "my week is …") is no longer misread as clarifications to an existing plan — `newPlanFraming` bails out of the clarify path so `plan_week` replaces the week.
 - Tests: +3, updated 4 for the new behavior. **82 total**, all green; `next build` clean; full flow (plan → day-by-day advice → option panel → save → updated) verified in the browser.
+
+### M10.2 — Conversation history sidebar ✅
+- `ConversationSummary` type + `repo.listConversations()` (derives one row per conversation from stored messages: title = first user message, newest activity first). `GET /api/conversations`.
+- New client layout: `Workspace` (sidebar + chat, owns `conversationId` + the list) → `Sidebar` (list, "+ New chat", active highlight, relative times) + `Chat` (now takes `conversationId` as a prop and reloads on change; calls `onActivity` to refresh the list). `page.tsx` renders `Workspace` for the chat view.
+- "New chat" makes a fresh id; selecting a row loads that thread; continuing just sends more messages. On mobile the sidebar is a slide-over (`☰` in the header + scrim).
+- Tests: +1 repo test (84 total); `next build` clean; switch / new / continue verified in the browser.
 
 ### M9 — Chat starter + typing indicator ✅
 - `src/engine/profile-baseline.ts` — `profileDailyBaseline({ body_weight_kg })`: daily protein range from body weight + the post-session serving, both from the rules table. Deliberately reports fluid/sodium as **per-session training references, not daily totals** (the spec has no daily fluid/sodium formula — not invented).
