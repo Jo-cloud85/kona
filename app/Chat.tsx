@@ -167,9 +167,6 @@ export default function Chat({
             {llm ? ` · ${llm}` : ''}
           </p>
         </div>
-        <a className="dash-link" href="/dashboard">
-          Dashboard
-        </a>
       </header>
 
       <div className="thread" ref={threadRef}>

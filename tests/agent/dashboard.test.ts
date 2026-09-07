@@ -69,11 +69,31 @@ describe('buildDashboard', () => {
     expect(gymDay.carb_g_per_hour).toBeNull();
     expect(gymDay.fluid_ml_per_hour).toBeNull();
 
-    // Monday is a rest day
+    // Monday is a rest day — but still carries the daily protein target
     const rest = d.days.find((x) => x.date === '2026-09-14')!;
     expect(rest.is_rest).toBe(true);
+    expect(rest.protein_daily_g).toEqual(d.baseline.protein_daily_g);
+    expect(rest.carb_g_per_hour).toBeNull();
 
     // days are date-sorted
     expect(d.days.map((x) => x.date)).toEqual(['2026-09-14', '2026-09-15', '2026-09-16']);
+  });
+
+  it('flags the day before a long session (but not before a plain hard one)', () => {
+    const d = buildDashboard({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [
+        session({ start_at: '2026-09-15T07:00:00', distance_km: 6, intensity: 'hard' }), // Tue, hard but short
+        session({ start_at: '2026-09-16T07:00:00', sport: 'gym', duration_minutes: 45 }), // Wed, routine
+        session({ start_at: '2026-09-17T07:00:00', distance_km: 20, is_long: true }), // Thu, long run
+      ],
+    });
+    const mon = d.days.find((x) => x.date === '2026-09-14')!;
+    const wed = d.days.find((x) => x.date === '2026-09-16')!;
+    const thu = d.days.find((x) => x.date === '2026-09-17')!;
+    expect(mon.prep_for).toBeNull(); // Tue is only hard+short — no day-before prep
+    expect(wed.prep_for).toBe(thu.weekday); // day before the long run
+    expect(thu.prep_for).toBeNull();
   });
 });

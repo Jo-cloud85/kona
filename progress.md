@@ -1,11 +1,61 @@
 # Kona — Progress
 
 ## Current milestone
-**M10 complete — 3 requested features (day-by-day advice + option prompts,
-history sidebar, dashboard charts).** Next: a persistence backend to replace the
-in-memory store; food-estimation ranges (§14); historical pattern surfacing (§12).
+**M11 complete — daily-nutrition energy model, bottom-nav app shell
+(Profile / Daily / Dashboard / Chat), and the dashboard "consistency" rework.**
+Next: a persistence backend to replace the in-memory store; food-estimation
+ranges (§14); historical pattern surfacing (§12).
 
 ## Completed work
+
+### M11 — Daily nutrition + app shell + dashboard rework ✅
+_From user feedback on the dashboard and a request for a per-day intake summary.
+The user explicitly approved adding a full energy model, food suggestions as
+illustrative examples only, and unifying the dashboard panels (AskUserQuestion)._
+
+- **Daily-nutrition engine (methodology v0.2.0, separately versioned).**
+  `src/rules/daily_v0_2_0.ts` (`DAILY_RULES`) + `src/engine/daily-nutrition.ts`
+  (`dailyNutrition()`): resting energy via **Mifflin–St Jeor** (PMID 2305711),
+  × an activity factor (1.2–1.9), ±8% → daily energy range. Protein
+  1.4–2.0 g/kg (ISSN 2017), carbohydrate 3–10 g/kg by activity (ACSM/AND/DC
+  2016), fat 20–35% of energy, fibre 14 g/1000 kcal, fluid from EFSA 2010
+  adequate intakes. Sodium stays **guidance, not a computed target** (spec §6.4).
+  `confidence` drops to `low` and `assumptions[]` records every gap when
+  height / age / sex / activity aren't all known.
+- **Food suggestions as illustrative examples.** `src/data/foods.ts` — ~33
+  curated reference foods with rounded nutrition and `excluded_by` dietary tags;
+  `foodsFor(role, restrictions)` filters. `src/agent/daily.ts` (`buildDaily`)
+  turns the engine ranges into per-macro target + a rotating sample of example
+  foods, plus fluid / sodium as prose. Framed throughout as "examples of what
+  the target looks like, not a meal plan".
+- **Form fields.** Workout types gained `skating` + `combat_sports` (+ `hyrox`
+  already added). New required **height** and **activity level** questions (the
+  energy model needs them) and an optional 14-option **dietary restrictions**
+  multi-select. `Profile`, `profile-input.ts` validation, tools enum, and the
+  starter sport labels all updated.
+- **Bottom-nav app shell.** `app/AppShell.tsx` — four tabs with icons in order
+  **Profile · Daily · Dashboard · Chat**, active tab persisted to
+  `localStorage` (`kona.tab`). `height: 100dvh; overflow: hidden` shell so the
+  tab content scrolls internally and the nav stays pinned; mobile-safe-area
+  padding. `ProfileForm` extracted as a reusable component used by both
+  onboarding and the **Profile** tab (edit mode, pre-filled, "Save changes").
+  New **Daily** tab (`DailyTab` + `GET /api/daily`) renders the energy KPI,
+  per-macro sections with example foods, and fluid / sodium callouts.
+- **Dashboard rework (the "consistency" feedback).** Four visually-identical
+  `RangeChart` panels (was: 1 stat tile + 2 charts + 1 note). Rest days now
+  appear — they carry the **daily protein target** (same every day, weight-based)
+  in the protein panel and the table. A `⚑ prep for <day>` flag marks the day
+  before a long or double-session day (qualitative — no invented carb-loading
+  number). The confusing "not needed for this session" wording is explained in a
+  lead paragraph that is honest that the carb / fluid / sodium ranges repeat
+  because the engine has no measured personal data yet.
+- Docs: `CALCULATION_ENGINE_SPEC.md` §23 documents the v0.2.0 daily methodology
+  and its sources; `PRODUCT_VISION.md` "What Kona is NOT" reworded + a post-v0.1
+  scope note on the daily estimate.
+- Tests: +11 (`daily-nutrition` ×5, `daily` ×3, dashboard rest-day + prep-flag,
+  profile-input height/activity/restrictions). **99 total**, all green;
+  `tsc --noEmit`, `eslint .`, `next build` all clean. Full 4-tab flow
+  (onboard → Profile edit → Daily → Dashboard → Chat) verified in the browser.
 
 ### M1 — Deterministic calculation core ✅
 - Scaffold: TypeScript strict (`noUncheckedIndexedAccess`), Vitest, ESLint flat config, `tsx`. No web stack yet.

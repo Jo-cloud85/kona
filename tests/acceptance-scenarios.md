@@ -18,7 +18,18 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AO7 | Typing indicator | While a reply is generating, a three-dot wave shows in an assistant bubble. | manual (browser) |
 | AO8 | Option-button prompts | A saved week gives a prep line for **every** day and renders per-session effort/length option buttons; picking them + Save updates the plan. | ✅ `tests/engine/week.test.ts`, `tests/agent/week-plan.test.ts` + manual |
 | AO9 | History sidebar | Multiple conversations listed (title from first message, newest first); "New chat" and switching work; continuing sends more messages. | ✅ `tests/data/repository.test.ts` + manual |
-| AO10 | Dashboard | A "Dashboard" link shows per-day carb/fluid range-bar charts + the daily protein stat tile + a sodium callout + a table view, all from the engine; unclassifiable days show "not needed". | ✅ `tests/agent/dashboard.test.ts` + manual |
+| AO10 | Dashboard | Four visually-consistent range-bar panels (protein daily target · carb · fluid · sodium), all from the engine; rest days appear and carry the daily protein target; a `⚑ prep for <day>` flag marks the day before a long / double-session day (qualitative, no invented number); a lead paragraph explains why the during-session ranges repeat; table view lists all 7 days. | ✅ `tests/agent/dashboard.test.ts` + manual |
+
+## A-shell. App shell + daily nutrition (M11)
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AS1 | Form — extra fields | Workout types include skating, combat sports, HYROX, climbing; **height** and **activity level** are required; **dietary restrictions** is an optional 14-option multi-select. Bad height / missing activity level is rejected with a specific message; unknown restrictions dropped, deduped. | ✅ `tests/domain/profile-input.test.ts` |
+| AS2 | Bottom nav | Four tabs in order Profile · Daily · Dashboard · Chat, each with an icon; the active tab persists across reloads; nav stays pinned while tab content scrolls. | manual (browser) |
+| AS3 | Profile tab | Opens the same form pre-filled with the saved profile ("Save changes"); saving updates the daily targets and the dashboard. | manual (browser) + `tests/data/repository.test.ts` |
+| AS4 | Daily energy model | `dailyNutrition()` computes a daily energy range via Mifflin–St Jeor × activity factor ±8%; protein / carbohydrate / fat / fibre ranges scale to body weight and activity; sodium stays **guidance, never a computed target**; `confidence` drops and `assumptions[]` is populated when height / age / sex / activity are missing. | ✅ `tests/engine/daily-nutrition.test.ts` |
+| AS5 | Food suggestions are examples | The Daily tab shows each macro target with a rotating sample of real foods, filtered by the user's dietary restrictions (e.g. vegan + gluten-free excludes chicken / beef / salmon / egg / dairy / wheat, keeps rice / potato / tofu / beans); framed as "examples, not a meal plan". | ✅ `tests/agent/daily.test.ts` + manual |
+| AS6 | Methodology is versioned separately | Daily nutrition carries `methodology_version` 0.2.0, distinct from the during-session engine's 0.1.0; documented in `CALCULATION_ENGINE_SPEC.md` §23. | ✅ `tests/agent/daily.test.ts` |
 
 ## A. Core conversation slice (START_WITH_CLAUDE.md)
 
@@ -75,5 +86,8 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 
 ## Deferred (not yet built)
 
-Food estimation ranges, photo analysis, historical pattern surfacing, auth,
-persistence backend (state currently resets on server restart).
+Food estimation ranges (for logged meals), photo analysis, historical pattern
+surfacing, auth, persistence backend (state currently resets on server restart).
+
+All v0.1.0 (during-session) and v0.2.0 (daily) numbers are literature-sourced
+placeholders — they require expert review before any public launch.

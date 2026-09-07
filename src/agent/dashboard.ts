@@ -18,12 +18,17 @@ export interface DashboardDay {
   date: string;
   weekday: string;
   is_rest: boolean;
+  is_key_day: boolean;
   sessions: DashboardDaySession[];
+  /** Daily protein target — the same every day (weight-based), including rest days. */
+  protein_daily_g: Range;
   /** During-exercise targets — null when no session that day has a classifiable duration. */
   carb_g_per_hour: Range | null;
   fluid_ml_per_hour: Range | null;
   /** Reference sodium *concentration* for long/hot sessions (not a per-day total). */
   sodium_mg_per_litre: Range | null;
+  /** Set when the NEXT day is a long / key session — eat & hydrate normally today. */
+  prep_for: string | null;
 }
 
 export interface Dashboard {
@@ -96,10 +101,14 @@ export function buildDashboard(input: {
     },
   });
 
+  const protein_daily_g = base.protein_daily_g;
+
   const sessionDays: DashboardDay[] = analysis.days.map((d) => ({
     date: d.date,
     weekday: d.weekday_label,
     is_rest: false,
+    is_key_day: d.is_key_day,
+    protein_daily_g,
     sessions: d.sessions.map((s) => ({
       sport: s.sport,
       duration_class: s.duration_class ?? null,
@@ -109,6 +118,7 @@ export function buildDashboard(input: {
     carb_g_per_hour: widest(d.sessions.map((s) => s.calc?.estimates.carbohydrate_g_per_hour ?? null)),
     fluid_ml_per_hour: widest(d.sessions.map((s) => s.calc?.estimates.fluid_ml_per_hour ?? null)),
     sodium_mg_per_litre: widest(d.sessions.map((s) => s.calc?.estimates.sodium?.mg_per_litre ?? null)),
+    prep_for: null,
   }));
 
   const restDays: DashboardDay[] = analysis.rest_days.map((date) => {
@@ -118,19 +128,34 @@ export function buildDashboard(input: {
       date,
       weekday: label,
       is_rest: true,
+      is_key_day: false,
+      protein_daily_g,
       sessions: [],
       carb_g_per_hour: null,
       fluid_ml_per_hour: null,
       sodium_mg_per_litre: null,
+      prep_for: null,
     };
   });
+
+  const days = [...sessionDays, ...restDays].sort((a, b) => a.date.localeCompare(b.date));
+
+  // Flag the day BEFORE a long session or a double-session day — when eating
+  // and hydrating normally through the day matters most. (A single hard session
+  // the next day doesn't need day-before prep, so it isn't flagged.)
+  for (let i = 0; i < days.length - 1; i++) {
+    const next = days[i + 1]!;
+    if (next.sessions.some((s) => s.is_long) || next.sessions.length > 1) {
+      days[i]!.prep_for = next.weekday;
+    }
+  }
 
   return {
     has_plan: true,
     week_start: input.weeklyPlan.week_start,
     week_end: weekEndIso(input.weeklyPlan.week_start),
     baseline: base,
-    days: [...sessionDays, ...restDays].sort((a, b) => a.date.localeCompare(b.date)),
+    days,
     methodology_version: analysis.methodology_version,
   };
 }

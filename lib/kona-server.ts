@@ -5,6 +5,7 @@ import type { ProfileFormData } from '../src/domain/profile-input';
 import {
   AnthropicLlmClient,
   DeterministicLlmClient,
+  buildDaily,
   buildDashboard,
   buildStarter,
   handleMessage,
@@ -12,6 +13,7 @@ import {
   type AgentTurn,
   type ChatStarter,
   type Dashboard,
+  type DailyPlan,
   type LlmClient,
 } from '../src/agent/index';
 
@@ -94,6 +96,11 @@ export async function listMessages(conversationId: string) {
 
 export async function listConversations() {
   return getRepo().listConversations(DEMO_USER_ID);
+}
+
+export async function getDaily(): Promise<DailyPlan | null> {
+  const profile = await getRepo().getProfile(DEMO_USER_ID);
+  return profile?.onboarded_at ? buildDaily(profile) : null;
 }
 
 export async function getDashboard(): Promise<Dashboard | null> {

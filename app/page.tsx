@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Workspace from './Workspace';
+import AppShell from './AppShell';
 import Onboarding from './Onboarding';
 
-type View = 'loading' | 'onboarding' | 'chat';
+type View = 'loading' | 'onboarding' | 'app';
 
 export default function Page() {
   const [view, setView] = useState<View>('loading');
@@ -16,7 +16,7 @@ export default function Page() {
       const data = (await res.json()) as { profile: { username?: string; onboarded_at?: string } | null };
       if (data.profile?.onboarded_at) {
         setName(data.profile.username);
-        setView('chat');
+        setView('app');
       } else {
         setView('onboarding');
       }
@@ -43,5 +43,12 @@ export default function Page() {
     return <Onboarding onDone={() => void loadProfile()} />;
   }
 
-  return <Workspace greetingName={name} />;
+  return (
+    <AppShell
+      greetingName={name}
+      onProfileChange={(p) => {
+        if (p.username) setName(p.username);
+      }}
+    />
+  );
 }
