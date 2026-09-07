@@ -1,21 +1,53 @@
-import type { Gender, Profile, Sport } from './types';
+import type { ActivityLevel, DietaryRestriction, Gender, Profile, Sport } from './types';
 
 /**
- * Validation for the onboarding form. Pure and framework-free so it can be unit
- * tested and reused by the API route. Validates external input at the boundary
- * (CLAUDE.md "Validate external/user input at boundaries").
+ * Validation for the onboarding / profile form. Pure and framework-free so it
+ * can be unit tested and reused by the API route. Validates external/user input
+ * at the boundary (CLAUDE.md).
  */
 
-/** Sports offered in the onboarding form (a subset of the full Sport union). */
-export const ONBOARDING_SPORTS = ['running', 'swimming', 'cycling', 'gym', 'climbing'] as const satisfies readonly Sport[];
+/** Sports offered in the form (a subset of the full Sport union). */
+export const ONBOARDING_SPORTS = [
+  'running',
+  'swimming',
+  'cycling',
+  'gym',
+  'climbing',
+  'skating',
+  'combat_sports',
+  'hyrox',
+] as const satisfies readonly Sport[];
 
 export const GENDERS: readonly Gender[] = ['female', 'male', 'nonbinary', 'other', 'prefer_not_to_say'];
 
+export const ACTIVITY_LEVELS: readonly ActivityLevel[] = [
+  'sedentary',
+  'light',
+  'moderate',
+  'very_active',
+  'extra_active',
+];
+
+export const DIETARY_RESTRICTIONS: readonly DietaryRestriction[] = [
+  'vegetarian',
+  'vegan',
+  'pescatarian',
+  'no_beef',
+  'no_pork',
+  'halal',
+  'kosher',
+  'dairy_free',
+  'lactose_intolerant',
+  'gluten_free',
+  'nut_allergy',
+  'egg_free',
+  'soy_free',
+  'shellfish_allergy',
+];
+
 export type ProfileFormData = Omit<Profile, 'user_id' | 'known_sweat_data' | 'preferred_product_ids' | 'onboarded_at'>;
 
-export type ProfileValidation =
-  | { ok: true; data: ProfileFormData }
-  | { ok: false; error: string };
+export type ProfileValidation = { ok: true; data: ProfileFormData } | { ok: false; error: string };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -49,9 +81,17 @@ export function validateProfileInput(input: unknown): ProfileValidation {
   const age = intInRange(input.age, 12, 100);
   if (age === undefined) return { ok: false, error: 'Age must be a whole number between 12 and 100' };
 
+  const height_cm = intInRange(input.height_cm, 120, 230);
+  if (height_cm === undefined) return { ok: false, error: 'Height must be a whole number between 120 and 230 cm' };
+
   const body_weight_kg = numInRange(input.body_weight_kg, 25, 250);
   if (body_weight_kg === undefined) {
     return { ok: false, error: 'Body weight must be between 25 and 250 kg' };
+  }
+
+  const activity_level = input.activity_level;
+  if (typeof activity_level !== 'string' || !ACTIVITY_LEVELS.includes(activity_level as ActivityLevel)) {
+    return { ok: false, error: 'Pick an activity level' };
   }
 
   const rawSports = Array.isArray(input.usual_sports) ? input.usual_sports : [];
@@ -59,6 +99,12 @@ export function validateProfileInput(input: unknown): ProfileValidation {
     (s): s is Sport => typeof s === 'string' && (ONBOARDING_SPORTS as readonly string[]).includes(s),
   );
   if (usual_sports.length === 0) return { ok: false, error: 'Pick at least one type of workout' };
+
+  const rawDiet = Array.isArray(input.dietary_restrictions) ? input.dietary_restrictions : [];
+  const dietary_restrictions = [...new Set(rawDiet)].filter(
+    (d): d is DietaryRestriction =>
+      typeof d === 'string' && (DIETARY_RESTRICTIONS as readonly string[]).includes(d),
+  );
 
   const typical_weekly_sessions = intInRange(input.typical_weekly_sessions, 0, 40);
   if (typical_weekly_sessions === undefined) {
@@ -82,8 +128,11 @@ export function validateProfileInput(input: unknown): ProfileValidation {
       username,
       gender: gender as Gender,
       age,
+      height_cm,
       body_weight_kg,
+      activity_level: activity_level as ActivityLevel,
       usual_sports,
+      dietary_restrictions,
       typical_weekly_sessions,
       ...(noteRaw ? { recent_injuries_note: noteRaw } : {}),
       self_perception: { sleep_quality, hydration, sweat_level },

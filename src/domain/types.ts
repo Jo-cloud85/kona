@@ -28,6 +28,8 @@ export type Sport =
   | 'swimming'
   | 'gym'
   | 'climbing'
+  | 'skating'
+  | 'combat_sports'
   | 'hyrox'
   | 'triathlon'
   | 'other';
@@ -64,6 +66,25 @@ export interface KnownSweatData {
 
 export type Gender = 'female' | 'male' | 'nonbinary' | 'other' | 'prefer_not_to_say';
 
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'very_active' | 'extra_active';
+
+/** Dietary restriction / preference tags used to filter food suggestions. */
+export type DietaryRestriction =
+  | 'vegetarian'
+  | 'vegan'
+  | 'pescatarian'
+  | 'no_beef'
+  | 'no_pork'
+  | 'halal'
+  | 'kosher'
+  | 'dairy_free'
+  | 'lactose_intolerant'
+  | 'gluten_free'
+  | 'nut_allergy'
+  | 'egg_free'
+  | 'soy_free'
+  | 'shellfish_allergy';
+
 /** Subjective 1–5 self-ratings from onboarding. 5 = excellent for sleep/hydration;
  *  5 = a lot / excessive for sweat. Context for the companion, NOT a calc input. */
 export interface SelfPerception {
@@ -87,6 +108,10 @@ export interface Profile {
   username?: string;
   gender?: Gender;
   age?: number;
+  /** cm — needed for the Mifflin–St Jeor daily energy estimate. */
+  height_cm?: number;
+  activity_level?: ActivityLevel;
+  dietary_restrictions?: DietaryRestriction[];
   /** Free text: injuries or cramps in the last month, or empty. */
   recent_injuries_note?: string;
   self_perception?: SelfPerception;

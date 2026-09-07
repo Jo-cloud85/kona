@@ -5,8 +5,11 @@ const valid = {
   username: 'joan',
   gender: 'female',
   age: 34,
+  height_cm: 168,
   body_weight_kg: 58,
+  activity_level: 'moderate',
   usual_sports: ['running', 'swimming', 'gym'],
+  dietary_restrictions: ['lactose_intolerant', 'no_beef'],
   typical_weekly_sessions: 6,
   recent_injuries_note: '  left hip tight after long runs  ',
   self_perception: { sleep_quality: 4, hydration: 3, sweat_level: 5 },
@@ -21,12 +24,15 @@ describe('validateProfileInput', () => {
       username: 'joan',
       gender: 'female',
       age: 34,
+      height_cm: 168,
       body_weight_kg: 58,
+      activity_level: 'moderate',
       typical_weekly_sessions: 6,
       recent_injuries_note: 'left hip tight after long runs',
       self_perception: { sleep_quality: 4, hydration: 3, sweat_level: 5 },
     });
     expect(r.data.usual_sports).toEqual(['running', 'swimming', 'gym']);
+    expect(r.data.dietary_restrictions).toEqual(['lactose_intolerant', 'no_beef']);
   });
 
   it('omits an empty injury note', () => {
@@ -40,6 +46,10 @@ describe('validateProfileInput', () => {
     [{ gender: 'yes' }, /gender/i],
     [{ age: 8 }, /age/i],
     [{ age: 34.5 }, /age/i],
+    [{ height_cm: 90 }, /height/i],
+    [{ height_cm: undefined }, /height/i],
+    [{ activity_level: 'couch' }, /activity level/i],
+    [{ activity_level: undefined }, /activity level/i],
     [{ body_weight_kg: 10 }, /weight/i],
     [{ body_weight_kg: 400 }, /weight/i],
     [{ usual_sports: [] }, /at least one/i],

@@ -19,6 +19,8 @@ const SPORT_LABEL: Record<Sport, string> = {
   swimming: 'swimming',
   gym: 'gym',
   climbing: 'climbing',
+  skating: 'skating',
+  combat_sports: 'combat sports',
   hyrox: 'HYROX',
   triathlon: 'triathlon',
   other: 'other training',

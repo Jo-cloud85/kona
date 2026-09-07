@@ -8,6 +8,7 @@ export {
 } from './anthropic-llm';
 export { buildContext } from './context';
 export { buildStarter, type ChatStarter } from './starter';
+export { buildDaily, type DailyPlan, type MacroIdeas, type FoodIdea } from './daily';
 export {
   buildDashboard,
   type Dashboard,

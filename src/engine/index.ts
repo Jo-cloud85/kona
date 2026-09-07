@@ -20,6 +20,12 @@ export type {
 } from './types';
 export { profileDailyBaseline, type ProfileDailyBaseline } from './profile-baseline';
 export {
+  dailyNutrition,
+  activityFromSessions,
+  type DailyNutrition,
+  type DailyNutritionInput,
+} from './daily-nutrition';
+export {
   analyzeWeek,
   type WeekAnalysis,
   type WeekAnalysisInput,

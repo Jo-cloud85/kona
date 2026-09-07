@@ -17,10 +17,17 @@ Kona translates messy real-world training stories into structured data, uses a d
 ## What Kona is NOT
 - Not a medical advisor.
 - Not a dietitian replacement.
-- Not a generic calorie-counting app.
+- Not a food-logging / calorie-tracking diary (Kona shows target *ranges* and
+  illustrative examples; it does not ask you to log every gram).
 - Not a generic food database.
 - Not a Garmin/Strava replacement.
 - Not an opaque “AI nutrition expert” that invents precise numbers.
+
+> **Scope note (post-v0.1):** in addition to training fuelling, Kona now shows a
+> **daily** nutrition estimate (energy + macros) via the Mifflin–St Jeor
+> equation and published macro ranges — see `CALCULATION_ENGINE_SPEC.md` §23.
+> These are estimates with a confidence flag, presented as ranges with example
+> foods, not a prescribed meal plan.
 
 ## Core product loop
 **Plan → Talk → Do → Check in → Adapt → Remember**

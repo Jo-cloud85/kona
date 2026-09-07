@@ -733,3 +733,32 @@ https://pubmed.ncbi.nlm.nih.gov/28332116/
 
 McCubbin AJ et al. Modelling sodium requirements of athletes across a variety of exercise scenarios. PubMed PMID 35616504.
 https://pubmed.ncbi.nlm.nih.gov/35616504/
+
+---
+
+# 23. Daily-nutrition methodology (v0.2.0 — added post-v0.1)
+
+The v0.1 engine covers **training fuelling** (during/around sessions). A separate,
+separately-versioned table (`src/rules/daily_v0_2_0.ts`, methodology `0.2.0`)
+adds **whole-day targets** for the "Daily" tab. This broadens Kona past training
+fuelling; it is still a wellness tool, not a clinical service, and every output is
+a range with a confidence flag.
+
+- **Energy**: Mifflin–St Jeor resting energy (PMID 2305711) × a whole-day
+  activity factor (1.2 sedentary → 1.9 extra-active). Reported as a ±8 % range.
+  Sex unspecified → the mean of the male/female equation constants (flagged).
+- **Protein**: 1.4–2.0 g/kg/day (ISSN 2017).
+- **Carbohydrate**: g/kg/day by activity level, 3–5 (light) to 8–10 (extra),
+  per ACSM/AND 2016 (PMID 26891166).
+- **Fat**: 20–35 % of energy (AMDR).
+- **Fibre**: 14 g per 1000 kcal (US Dietary Guidelines / IOM).
+- **Fluid**: adequate daily intake from drinks by sex (EFSA 2010: ~2.0 L women,
+  ~2.5 L men), plus ~0.4–0.8 L per hour of exercise. Presented as "go by thirst",
+  not a fixed number.
+- **Sodium**: NOT a computed personal target (§6.4). Guidance only — adequate
+  intake ~1.5 g/day, staying under ~2.3 g/day (NASEM 2019); heavy sweaters top up
+  around sessions.
+
+Food suggestions are **illustrative examples** of what a target looks like
+(`src/data/foods.ts`, rounded reference values), filtered by the user's dietary
+restrictions — never a prescribed meal plan.
