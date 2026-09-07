@@ -175,6 +175,11 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.header .header-title {
+  flex: 1;
+  min-width: 0;
+}
+
 .header h1 {
   margin: 0;
   font-size: 18px;
@@ -638,4 +643,225 @@ button.cta:disabled {
     z-index: 19;
     background: rgba(0, 0, 0, 0.4);
   }
+}
+
+/* ---- Dashboard --------------------------------------------------------- */
+
+.dash {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+  --viz-fill: #2a78d6;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dash {
+    --viz-fill: #3987e5;
+  }
+}
+
+.dash-head {
+  margin-bottom: 20px;
+}
+
+.dash-head .back {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.dash-head .back:hover {
+  color: var(--text);
+}
+
+.dash-head h1 {
+  margin: 8px 0 2px;
+  font-size: 22px;
+}
+
+.dash-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dash-msg {
+  color: var(--text);
+  font-size: 14px;
+  padding: 24px 0;
+}
+
+.dash-msg .muted,
+.muted {
+  color: var(--muted);
+}
+
+.dash-foot {
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.kpi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.kpi {
+  flex: 1;
+  min-width: 200px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kpi-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.kpi-value {
+  font-size: 26px;
+  font-weight: 650;
+}
+
+.kpi-unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.kpi-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.viz {
+  margin: 0 0 22px;
+}
+
+.viz figcaption {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.viz-unit {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.viz-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.viz-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.viz-tick {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.viz-track {
+  fill: var(--assistant-bubble);
+}
+
+.viz-fill {
+  fill: var(--viz-fill);
+}
+
+.viz-row:hover .viz-fill {
+  fill: color-mix(in srgb, var(--viz-fill) 78%, var(--text));
+}
+
+.viz-rowlabel {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.viz-rowsub {
+  fill: var(--muted);
+  font-size: 9.5px;
+}
+
+.viz-value {
+  fill: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-none {
+  fill: var(--muted);
+  font-size: 10.5px;
+}
+
+.callout {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--viz-fill);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--panel);
+}
+
+.table-view {
+  margin-top: 18px;
+  font-size: 13px;
+}
+
+.table-view summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.table-view table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.table-view th,
+.table-view td {
+  text-align: left;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.table-view th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Dashboard link in the chat header */
+.dash-link {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dash-link:hover {
+  border-color: var(--accent);
 }

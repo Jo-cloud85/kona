@@ -160,13 +160,16 @@ export default function Chat({
             ☰
           </button>
         )}
-        <div>
+        <div className="header-title">
           <h1>Kona</h1>
           <p>
             {greetingName ? `Hi ${greetingName} — ` : ''}your AI fueling companion for training
             {llm ? ` · ${llm}` : ''}
           </p>
         </div>
+        <a className="dash-link" href="/dashboard">
+          Dashboard
+        </a>
       </header>
 
       <div className="thread" ref={threadRef}>

@@ -5,11 +5,13 @@ import type { ProfileFormData } from '../src/domain/profile-input';
 import {
   AnthropicLlmClient,
   DeterministicLlmClient,
+  buildDashboard,
   buildStarter,
   handleMessage,
   type AgentDeps,
   type AgentTurn,
   type ChatStarter,
+  type Dashboard,
   type LlmClient,
 } from '../src/agent/index';
 
@@ -92,6 +94,15 @@ export async function listMessages(conversationId: string) {
 
 export async function listConversations() {
   return getRepo().listConversations(DEMO_USER_ID);
+}
+
+export async function getDashboard(): Promise<Dashboard | null> {
+  const repo = getRepo();
+  const profile = await repo.getProfile(DEMO_USER_ID);
+  if (!profile?.onboarded_at) return null;
+  const weeklyPlan = (await repo.listWeeklyPlans(DEMO_USER_ID)).at(-1);
+  const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  return buildDashboard({ profile, weeklyPlan, sessions });
 }
 
 /** The one-time opening message + conversation starters (only meaningful before

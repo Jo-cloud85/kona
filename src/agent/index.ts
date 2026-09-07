@@ -8,6 +8,12 @@ export {
 } from './anthropic-llm';
 export { buildContext } from './context';
 export { buildStarter, type ChatStarter } from './starter';
+export {
+  buildDashboard,
+  type Dashboard,
+  type DashboardDay,
+  type DashboardDaySession,
+} from './dashboard';
 export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety';
 export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools';
 export type {

@@ -16,6 +16,9 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AO5 | Chat starter | The empty chat shows a greeting + form echo + daily protein range (from the engine) with fluid/sodium framed as per-session references, then 3 prompt chips that pre-fill a parseable stub. | ✅ `tests/agent/starter.test.ts`, `tests/engine/profile-baseline.test.ts` + manual (browser) |
 | AO6 | Prompt replies become memory | "My typical training week is …" saves the plan **and** a `typical_week` memory; "My next race is …" saves a `next_race` memory (no session/plan created). | ✅ `tests/agent/week-plan.test.ts` |
 | AO7 | Typing indicator | While a reply is generating, a three-dot wave shows in an assistant bubble. | manual (browser) |
+| AO8 | Option-button prompts | A saved week gives a prep line for **every** day and renders per-session effort/length option buttons; picking them + Save updates the plan. | ✅ `tests/engine/week.test.ts`, `tests/agent/week-plan.test.ts` + manual |
+| AO9 | History sidebar | Multiple conversations listed (title from first message, newest first); "New chat" and switching work; continuing sends more messages. | ✅ `tests/data/repository.test.ts` + manual |
+| AO10 | Dashboard | A "Dashboard" link shows per-day carb/fluid range-bar charts + the daily protein stat tile + a sodium callout + a table view, all from the engine; unclassifiable days show "not needed". | ✅ `tests/agent/dashboard.test.ts` + manual |
 
 ## A. Core conversation slice (START_WITH_CLAUDE.md)
 

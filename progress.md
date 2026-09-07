@@ -1,11 +1,9 @@
 # Kona — Progress
 
 ## Current milestone
-**M10 in progress — 3 requested features.**
-- ✅ (1) Day-by-day advice for the whole week + structured per-session prompts with option buttons.
-- ✅ (2) History sidebar: multiple conversations, switch / new chat / continue.
-- ⏳ (3) Dashboard button → per-day nutrition charts.
-Next after: a persistence backend; food-estimation ranges (§14).
+**M10 complete — 3 requested features (day-by-day advice + option prompts,
+history sidebar, dashboard charts).** Next: a persistence backend to replace the
+in-memory store; food-estimation ranges (§14); historical pattern surfacing (§12).
 
 ## Completed work
 
@@ -69,6 +67,11 @@ Next after: a persistence backend; food-estimation ranges (§14).
 - `POST /api/chat` returns `session_prompts` extracted from the turn's tool results.
 - Fix: a message framed as a whole new week ("Next week: …", "new plan", "my week is …") is no longer misread as clarifications to an existing plan — `newPlanFraming` bails out of the clarify path so `plan_week` replaces the week.
 - Tests: +3, updated 4 for the new behavior. **82 total**, all green; `next build` clean; full flow (plan → day-by-day advice → option panel → save → updated) verified in the browser.
+
+### M10.3 — Weekly fueling dashboard ✅
+- `src/agent/dashboard.ts` — `buildDashboard({ profile, weeklyPlan, sessions })`: per-day carb / fluid / sodium targets from the engine's per-session `calc`, plus the daily protein baseline. Unclassifiable days carry `null` (no guess). `GET /api/dashboard`, `getDashboard()` in `lib/kona-server.ts`.
+- `app/dashboard/page.tsx` — a **Dashboard** link in the chat header opens it. Follows the `dataviz` skill: form picked by the data's job — daily protein is a **stat tile** (constant, weight-based), carb & fluid are **small-multiple range-bar charts** (one bar per training day, no dual axis), sodium is a **callout** (a per-litre reference, not a per-day quantity). Validated sequential blue (`#2a78d6` / `#3987e5`, passes contrast + band in both modes), thin marks with 4px rounded ends, recessive gridlines, no legend (single series), value labels at the bar tip only, `<title>` hover, a **Table view** `<details>`, and a methodology-version footer. Short/easy days show "not needed for this session".
+- Tests: +3 (`tests/agent/dashboard.test.ts`). **86 total**, all green; `next build` clean; rendered + eyeballed in the browser (light and dark).
 
 ### M10.2 — Conversation history sidebar ✅
 - `ConversationSummary` type + `repo.listConversations()` (derives one row per conversation from stored messages: title = first user message, newest activity first). `GET /api/conversations`.
