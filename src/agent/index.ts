@@ -7,6 +7,7 @@ export {
   type AnthropicLike,
 } from './anthropic-llm';
 export { buildContext } from './context';
+export { buildStarter, type ChatStarter } from './starter';
 export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety';
 export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools';
 export type {

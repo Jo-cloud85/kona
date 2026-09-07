@@ -10,6 +10,11 @@ interface ChatEntry {
   detail?: string;
 }
 
+interface Starter {
+  greeting: string;
+  prompts: { label: string; prefill: string }[];
+}
+
 const CONV_KEY = 'kona.conversationId';
 
 function getConversationId(): string {
@@ -29,19 +34,25 @@ function getConversationId(): string {
 export default function Chat({ greetingName }: { greetingName?: string }) {
   const [conversationId, setConversationId] = useState('web');
   const [entries, setEntries] = useState<ChatEntry[]>([]);
+  const [starter, setStarter] = useState<Starter | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [llm, setLlm] = useState('');
   const threadRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const id = getConversationId();
     setConversationId(id);
     fetch(`/api/chat?conversationId=${encodeURIComponent(id)}`)
       .then((r) => r.json())
-      .then((data: { llm?: string; messages?: ChatEntry[] }) => {
+      .then((data: { llm?: string; messages?: ChatEntry[]; starter?: Starter | null }) => {
         if (data.llm) setLlm(data.llm);
-        if (data.messages?.length) setEntries(data.messages.map((m) => ({ role: m.role, content: m.content })));
+        if (data.messages?.length) {
+          setEntries(data.messages.map((m) => ({ role: m.role, content: m.content })));
+        } else if (data.starter) {
+          setStarter(data.starter);
+        }
       })
       .catch(() => undefined);
   }, []);
@@ -50,36 +61,51 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' });
   }, [entries, busy]);
 
-  const send = useCallback(async () => {
-    const message = draft.trim();
-    if (!message || busy) return;
-    setDraft('');
-    setEntries((prev) => [...prev, { role: 'user', content: message }]);
-    setBusy(true);
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message, conversationId }),
-      });
-      const data = await res.json();
-      setEntries((prev) => [
-        ...prev,
-        res.ok
-          ? { role: 'assistant', content: data.reply, intent: data.intent, safety: data.safety_escalated }
-          : {
-              role: 'assistant',
-              content: data.error ?? 'Something went wrong.',
-              intent: 'error',
-              detail: typeof data.detail === 'string' ? data.detail : undefined,
-            },
-      ]);
-    } catch {
-      setEntries((prev) => [...prev, { role: 'assistant', content: 'Network error — try again.', intent: 'error' }]);
-    } finally {
-      setBusy(false);
-    }
-  }, [draft, busy, conversationId]);
+  const send = useCallback(
+    async (text?: string) => {
+      const message = (text ?? draft).trim();
+      if (!message || busy) return;
+      setDraft('');
+      setStarter(null);
+      setEntries((prev) => [...prev, { role: 'user', content: message }]);
+      setBusy(true);
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ message, conversationId }),
+        });
+        const data = await res.json();
+        setEntries((prev) => [
+          ...prev,
+          res.ok
+            ? { role: 'assistant', content: data.reply, intent: data.intent, safety: data.safety_escalated }
+            : {
+                role: 'assistant',
+                content: data.error ?? 'Something went wrong.',
+                intent: 'error',
+                detail: typeof data.detail === 'string' ? data.detail : undefined,
+              },
+        ]);
+      } catch {
+        setEntries((prev) => [...prev, { role: 'assistant', content: 'Network error — try again.', intent: 'error' }]);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [draft, busy, conversationId],
+  );
+
+  const usePrompt = (prefill: string) => {
+    setDraft(prefill);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(prefill.length, prefill.length);
+      }
+    });
+  };
 
   return (
     <div className="app">
@@ -92,11 +118,25 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
       </header>
 
       <div className="thread" ref={threadRef}>
-        {entries.length === 0 && (
+        {entries.length === 0 && !starter && (
           <div className="empty">
             Tell Kona about a session, e.g. <code>Tomorrow I&apos;m doing an 18km run at 6am.</code>
           </div>
         )}
+
+        {entries.length === 0 && starter && (
+          <div className="row assistant">
+            <div className="bubble">{starter.greeting}</div>
+            <div className="starters">
+              {starter.prompts.map((p) => (
+                <button key={p.label} className="starter-chip" onClick={() => usePrompt(p.prefill)}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {entries.map((e, i) => (
           <div key={i} className={`row ${e.role}`}>
             <div className="bubble">{e.content}</div>
@@ -108,15 +148,21 @@ export default function Chat({ greetingName }: { greetingName?: string }) {
             )}
           </div>
         ))}
+
         {busy && (
           <div className="row assistant">
-            <div className="bubble">…</div>
+            <div className="bubble typing" aria-label="Kona is typing">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
           </div>
         )}
       </div>
 
       <div className="composer">
         <textarea
+          ref={inputRef}
           value={draft}
           onChange={(ev) => setDraft(ev.target.value)}
           onKeyDown={(ev) => {

@@ -13,6 +13,9 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AO2 | Form validation | Bad input (empty username, out-of-range age/weight, no sport, perception ≠ 1–5) is rejected with a specific message; input trimmed, sports deduped, unknown sports dropped. | ✅ `tests/domain/profile-input.test.ts` |
 | AO3 | Submit | Valid form persists the profile (`onboarded_at` set); the app shows the chat and greets by name; a reload skips onboarding. | manual (browser) + `tests/data/repository.test.ts` |
 | AO4 | Perception is context, not a measurement | A high self-rated sweat level does not put the engine into measured-sweat mode. | ✅ (engine has no `known_sweat_data` from onboarding) |
+| AO5 | Chat starter | The empty chat shows a greeting + form echo + daily protein range (from the engine) with fluid/sodium framed as per-session references, then 3 prompt chips that pre-fill a parseable stub. | ✅ `tests/agent/starter.test.ts`, `tests/engine/profile-baseline.test.ts` + manual (browser) |
+| AO6 | Prompt replies become memory | "My typical training week is …" saves the plan **and** a `typical_week` memory; "My next race is …" saves a `next_race` memory (no session/plan created). | ✅ `tests/agent/week-plan.test.ts` |
+| AO7 | Typing indicator | While a reply is generating, a three-dot wave shows in an assistant bubble. | manual (browser) |
 
 ## A. Core conversation slice (START_WITH_CLAUDE.md)
 

@@ -48,7 +48,10 @@ describe('weekly plan conversation slice', () => {
     const turn = await say(SPEC_WEEK);
 
     expect(turn.intent).toBe('plan_week');
-    expect(turn.tool_calls.map((c) => c.tool)).toEqual(['save_weekly_plan']);
+    expect(turn.tool_calls.map((c) => c.tool)).toEqual(['save_weekly_plan', 'propose_memory_update']);
+    // the week is also remembered as a durable fact
+    const mems = await repo.listMemories(DEMO_USER_ID);
+    expect(mems.find((m) => m.key === 'typical_week')?.value).toContain('Tuesday 8km run');
 
     // 6 planned sessions (gym, run, swim, bike, run, long run); Thursday is rest.
     const planned = await repo.listPlannedSessions(DEMO_USER_ID);
@@ -180,6 +183,17 @@ describe('weekly plan conversation slice', () => {
     expect(wed).toMatchObject({ intensity: 'hard', duration_minutes: 60 }); // "hard, about an hour" kept whole
     expect(fri).toMatchObject({ intensity: 'hard', duration_minutes: 60 });
     expect(bike.intensity).toBe('easy'); // not smeared with the gym's "hard"
+  });
+
+  it('remembers a stated next race as a memory (not a planner)', async () => {
+    const turn = await say('My next race is the Chicago Marathon on October 11.');
+    expect(turn.intent).toBe('note_race');
+    expect(turn.tool_calls.map((c) => c.tool)).toEqual(['propose_memory_update']);
+    const mems = await repo.listMemories(DEMO_USER_ID);
+    expect(mems.find((m) => m.key === 'next_race')?.value).toBe('the Chicago Marathon on October 11');
+    expect(turn.reply).toMatch(/Noted your next race.*Chicago Marathon/i);
+    // no session or plan was created
+    expect(await repo.listPlannedSessions(DEMO_USER_ID)).toHaveLength(0);
   });
 
   it('fills a single day from "Saturday swim is usually 1.5km"', async () => {

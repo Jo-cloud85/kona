@@ -51,6 +51,7 @@ Guidance:
 - What actually happened (often different from the plan) -> save_actual_session (NEVER change the plan), then calculate_fueling_targets with phase "post_workout". Put their stated reason in "reason"; when the reason is pain or injury, also set context.injury_or_pain true and context.reason_for_modification.
 - Food, drink or products consumed -> log_fuel_intake with each item and the quantity they stated. Never invent nutrition values.
 - How they feel / recovery / soreness / sleep -> save_recovery with their words as free_text and a coarse overall_severity.
+- A durable fact worth remembering (an upcoming race, a standing preference, their typical week) -> propose_memory_update with a short key (e.g. "next_race", "typical_week") and the value in their words. Do this alongside a plan tool when both apply.
 - To reference a session you create earlier in this same turn, pass the string "$last" as its id.
 - When you have no explicit planned_session_id, link an actual session with link_to_plan_date (YYYY-MM-DD), using the current date or the plan's date from CONTEXT.
 - Resolve relative dates/times ("tomorrow", "6am") against now_iso in CONTEXT.
@@ -114,6 +115,7 @@ const INTENT_BY_TOOL: Record<string, string> = {
   save_actual_session: 'log_actual',
   log_fuel_intake: 'log_fuel',
   save_recovery: 'recovery_check_in',
+  propose_memory_update: 'note_saved',
 };
 
 /** Convert an Anthropic response into an InterpretResult. Pure — unit tested. */

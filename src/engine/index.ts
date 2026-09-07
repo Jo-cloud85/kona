@@ -18,6 +18,7 @@ export type {
   CarbohydrateEstimate,
   SodiumEstimate,
 } from './types';
+export { profileDailyBaseline, type ProfileDailyBaseline } from './profile-baseline';
 export {
   analyzeWeek,
   type WeekAnalysis,

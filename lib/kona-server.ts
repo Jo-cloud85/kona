@@ -5,9 +5,11 @@ import type { ProfileFormData } from '../src/domain/profile-input';
 import {
   AnthropicLlmClient,
   DeterministicLlmClient,
+  buildStarter,
   handleMessage,
   type AgentDeps,
   type AgentTurn,
+  type ChatStarter,
   type LlmClient,
 } from '../src/agent/index';
 
@@ -74,4 +76,11 @@ export async function sendMessage(conversationId: string, message: string): Prom
 
 export async function listMessages(conversationId: string) {
   return getRepo().listMessages(conversationId);
+}
+
+/** The one-time opening message + conversation starters (only meaningful before
+ *  the conversation has any messages). Null until the user has onboarded. */
+export async function getStarter(): Promise<ChatStarter | null> {
+  const profile = await getRepo().getProfile(DEMO_USER_ID);
+  return profile?.onboarded_at ? buildStarter(profile) : null;
 }

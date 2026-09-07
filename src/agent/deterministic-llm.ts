@@ -192,10 +192,37 @@ export class DeterministicLlmClient implements LlmClient {
           intent: 'plan_week',
           tool_calls: [
             { tool: 'save_weekly_plan', args: { week_start: weekStart, source_text: text, days } },
+            {
+              tool: 'propose_memory_update',
+              args: { key: 'typical_week', value: text, certainty: 'user_reported' },
+            },
           ],
           notes: [`Parsed ${week.length} day(s) for week starting ${weekStart}.`],
         };
       }
+    }
+
+    // 2b. Answering "tell me about your next race" — remember it (not a planner)
+    if (
+      /\b(race|marathon|half[- ]?marathon|10 ?k|5 ?k|21 ?k|42 ?k|ultra|ironman|70\.3|hyrox (comp|competition|race)|parkrun|time trial|event)\b/i.test(
+        text,
+      ) &&
+      !pastWorkoutMarker &&
+      !modificationMarker &&
+      !futureMarker
+    ) {
+      const value =
+        text
+          .replace(/^\s*(my next race is|next race[:-]?)\s*/i, '')
+          .trim()
+          .replace(/[.!]+$/, '') || text;
+      return {
+        intent: 'note_race',
+        tool_calls: [
+          { tool: 'propose_memory_update', args: { key: 'next_race', value, certainty: 'user_reported' } },
+        ],
+        notes: ['Saved the race as a memory.'],
+      };
     }
 
     // 2. Plan a session

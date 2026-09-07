@@ -1,4 +1,4 @@
-import { listMessages, llmName, sendMessage } from '../../../lib/kona-server';
+import { getStarter, listMessages, llmName, sendMessage } from '../../../lib/kona-server';
 
 // The core uses node:crypto and an in-memory store — must run on the Node runtime.
 export const runtime = 'nodejs';
@@ -16,6 +16,7 @@ export async function GET(req: Request): Promise<Response> {
   return Response.json({
     llm: llmName(),
     messages: messages.map((m) => ({ role: m.role, content: m.content, at: m.created_at })),
+    starter: messages.length === 0 ? await getStarter() : null,
   });
 }
 

@@ -1,9 +1,9 @@
 # Kona — Progress
 
 ## Current milestone
-**M8 complete — onboarding (Get Started → profile form).** Next: a persistence
-backend to replace the in-memory store (onboarding data currently resets on
-server restart); food-estimation ranges (§14); historical pattern surfacing (§12).
+**M9 complete — chat starter (greeting + daily baseline + conversation prompts)
+and a typing indicator.** Next: a persistence backend to replace the in-memory
+store; food-estimation ranges (§14); historical pattern surfacing (§12).
 
 ## Completed work
 
@@ -59,6 +59,14 @@ server restart); food-estimation ranges (§14); historical pattern surfacing (§
 - Deterministic interpreter: `plan_week` intent when ≥2 weekday names are present. Anthropic client: `save_weekly_plan → plan_week` + a system-prompt bullet.
 - Responder: `composeWeekPlan` — week date range, day-by-day list (incl. rest days), the top 1–2 key-day prep lines, and a "remembered this" close.
 - Tests: +18 (`tests/engine/week.test.ts` ×5, `tests/agent/week-plan.test.ts` ×5 incl. the exact PRODUCT_VISION sentence and a later actual-session linking to the week's Tuesday plan, +8 repo). **49 total**, all green; typecheck + lint clean; verified in the browser.
+
+### M9 — Chat starter + typing indicator ✅
+- `src/engine/profile-baseline.ts` — `profileDailyBaseline({ body_weight_kg })`: daily protein range from body weight + the post-session serving, both from the rules table. Deliberately reports fluid/sodium as **per-session training references, not daily totals** (the spec has no daily fluid/sodium formula — not invented).
+- `src/agent/starter.ts` — `buildStarter(profile)`: the one-time opener ("Hi &lt;name&gt;, I'm Kona … here's what I've got from your form … a rough daily protein target is …") + three conversation prompts that pre-fill a parseable stub in the composer ("My typical training week is: ", "Tomorrow I'm doing ", "My next race is ").
+- `GET /api/chat` returns `starter` when the conversation is empty; `app/Chat.tsx` renders it as the intro bubble + clickable chips (chip → pre-fills + focuses the input).
+- **Replies become memory**: `plan_week` now also proposes a `typical_week` memory; a new `note_race` intent (race/marathon/10k/… keywords) saves a `next_race` memory instead of trying to plan it (race planner stays out of scope). Anthropic system prompt updated to `propose_memory_update` for durable facts.
+- Typing indicator: the `…` bubble is now three dots doing a staggered wave (`.bubble.typing`, `@keyframes kona-wave`, with a `prefers-reduced-motion` fade fallback).
+- Tests: +11 (`profile-baseline` ×3, `starter` ×4, `note_race` + `typical_week` memory, updated week-plan assertion). **80 total**, all green; `next build` clean; full flow verified in the browser.
 
 ### M8 — Onboarding ✅
 - `Get Started` landing → profile form → chat. `app/page.tsx` orchestrates three views (`loading | onboarding | chat`); `app/Onboarding.tsx` (landing hero + form), `app/Chat.tsx` (the chat, extracted from `page.tsx`, now greets by name).

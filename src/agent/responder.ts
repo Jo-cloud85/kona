@@ -310,6 +310,17 @@ export function composeResponse(req: ComposeRequest): string {
       return composeFuel(req.tool_results);
     case 'recovery_check_in':
       return composeRecovery(req);
+    case 'note_race': {
+      const mem = find(req.tool_results, 'propose_memory_update')?.data as { value?: string } | undefined;
+      const what = mem?.value ? ` (${mem.value})` : '';
+      return `Noted your next race${what} — I'll keep it in mind and factor it into fueling as it gets closer. As the date nears, tell me the plan for race week and the days around it.`;
+    }
+    case 'note_saved': {
+      const mem = find(req.tool_results, 'propose_memory_update')?.data as { key?: string; value?: string } | undefined;
+      return mem?.value
+        ? `Got it — I've noted that${mem.key === 'next_race' ? ' race' : ''} and will bring it in where it's relevant.`
+        : "Noted — I'll remember that.";
+    }
     default:
       return "Tell me a bit more and I'll help — a planned session, what you actually did, what you ate, or how recovery feels.";
   }
