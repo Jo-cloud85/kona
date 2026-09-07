@@ -28,15 +28,24 @@ function getRepo(): InMemoryRepository {
   return repo;
 }
 
+/** deterministic unless KONA_LLM=anthropic (or an ANTHROPIC_API_KEY is present
+ *  and KONA_LLM isn't forced to 'deterministic'). */
+function useAnthropic(): boolean {
+  const forced = process.env.KONA_LLM;
+  if (forced === 'deterministic') return false;
+  if (forced === 'anthropic') return true;
+  return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
 function getLlm(): LlmClient {
   if (!llm) {
-    llm = process.env.ANTHROPIC_API_KEY ? new AnthropicLlmClient() : new DeterministicLlmClient();
+    llm = useAnthropic() ? new AnthropicLlmClient() : new DeterministicLlmClient();
   }
   return llm;
 }
 
 export function llmName(): string {
-  return process.env.ANTHROPIC_API_KEY
+  return useAnthropic()
     ? `anthropic (${process.env.KONA_LLM_MODEL ?? 'claude-opus-5'})`
     : 'deterministic';
 }
