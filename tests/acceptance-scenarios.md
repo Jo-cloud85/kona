@@ -20,16 +20,18 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AO9 | History sidebar | Multiple conversations listed (title from first message, newest first); "New chat" and switching work; continuing sends more messages. | ✅ `tests/data/repository.test.ts` + manual |
 | AO10 | Dashboard | Four visually-consistent range-bar panels (protein daily target · carb · fluid · sodium), all from the engine; rest days appear and carry the daily protein target; a `⚑ prep for <day>` flag marks the day before a long / double-session day (qualitative, no invented number); a lead paragraph explains why the during-session ranges repeat; table view lists all 7 days. | ✅ `tests/agent/dashboard.test.ts` + manual |
 
-## A-shell. App shell + daily nutrition (M11)
+## A-shell. App shell (M11 → trimmed in the 2026 reset)
 
 | # | Scenario | Expected behaviour | Coverage |
 |---|----------|--------------------|----------|
-| AS1 | Form — extra fields | Workout types include skating, combat sports, HYROX, climbing; **height** and **activity level** are required; **dietary restrictions** is an optional 14-option multi-select. Bad height / missing activity level is rejected with a specific message; unknown restrictions dropped, deduped. | ✅ `tests/domain/profile-input.test.ts` |
-| AS2 | Bottom nav | Four tabs in order Profile · Daily · Dashboard · Chat, each with an icon; the active tab persists across reloads; nav stays pinned while tab content scrolls. | manual (browser) |
-| AS3 | Profile tab | Opens the same form pre-filled with the saved profile ("Save changes"); saving updates the daily targets and the dashboard. | manual (browser) + `tests/data/repository.test.ts` |
-| AS4 | Daily energy model | `dailyNutrition()` computes a daily energy range via Mifflin–St Jeor × activity factor ±8%; protein / carbohydrate / fat / fibre ranges scale to body weight and activity; sodium stays **guidance, never a computed target**; `confidence` drops and `assumptions[]` is populated when height / age / sex / activity are missing. | ✅ `tests/engine/daily-nutrition.test.ts` |
-| AS5 | Food suggestions are examples | The Daily tab shows each macro target with a rotating sample of real foods, filtered by the user's dietary restrictions (e.g. vegan + gluten-free excludes chicken / beef / salmon / egg / dairy / wheat, keeps rice / potato / tofu / beans); framed as "examples, not a meal plan". | ✅ `tests/agent/daily.test.ts` + manual |
-| AS6 | Methodology is versioned separately | Daily nutrition carries `methodology_version` 0.2.0, distinct from the during-session engine's 0.1.0; documented in `CALCULATION_ENGINE_SPEC.md` §23. | ✅ `tests/agent/daily.test.ts` |
+| AS2 | Bottom nav | Tabs **Home · Dashboard · Chat** (the Daily tab was removed in the reset); active tab persists across reloads; nav stays pinned while tab content scrolls. Profile opens as an overlay from the Home avatar. | manual (browser) |
+| AS3 | Profile overlay | Opens the profile form pre-filled with the saved profile ("Save changes"); saving updates the Home advice. | manual (browser) + `tests/data/repository.test.ts` |
+
+> **Removed in the 2026 reset:** the "Daily" tab, the Mifflin–St Jeor daily
+> energy/macro model (`dailyNutrition`, `daily_v0_2_0` rules), and the food
+> portion catalog (`src/data/foods.ts`). Kona no longer shows a daily
+> energy/macro breakdown — see `PRODUCT_VISION.md` and
+> `CALCULATION_ENGINE_SPEC.md` §23. Scenarios AS1 / AS4 / AS5 / AS6 retired.
 
 ## A-home. Home tab (M12)
 
@@ -38,10 +40,10 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AH1 | Landing page | Opening the app lands on **Home** (first nav tab). A time-based greeting (`Good morning/afternoon/evening, <name>`) and today's date sit top-left; a Profile avatar sits top-right. | ✅ `tests/agent/home.test.ts` (greeting name, `today`) + manual |
 | AH2 | Week day-strip | The current calendar week is shown Mon–Sun with the date number; today is ringed, the selected day is filled, and a dot marks days that have a session. Tapping a day reloads "What's Planned" + fuelling for that date. | ✅ `tests/agent/home.test.ts` (week dates/labels, `is_today`, `has_session`) + manual |
 | AH3 | What's Planned | The selected day shows each planned session's title, **stated** effort (or "effort not set"), and **estimated** length (`"18 km"` / `"45 min"` / `"length not set"` — never a guessed number). Rest days and days outside the plan get a plain-language line. | ✅ `tests/agent/home.test.ts` (session view, needs-detail flags) + manual |
-| AH4 | Recommended fuelling | Always shows the profile's daily average (energy / protein / carb / fluid, from the v0.2.0 engine). On a day with a classifiable session it also shows the during-session carb / fluid / sodium targets; a rest day or unclassifiable day says "Normal day — the daily average above is all you need." | ✅ `tests/agent/home.test.ts` (during-session present for a long run, `is_normal_day` for rest / gym-needs-detail / no-plan) + manual |
+| AH4 | Recommended fuelling | Shows only what the day warrants — no daily energy/macro breakdown. A classifiable session shows during-session carb / fluid / sodium references + a post-session protein line; a rest or easy/unclassifiable day says "nothing to prepare — normal meals and fluids". | ✅ `tests/agent/home.test.ts` (during-session present for a long run; `post_session_protein_g` null on a rest day; `is_normal_day` for rest / gym-needs-detail / no-plan) + manual |
 | AH5 | Change / add a workout | The card's CTA switches to the **Chat** tab with the composer pre-filled (`"On Wednesday I'm doing "` / `"Change my Sunday session to "`), so plan edits still go through the chat orchestrator. The prefill is applied once and then cleared. | manual (browser) |
 | AH6 | Profile overlay | The Home avatar opens a full-screen overlay with the existing profile form (edit mode, pre-filled). Saving updates the greeting name and the Home fuelling. Profile is not a nav tab. | manual (browser) + `tests/data/repository.test.ts` |
-| AH7 | No weekly plan | With no plan saved, Home still renders the week and the daily-average fuelling; "What's Planned" invites the user to tell Kona their week in chat. | ✅ `tests/agent/home.test.ts` |
+| AH7 | No weekly plan | With no plan saved, Home still renders the week; "What's Planned" invites the user to tell Kona their week in chat. | ✅ `tests/agent/home.test.ts` |
 
 ## A-tod. Time of day + focused updates + check-in (M13)
 
@@ -49,7 +51,7 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 |---|----------|--------------------|----------|
 | AT1 | Session info contract | Every planned session needs type, intensity, distance-or-duration, **and time of day**. A missing time of day is prompted for — the weekly-plan option panel shows a Morning / Afternoon / Evening row per under-specified session. | ✅ `tests/agent/week-plan.test.ts` (`ask_time`) + manual |
 | AT2 | Time is derived when stated | "18 km run at 6am" / "evening gym" set `time_of_day` without a prompt; the session then reads "… morning running" / "evening gym". | ✅ `tests/agent/week-plan.test.ts`, `tests/agent/home.test.ts` |
-| AT3 | Morning pre-fuel advice | A morning session adds a qualitative pre-fuel line (light, quick carbs 20–30 min before — banana / dates / toast — not a full breakfast), restriction-filtered on the Home card. No new numbers. | ✅ `tests/agent/week-plan.test.ts`, `tests/agent/home.test.ts` |
+| AT3 | Morning pre-fuel advice | A morning session adds a qualitative pre-fuel line (light, quick carbs 20–30 min before — banana / dates / toast — not a full breakfast). No new numbers. | ✅ `tests/agent/week-plan.test.ts`, `tests/agent/home.test.ts` |
 | AT4 | Single-day update stays focused | Filling / changing one day replies about **that day only** (updated line + that day's prep + any gap still open for it) — it does not re-echo the whole week or "Day by day". A new/replaced weekly plan still gets the full-week summary. | ✅ `tests/agent/week-plan.test.ts` + manual |
 | AT5 | End-of-day check-in — quiet log | The popup (feel · went-as-planned · injuries/pains · free text) is saved as a recovery log; the reflection shows in the popup, nothing is added to the Chat thread. | ✅ `tests/agent/checkin.test.ts` + manual |
 | AT6 | Check-in safety | A concerning elaboration trips the same safety screen as any recovery message — Kona points to professional care and does not diagnose. "Plan didn't go as planned" is a nudge to describe the actual in chat, not an overwrite. | ✅ `tests/agent/checkin.test.ts` |

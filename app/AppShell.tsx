@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Workspace from './Workspace';
 import DashboardView from './DashboardView';
-import DailyTab from './DailyTab';
 import HomeTab from './HomeTab';
 import type { ProfileValues } from './ProfileForm';
 
-type Tab = 'home' | 'daily' | 'dashboard' | 'chat';
+type Tab = 'home' | 'dashboard' | 'chat';
 const TAB_KEY = 'kona.tab';
 
 const NAV: { tab: Tab; label: string; icon: ReactNode }[] = [
@@ -18,16 +17,6 @@ const NAV: { tab: Tab; label: string; icon: ReactNode }[] = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
         <path d="M4 11.5 12 4l8 7.5" />
         <path d="M6 10.5V20h12v-9.5" />
-      </svg>
-    ),
-  },
-  {
-    tab: 'daily',
-    label: 'Daily',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-        <rect x="5" y="4" width="14" height="17" rx="2" />
-        <path d="M9 4V3h6v1M8.5 9h7M8.5 13h7M8.5 17h4" />
       </svg>
     ),
   },
@@ -67,7 +56,7 @@ export default function AppShell({
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(TAB_KEY);
-      const t = raw === 'profile' ? 'home' : (raw as Tab | null);
+      const t = raw === 'profile' || raw === 'daily' ? 'home' : (raw as Tab | null);
       if (t && NAV.some((n) => n.tab === t)) setTab(t);
     } catch {
       /* ignore */
@@ -95,14 +84,8 @@ export default function AppShell({
     <div className="app-shell">
       <div className="tab-content" key={tab}>
         {tab === 'home' && (
-          <HomeTab
-            greetingName={greetingName}
-            onProfileChange={onProfileChange}
-            onOpenChat={openChat}
-            onOpenDaily={() => go('daily')}
-          />
+          <HomeTab greetingName={greetingName} onProfileChange={onProfileChange} onOpenChat={openChat} />
         )}
-        {tab === 'daily' && <DailyTab />}
         {tab === 'dashboard' && <DashboardView />}
         {tab === 'chat' && (
           <Workspace

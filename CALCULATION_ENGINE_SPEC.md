@@ -393,9 +393,8 @@ NOT had a full breakfast, so suggest something small and easy to digest ~20–30
 min before (a banana, a few dates, toast with jam/honey) rather than a full
 meal. When `time_of_day = evening`, the athlete has eaten through the day — a
 small carb snack ~1 h before is enough if it has been 3+ hours since eating.
-These lines are qualitative preparation advice (`src/data/foods.ts` →
-`PRE_FUEL_SNACKS`, restriction-filtered on the Home tab); they introduce no new
-numbers.
+These lines are qualitative preparation advice (a static phrasing in
+`src/engine/week.ts` / `src/agent/home.ts`); they introduce no new numbers.
 
 ## Trigger: known difficult conditions
 
@@ -760,29 +759,20 @@ https://pubmed.ncbi.nlm.nih.gov/35616504/
 
 ---
 
-# 23. Daily-nutrition methodology (v0.2.0 — added post-v0.1)
+# 23. Daily-nutrition methodology (v0.2.0) — REMOVED in the 2026 reset
 
-The v0.1 engine covers **training fuelling** (during/around sessions). A separate,
-separately-versioned table (`src/rules/daily_v0_2_0.ts`, methodology `0.2.0`)
-adds **whole-day targets** for the "Daily" tab. This broadens Kona past training
-fuelling; it is still a wellness tool, not a clinical service, and every output is
-a range with a confidence flag.
+A v0.1 build added a whole-day energy + macro estimate (Mifflin–St Jeor ×
+activity factor, macro ranges by activity level) driving a "Daily" tab, plus a
+food-portion catalog. **All of it was removed** — engine (`daily-nutrition.ts`),
+rules table (`daily_v0_2_0.ts`), food catalog (`data/foods.ts`), agent payload
+(`agent/daily.ts`), `/api/daily`, and the Daily tab.
 
-- **Energy**: Mifflin–St Jeor resting energy (PMID 2305711) × a whole-day
-  activity factor (1.2 sedentary → 1.9 extra-active). Reported as a ±8 % range.
-  Sex unspecified → the mean of the male/female equation constants (flagged).
-- **Protein**: 1.4–2.0 g/kg/day (ISSN 2017).
-- **Carbohydrate**: g/kg/day by activity level, 3–5 (light) to 8–10 (extra),
-  per ACSM/AND 2016 (PMID 26891166).
-- **Fat**: 20–35 % of energy (AMDR).
-- **Fibre**: 14 g per 1000 kcal (US Dietary Guidelines / IOM).
-- **Fluid**: adequate daily intake from drinks by sex (EFSA 2010: ~2.0 L women,
-  ~2.5 L men), plus ~0.4–0.8 L per hour of exercise. Presented as "go by thirst",
-  not a fixed number.
-- **Sodium**: NOT a computed personal target (§6.4). Guidance only — adequate
-  intake ~1.5 g/day, staying under ~2.3 g/day (NASEM 2019); heavy sweaters top up
-  around sessions.
+Why: the product thesis is an **endurance companion**, not a calorie / macro
+tracker. A daily energy-and-grams breakdown made Kona feel like a generic
+nutrition app, and it forced onboarding to collect height, activity level and
+dietary restrictions purely to feed that one screen.
 
-Food suggestions are **illustrative examples** of what a target looks like
-(`src/data/foods.ts`, rounded reference values), filtered by the user's dietary
-restrictions — never a prescribed meal plan.
+What remains is the **training-fuelling** engine only (§1–§22): during- and
+around-session hydration, carbohydrate, sodium and post-session protein, driven
+by the versioned `v0_1_0` rules table. The morning/evening pre-fuel note (§9) is
+qualitative advice and stays.

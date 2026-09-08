@@ -1,15 +1,13 @@
 import type { Intensity, PlannedSession, Profile, Range, Sport, TimeOfDay, WeeklyPlan } from '../domain/types';
-import { preFuelSnacks } from '../data/foods';
-import { buildDaily } from './daily';
 import { buildDashboard } from './dashboard';
 
 /**
  * The "Home" tab payload: the current week laid out Mon–Sun, what's planned for
  * the selected day (straight from the stored plan — estimated length + stated
- * effort, nothing invented), and the fuelling to aim for. Fuelling is the
- * profile's daily average (from the engine), plus the during-session targets
- * for that day when the day has a session the engine can classify. A rest day
- * or an unclassifiable day is a "normal day" — the daily average is all of it.
+ * effort, nothing invented), and the fuelling that day actually warrants. On a
+ * rest or easy day there is nothing extra to do; only sessions the engine can
+ * classify get during-session carb / fluid / sodium references. Kona is not a
+ * calorie tracker — there is deliberately no daily energy / macro breakdown.
  */
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -53,22 +51,18 @@ export interface HomeWeekDay {
 }
 
 export interface HomeFuel {
-  daily: {
-    energy_kcal: Range;
-    protein_g: Range;
-    carbohydrate_g: Range;
-    fluid_l: Range;
-  };
   during_session: {
     carb_g_per_hour: Range;
     fluid_ml_per_hour: Range;
     sodium_mg_per_litre: Range | null;
   } | null;
-  /** True when there's nothing extra to do — the daily average covers the day. */
+  /** Post-session protein serving reference (rules table, constant). Shown only
+   *  when the selected day has a session. */
+  post_session_protein_g: Range | null;
+  /** True when there's nothing extra to do — normal meals cover the day. */
   is_normal_day: boolean;
   /** Time-of-day pre-fuel nudge for the selected day (morning / evening), or null. */
   pre_fuel_note: string | null;
-  confidence: string;
 }
 
 export interface HomeView {
@@ -90,7 +84,7 @@ export interface HomeView {
     sessions: HomeSession[];
     fuel: HomeFuel;
   };
-  methodology: { daily: string; session: string | null };
+  methodology: { session: string | null };
 }
 
 function isoDate(d: Date): string {
@@ -167,11 +161,10 @@ function sessionView(s: PlannedSession): HomeSession {
 }
 
 /** Pre-fuel nudge for the selected day, keyed off a session's stated time. */
-function preFuelNote(sessions: HomeSession[], restrictions: Profile['dietary_restrictions'] = []): string | null {
+function preFuelNote(sessions: HomeSession[]): string | null {
   const times = new Set(sessions.map((s) => s.time_of_day).filter((t): t is TimeOfDay => t != null));
   if (times.has('morning')) {
-    const snacks = preFuelSnacks(restrictions ?? []).join(', ');
-    return `Morning session — if you train before a full breakfast, have ${snacks} 20–30 min before rather than a big meal.`;
+    return 'Morning session — if you train before a full breakfast, have something light 20–30 min before (a banana, a few dates, toast with jam) rather than a big meal.';
   }
   if (times.has('evening')) {
     return "Evening session — you'll have eaten through the day; if it's been 3+ hours, a small carb snack about an hour before is plenty.";
@@ -215,7 +208,6 @@ export function buildHome(input: {
     };
   });
 
-  const daily = buildDaily(input.profile, now).nutrition;
   const dashboard = buildDashboard({
     profile: input.profile,
     weeklyPlan: input.weeklyPlan,
@@ -238,7 +230,7 @@ export function buildHome(input: {
     : false;
 
   const selectedSessions = (byDate.get(selected_date) ?? []).map(sessionView);
-  const pre_fuel_note = preFuelNote(selectedSessions, input.profile.dietary_restrictions ?? []);
+  const pre_fuel_note = preFuelNote(selectedSessions);
 
   const todayDay = week.find((d) => d.is_today);
   const checkinDone = input.checkinDoneToday ?? false;
@@ -260,18 +252,12 @@ export function buildHome(input: {
       is_rest: restSet.has(selected_date),
       sessions: selectedSessions,
       fuel: {
-        daily: {
-          energy_kcal: daily.energy_kcal,
-          protein_g: daily.protein_g,
-          carbohydrate_g: daily.carbohydrate_g,
-          fluid_l: daily.fluid_l,
-        },
         during_session: during,
+        post_session_protein_g: selectedSessions.length > 0 ? dashboard.baseline.post_session_protein_g : null,
         is_normal_day: during == null,
         pre_fuel_note,
-        confidence: daily.confidence,
       },
     },
-    methodology: { daily: daily.methodology_version, session: dashboard.methodology_version ?? null },
+    methodology: { session: dashboard.methodology_version ?? null },
   };
 }

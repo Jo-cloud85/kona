@@ -6,7 +6,6 @@ import {
   AnthropicLlmClient,
   DeterministicLlmClient,
   buildCheckinLog,
-  buildDaily,
   buildDashboard,
   buildHome,
   buildStarter,
@@ -18,7 +17,6 @@ import {
   type CheckinInput,
   type ChatStarter,
   type Dashboard,
-  type DailyPlan,
   type HomeView,
   type LlmClient,
 } from '../src/agent/index';
@@ -102,11 +100,6 @@ export async function listMessages(conversationId: string) {
 
 export async function listConversations() {
   return getRepo().listConversations(DEMO_USER_ID);
-}
-
-export async function getDaily(): Promise<DailyPlan | null> {
-  const profile = await getRepo().getProfile(DEMO_USER_ID);
-  return profile?.onboarded_at ? buildDaily(profile) : null;
 }
 
 export async function getDashboard(): Promise<Dashboard | null> {

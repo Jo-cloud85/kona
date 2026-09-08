@@ -1,13 +1,47 @@
 # Kona — Progress
 
 ## Current milestone
-**M13 complete — session `time_of_day` (required, prompted) + morning pre-fuel
-advice; single-day plan updates reply about that day only; end-of-day check-in
-(quiet recovery log + evening popup + avatar dot).**
-Next: a persistence backend to replace the in-memory store; food-estimation
-ranges (§14); historical pattern surfacing (§12).
+**Product reset (2026) in progress.** Founder re-scoped Kona to an *AI endurance
+companion* for the self-coached multi-sport recreational athlete — relationship +
+accumulated understanding, not a nutrition tracker. Audit approved in full;
+executing in milestones M14.1 → M21 (see the reset plan). **M14.1 done.**
+Next: M14.2 slim onboarding to 3 questions + weight contextual + trim sports.
+
+### Reset milestone plan
+- **M14.1** ✅ De-scope: remove the Daily tab + Mifflin–St Jeor energy model + food catalog; nav → Home/Dashboard/Chat; docs re-pointed.
+- **M14.2** Slim onboarding (name · endurance sports · what you're training for); weight collected contextually; trim sports to run/bike/swim/tri (+ strength).
+- **M15** Anthropic is the shipped path; wire `history` + recovery + fuel + goal into the prompt context.
+- **M16** Deterministic pattern layer — `Insight[]` (FACT / PATTERN / HYPOTHESIS / RECOMMENDATION + `Certainty`); broaden what gets remembered.
+- **M17** "What Kona knows about you" view replacing the chart Dashboard.
+- **M18** Home = narrative briefing; numbers inline and only when earned.
+- **M19** Close the check-in / logging loops — they visibly change the next recommendation + enter visible history.
+- **M20** Goal/race anchoring ("week X of Y before <event>") through Home + plan.
+- **M21** Defer plan-detail prompts to the next 1–2 key sessions.
 
 ## Completed work
+
+### M14.1 — De-scope: remove the Daily tab + daily energy model ✅
+_2026 reset, step 1. The daily energy/macro breakdown made Kona feel like a
+calorie tracker and forced onboarding to collect height / activity level /
+dietary restrictions purely to feed it._
+- **Deleted:** `app/DailyTab.tsx`, `app/api/daily/route.ts`, `src/agent/daily.ts`,
+  `src/engine/daily-nutrition.ts`, `src/rules/daily_v0_2_0.ts`, `src/data/foods.ts`,
+  and their tests. Dropped the `buildDaily` / `dailyNutrition` / `getDailyRules`
+  exports and `getDaily()`.
+- **Nav:** Home / Dashboard / Chat (was Home / Daily / Dashboard / Chat);
+  `kona.tab === 'daily'` migrates to `home`.
+- **Home fuelling card** no longer shows a daily energy / protein / carb / fluid
+  grid. It shows only what the day warrants: during-session carb / fluid / sodium
+  references (v0.1.0 engine) for classifiable sessions, a post-session protein
+  line, and the morning/evening pre-fuel note. A rest or easy day just says
+  "nothing to prepare — normal meals and fluids". The pre-fuel snack list is now
+  a static phrasing (no restriction filtering, since the food catalog is gone).
+- **Docs:** `PRODUCT_VISION.md` re-pointed to "AI endurance companion" with the
+  2026 thesis + target-customer section; `CALCULATION_ENGINE_SPEC.md` §23 marked
+  REMOVED; the §9 pre-fuel note ref updated.
+- 108 tests green (was 116 — the two daily-nutrition suites removed);
+  `tsc`, `eslint`, `next build` clean. Home verified in the browser (no energy
+  grid; earned during-session numbers on a long-run day).
 
 ### M13 — time-of-day, focused day updates, end-of-day check-in ✅
 _From user feedback: single-day edits shouldn't echo the whole week; sessions

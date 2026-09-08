@@ -76,13 +76,13 @@ describe('buildHome', () => {
 
     expect(h.selected.fuel.during_session).not.toBeNull();
     expect(h.selected.fuel.is_normal_day).toBe(false);
-    // the daily average is always there too
-    expect(h.selected.fuel.daily.energy_kcal.min).toBeGreaterThan(0);
-    expect(h.selected.fuel.daily.protein_g.max).toBeGreaterThan(h.selected.fuel.daily.protein_g.min);
+    // a session day carries the post-session protein reference (rules table)
+    expect(h.selected.fuel.post_session_protein_g).not.toBeNull();
+    expect(h.selected.fuel.post_session_protein_g!.max).toBeGreaterThan(h.selected.fuel.post_session_protein_g!.min);
     expect(h.week.find((d) => d.date === '2026-09-09')?.has_session).toBe(true);
   });
 
-  it('treats a rest day as a normal day — daily average only, no during-session block', () => {
+  it('treats a rest day as a normal day — no during-session block, no protein line', () => {
     const h = buildHome({
       profile,
       weeklyPlan: plan(),
@@ -94,7 +94,7 @@ describe('buildHome', () => {
     expect(h.selected.sessions).toHaveLength(0);
     expect(h.selected.fuel.during_session).toBeNull();
     expect(h.selected.fuel.is_normal_day).toBe(true);
-    expect(h.selected.fuel.daily.carbohydrate_g.min).toBeGreaterThan(0);
+    expect(h.selected.fuel.post_session_protein_g).toBeNull();
   });
 
   it('flags effort / length not set when the session still needs detail', () => {
@@ -119,13 +119,13 @@ describe('buildHome', () => {
     expect(h.selected.fuel.is_normal_day).toBe(true);
   });
 
-  it('works with no weekly plan — still returns the week and a daily average', () => {
+  it('works with no weekly plan — still returns the week', () => {
     const h = buildHome({ profile, sessions: [], now: NOW });
     expect(h.has_plan).toBe(false);
     expect(h.week).toHaveLength(7);
     expect(h.selected.in_plan).toBe(false);
     expect(h.selected.fuel.is_normal_day).toBe(true);
-    expect(h.selected.fuel.daily.energy_kcal.max).toBeGreaterThan(0);
+    expect(h.selected.fuel.during_session).toBeNull();
   });
 
   it('ignores a malformed selectedDate and falls back to today', () => {

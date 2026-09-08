@@ -43,18 +43,17 @@ interface HomeView {
     is_rest: boolean;
     sessions: HomeSession[];
     fuel: {
-      daily: { energy_kcal: Range; protein_g: Range; carbohydrate_g: Range; fluid_l: Range };
       during_session: {
         carb_g_per_hour: Range;
         fluid_ml_per_hour: Range;
         sodium_mg_per_litre: Range | null;
       } | null;
+      post_session_protein_g: Range | null;
       is_normal_day: boolean;
       pre_fuel_note: string | null;
-      confidence: string;
     };
   };
-  methodology: { daily: string; session: string | null };
+  methodology: { session: string | null };
 }
 
 const WEEKDAY_FULL: Record<string, string> = {
@@ -77,11 +76,6 @@ function rangeText(r: Range): string {
   return r.min === r.max ? r.min.toLocaleString() : `${r.min.toLocaleString()}–${r.max.toLocaleString()}`;
 }
 
-function fluidText(r: Range): string {
-  const f = (n: number) => Number(n.toFixed(1)).toString();
-  return r.min === r.max ? f(r.min) : `${f(r.min)}–${f(r.max)}`;
-}
-
 function longDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number) as [number, number, number];
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -91,12 +85,10 @@ export default function HomeTab({
   greetingName,
   onProfileChange,
   onOpenChat,
-  onOpenDaily,
 }: {
   greetingName?: string;
   onProfileChange: (p: ProfileValues) => void;
   onOpenChat: (prefill: string) => void;
-  onOpenDaily: () => void;
 }) {
   const [data, setData] = useState<HomeView | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -245,41 +237,10 @@ export default function HomeTab({
 
       <section className="home-card">
         <h2>{fuelTitle}</h2>
-        <p className="home-card-sub">
-          Daily average from your profile{fuel.is_normal_day ? '' : ' + this session'} · methodology v
-          {data.methodology.daily} · confidence {fuel.confidence}
-        </p>
-
-        <div className="fuel-grid">
-          <div className="fuel-stat">
-            <span className="fuel-stat-label">Energy</span>
-            <span className="fuel-stat-value">
-              {rangeText(fuel.daily.energy_kcal)} <small>kcal</small>
-            </span>
-          </div>
-          <div className="fuel-stat">
-            <span className="fuel-stat-label">Protein</span>
-            <span className="fuel-stat-value">
-              {rangeText(fuel.daily.protein_g)} <small>g</small>
-            </span>
-          </div>
-          <div className="fuel-stat">
-            <span className="fuel-stat-label">Carbs</span>
-            <span className="fuel-stat-value">
-              {rangeText(fuel.daily.carbohydrate_g)} <small>g</small>
-            </span>
-          </div>
-          <div className="fuel-stat">
-            <span className="fuel-stat-label">Fluid (drinks)</span>
-            <span className="fuel-stat-value">
-              {fluidText(fuel.daily.fluid_l)} <small>L</small>
-            </span>
-          </div>
-        </div>
 
         {fuel.during_session ? (
-          <div className="fuel-during">
-            <h3>During the session</h3>
+          <>
+            <p className="home-card-sub">During-session references · methodology v{data.methodology.session}</p>
             <div className="fuel-grid">
               <div className="fuel-stat">
                 <span className="fuel-stat-label">Carbs</span>
@@ -303,21 +264,28 @@ export default function HomeTab({
                 </span>
               </div>
             </div>
-          </div>
+          </>
         ) : (
-          <p className="fuel-normal">Normal day — the daily average above is all you need.</p>
+          <p className="fuel-normal">
+            {sel.sessions.length > 0
+              ? 'Nothing special for this one — your usual meals and fluids cover it.'
+              : 'Nothing to prepare — normal meals and fluids.'}
+          </p>
         )}
 
         {fuel.pre_fuel_note && <p className="fuel-note">{fuel.pre_fuel_note}</p>}
 
-        <button className="home-link" onClick={onOpenDaily}>
-          Full breakdown &amp; food ideas →
-        </button>
+        {fuel.post_session_protein_g && (
+          <p className="fuel-note">
+            After: put some carbohydrate and about {rangeText(fuel.post_session_protein_g)} g protein in the meal
+            afterwards.
+          </p>
+        )}
       </section>
 
       <p className="home-foot">
-        Estimates from general sports-nutrition guidance, not exact targets. Kona is a wellness tool, not a
-        dietitian.
+        Session references come from general sports-nutrition guidance, not exact targets. Kona is a wellness
+        tool, not a dietitian.
       </p>
 
       {checkinOpen && (

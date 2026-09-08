@@ -4,30 +4,56 @@
 **Kona**
 
 Suggested positioning:
-> **Your AI fueling companion for training.**
+> **Your AI endurance companion.**
 
 Possible supporting line:
-> Plan your fueling. Tell Kona what actually happened. Let it remember, learn, and help you prepare for the next workout.
+> Kona learns what you're training for, what you did, how you fuelled and how you felt — then helps you prepare for the next one.
+
+## Product thesis (2026 reset)
+Kona is an AI endurance companion for the **self-coached, moderately serious,
+multi-sport recreational athlete** — conceptually a simplified "Jarvis for
+endurance training". The athlete should feel Kona understands what they are
+training for, what they are doing today, what they have done recently, how they
+fuelled, how they felt, what has worked before, what hasn't, and their
+preferences and constraints. Fuelling is the initial wedge; the long-term value
+is the **relationship and accumulated understanding of the athlete**, not a
+calculator or a nutrition tracker.
+
+Architecture: **foundation model + structured athlete context + longitudinal
+memory + deterministic calculation/rules engine + conversation.** We do not train
+our own model. The goal is a rich personal athlete model.
+
+## Target customer
+The self-coached, moderately serious multi-sport recreational athlete. Typically:
+trains ~4–8×/week; running, cycling, swimming and/or triathlon; may use Garmin /
+COROS / Apple Watch / Strava; understands basic training & fuelling concepts;
+doesn't want a personal coach; doesn't want to track every calorie; wants an
+assistant that understands *context* rather than giving generic advice.
+
+Do **not** optimise for casual gym users, bodybuilding, weight-loss-first users,
+professional athletes, or medical nutrition.
 
 ## What Kona is
-Kona is a chat-first AI companion for recreational athletes who train frequently across one or more sports (running, cycling, swimming, gym/strength, HYROX, triathlon, etc.).
+Kona is a chat-first AI companion for self-coached endurance athletes (running,
+cycling, swimming, triathlon; strength as a supporting activity).
 
-Kona translates messy real-world training stories into structured data, uses a deterministic fueling/recovery engine for calculations, and turns the results into practical conversational recommendations.
+Kona translates messy real-world training stories into structured data, uses a
+deterministic fuelling/recovery engine for calculations, remembers what happens
+over time, and turns it into practical conversational guidance that references
+the athlete's own history.
 
 ## What Kona is NOT
 - Not a medical advisor.
 - Not a dietitian replacement.
-- Not a food-logging / calorie-tracking diary (Kona shows target *ranges* and
-  illustrative examples; it does not ask you to log every gram).
+- Not a food-logging / calorie-tracking diary. **Kona does not show a daily
+  energy / macro breakdown.** (An earlier v0.1 build added a Mifflin–St Jeor
+  daily-nutrition estimate + a "Daily" tab; both were removed in the 2026 reset
+  as off-thesis.)
 - Not a generic food database.
 - Not a Garmin/Strava replacement.
-- Not an opaque “AI nutrition expert” that invents precise numbers.
-
-> **Scope note (post-v0.1):** in addition to training fuelling, Kona now shows a
-> **daily** nutrition estimate (energy + macros) via the Mifflin–St Jeor
-> equation and published macro ranges — see `CALCULATION_ENGINE_SPEC.md` §23.
-> These are estimates with a confidence flag, presented as ranges with example
-> foods, not a prescribed meal plan.
+- Not an opaque "AI nutrition expert" that invents precise numbers.
+- Not a metrics dashboard. Prefer insights and remembered patterns over raw
+  charts.
 
 ## Core product loop
 **Plan → Talk → Do → Check in → Adapt → Remember**
