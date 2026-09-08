@@ -5,15 +5,15 @@ automated coverage. Do not weaken or delete these to make a suite pass.
 
 Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 
-## A-onboard. Onboarding
+## A-onboard. Onboarding (2026 reset — 3 questions)
 
 | # | Scenario | Expected behaviour | Coverage |
 |---|----------|--------------------|----------|
-| AO1 | First visit | "Get Started" landing → profile form (username, gender, age, body weight, workout types incl. climbing, sessions/week, optional injury note, 1–5 sleep/hydration/sweat). | manual (browser) |
-| AO2 | Form validation | Bad input (empty username, out-of-range age/weight, no sport, perception ≠ 1–5) is rejected with a specific message; input trimmed, sports deduped, unknown sports dropped. | ✅ `tests/domain/profile-input.test.ts` |
-| AO3 | Submit | Valid form persists the profile (`onboarded_at` set); the app shows the chat and greets by name; a reload skips onboarding. | manual (browser) + `tests/data/repository.test.ts` |
-| AO4 | Perception is context, not a measurement | A high self-rated sweat level does not put the engine into measured-sweat mode. | ✅ (engine has no `known_sweat_data` from onboarding) |
-| AO5 | Chat starter | The empty chat shows a greeting + form echo + daily protein range (from the engine) with fluid/sodium framed as per-session references, then 3 prompt chips that pre-fill a parseable stub. | ✅ `tests/agent/starter.test.ts`, `tests/engine/profile-baseline.test.ts` + manual (browser) |
+| AO1 | First visit | Landing hero → a 3-field form: **your name**, **which endurance sports** (Running / Cycling / Swimming / Triathlon / Strength), **"What are you working towards?"** (free text). No weight, height, activity level, dietary or self-perception fields. | manual (browser) |
+| AO2 | Form validation | Only name + ≥1 sport are required. Empty name, no sport, or an out-of-range optional value (weight / bottle / age / sessions) is rejected with a specific message; sports deduped, non-endurance/unknown dropped; goal accepted as text or `{text,event_date}`. | ✅ `tests/domain/profile-input.test.ts` |
+| AO3 | Submit | The profile persists (`onboarded_at` set, `goal.text` stored); the app opens Home; a reload skips onboarding. | manual (browser) + `tests/data/repository.test.ts` |
+| AO5 | Chat starter | The empty chat shows a short, warm intro — name, sports, and an acknowledgement of the goal (or a question about it) — **no wall of fuelling numbers**, then 3 prompt chips. | ✅ `tests/agent/starter.test.ts` + manual (browser) |
+| AO11 | Contextual weight | Weight is not asked at onboarding. After a plan is saved with weight unknown, the reply asks once; "I'm 64 kg" / "my usual bottle is 750 ml" route to `save_profile_fact` and are used from then on; an intake log ("I had a gel and my 750 ml bottle") is **not** treated as a profile fact. | ✅ `tests/agent/profile-fact.test.ts` + manual |
 | AO6 | Prompt replies become memory | "My typical training week is …" saves the plan **and** a `typical_week` memory; "My next race is …" saves a `next_race` memory (no session/plan created). | ✅ `tests/agent/week-plan.test.ts` |
 | AO7 | Typing indicator | While a reply is generating, a three-dot wave shows in an assistant bubble. | manual (browser) |
 | AO8 | Option-button prompts | A saved week gives a prep line for **every** day and renders per-session effort/length option buttons; picking them + Save updates the plan. | ✅ `tests/engine/week.test.ts`, `tests/agent/week-plan.test.ts` + manual |

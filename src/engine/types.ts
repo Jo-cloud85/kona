@@ -64,9 +64,11 @@ export interface FuelingCalculation {
   };
   recovery: {
     protein_daily_g_per_kg: Range;
-    protein_daily_g: Range;
+    /** null when body weight is not on file yet. */
+    protein_daily_g: Range | null;
     post_workout_protein_reference_g: Range;
-    post_workout_protein_per_kg_g: number;
+    /** null when body weight is not on file yet. */
+    post_workout_protein_per_kg_g: number | null;
   };
   recommendation_inputs: RecommendationInput[];
   warnings: string[];

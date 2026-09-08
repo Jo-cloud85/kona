@@ -66,37 +66,19 @@ export interface KnownSweatData {
 
 export type Gender = 'female' | 'male' | 'nonbinary' | 'other' | 'prefer_not_to_say';
 
-export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'very_active' | 'extra_active';
-
-/** Dietary restriction / preference tags used to filter food suggestions. */
-export type DietaryRestriction =
-  | 'vegetarian'
-  | 'vegan'
-  | 'pescatarian'
-  | 'no_beef'
-  | 'no_pork'
-  | 'halal'
-  | 'kosher'
-  | 'dairy_free'
-  | 'lactose_intolerant'
-  | 'gluten_free'
-  | 'nut_allergy'
-  | 'egg_free'
-  | 'soy_free'
-  | 'shellfish_allergy';
-
-/** Subjective 1–5 self-ratings from onboarding. 5 = excellent for sleep/hydration;
- *  5 = a lot / excessive for sweat. Context for the companion, NOT a calc input. */
-export interface SelfPerception {
-  sleep_quality: number; // 1–5
-  hydration: number; // 1–5
-  sweat_level: number; // 1–5 (5 = heavy sweater)
+/** What the athlete is training for. Set at onboarding (free text) and refined
+ *  in conversation. `event_date` enables "week X of Y" framing. */
+export interface TrainingGoal {
+  /** e.g. "Sub-4 marathon in Chicago", "First Olympic-distance tri", "Stay consistent". */
+  text: string;
+  /** ISO date (YYYY-MM-DD) of the event, when known. */
+  event_date?: string;
 }
 
 export interface Profile {
   user_id: string;
-  /** Required for the calculation engine (protein targets). */
-  body_weight_kg: number;
+  /** Optional — collected contextually the first time a calculation needs it. */
+  body_weight_kg?: number;
   usual_sports: Sport[];
   usual_bottle_ml?: number;
   typical_weekly_sessions?: number;
@@ -106,15 +88,12 @@ export interface Profile {
 
   // Onboarding background — helps the companion, not the numbers.
   username?: string;
+  /** What they're working towards. The organizing principle for a self-coached athlete. */
+  goal?: TrainingGoal;
   gender?: Gender;
   age?: number;
-  /** cm — needed for the Mifflin–St Jeor daily energy estimate. */
-  height_cm?: number;
-  activity_level?: ActivityLevel;
-  dietary_restrictions?: DietaryRestriction[];
   /** Free text: injuries or cramps in the last month, or empty. */
   recent_injuries_note?: string;
-  self_perception?: SelfPerception;
   /** Set once the user has completed onboarding. */
   onboarded_at?: string;
 }

@@ -66,7 +66,9 @@ function caveat(calc: FuelingCalculation): string {
 
 // --- per-intent composers -------------------------------------------------
 
-function composePlan(results: ToolResult[]): string {
+const WEIGHT_NUDGE = "By the way — what do you weigh? It sharpens the protein numbers. Just say e.g. \"I'm 68 kg\".";
+
+function composePlan(results: ToolResult[], weightKnown = true): string {
   const planned = find(results, 'save_planned_session')?.data as PlannedSession | undefined;
   const calc = find(results, 'calculate_fueling_targets')?.data as FuelingCalculation | undefined;
   if (!planned) return "I couldn't save that plan — could you repeat the session details?";
@@ -86,6 +88,7 @@ function composePlan(results: ToolResult[]): string {
     lines.push('');
     lines.push(caveat(calc));
   }
+  if (!weightKnown) lines.push('', WEIGHT_NUDGE);
   return lines.join('\n');
 }
 
@@ -247,7 +250,7 @@ function weekEndIso(weekStart: string): string {
   return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
 }
 
-function composeWeekPlan(results: ToolResult[]): string {
+function composeWeekPlan(results: ToolResult[], weightKnown = true): string {
   const data = find(results, 'save_weekly_plan')?.data as WeekPlanResult | undefined;
   if (!data) return "I couldn't save that week — could you list the days again?";
   const { analysis, rest_days } = data;
@@ -262,6 +265,7 @@ function composeWeekPlan(results: ToolResult[]): string {
   ];
 
   lines.push(...planAdviceLines(analysis));
+  if (!weightKnown) lines.push('', WEIGHT_NUDGE);
   return lines.join('\n');
 }
 
@@ -332,9 +336,9 @@ function composeClarifyPlanDetail(results: ToolResult[]): string {
 export function composeResponse(req: ComposeRequest): string {
   switch (req.intent) {
     case 'plan_session':
-      return composePlan(req.tool_results);
+      return composePlan(req.tool_results, req.context.profile?.body_weight_kg != null);
     case 'plan_week':
-      return composeWeekPlan(req.tool_results);
+      return composeWeekPlan(req.tool_results, req.context.profile?.body_weight_kg != null);
     case 'clarify_plan_detail':
       return composeClarifyPlanDetail(req.tool_results);
     case 'log_actual':
@@ -353,6 +357,16 @@ export function composeResponse(req: ComposeRequest): string {
       return mem?.value
         ? `Got it — I've noted that${mem.key === 'next_race' ? ' race' : ''} and will bring it in where it's relevant.`
         : "Noted — I'll remember that.";
+    }
+    case 'note_profile_fact': {
+      const p = find(req.tool_results, 'save_profile_fact')?.data as
+        | { body_weight_kg?: number; usual_bottle_ml?: number }
+        | undefined;
+      if (!p) return "I couldn't save that — could you say it again?";
+      const bits: string[] = [];
+      if (typeof p.body_weight_kg === 'number') bits.push(`${p.body_weight_kg} kg`);
+      if (typeof p.usual_bottle_ml === 'number') bits.push(`a ${p.usual_bottle_ml} ml bottle`);
+      return `Noted — ${bits.join(' and ')}. I'll use that from now on.`;
     }
     default:
       return "Tell me a bit more and I'll help — a planned session, what you actually did, what you ate, or how recovery feels.";

@@ -7,7 +7,6 @@ const profile: Profile = {
   username: 'Sam',
   body_weight_kg: 70,
   usual_sports: ['running', 'gym'],
-  self_perception: { sleep_quality: 3, hydration: 3, sweat_level: 3 },
   onboarded_at: '2026-09-06T00:00:00Z',
 };
 
@@ -46,8 +45,9 @@ describe('buildDashboard', () => {
     const d = buildDashboard({ profile, weeklyPlan: undefined, sessions: [] });
     expect(d.has_plan).toBe(false);
     expect(d.days).toHaveLength(0);
-    // baseline is still available
-    expect(d.baseline.protein_daily_g.min).toBeGreaterThan(0);
+    // baseline is still available (weight is on the fixture)
+    expect(d.baseline.protein_daily_g).not.toBeNull();
+    expect(d.baseline.protein_daily_g!.min).toBeGreaterThan(0);
   });
 
   it('fills per-day carb/fluid targets only where the engine can classify the session', () => {

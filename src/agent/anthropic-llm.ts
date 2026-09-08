@@ -52,6 +52,8 @@ Guidance:
 - Food, drink or products consumed -> log_fuel_intake with each item and the quantity they stated. Never invent nutrition values.
 - How they feel / recovery / soreness / sleep -> save_recovery with their words as free_text and a coarse overall_severity.
 - A durable fact worth remembering (an upcoming race, a standing preference, their typical week) -> propose_memory_update with a short key (e.g. "next_race", "typical_week") and the value in their words. Do this alongside a plan tool when both apply.
+- A standing profile fact stated in passing — their body weight in kg, or their usual bottle size in ml ("I weigh 68 kg", "my bottle is 750 ml") -> save_profile_fact. Not for one-off intake.
+- CONTEXT.profile.body_weight_kg may be null. If a fuelling calculation would benefit and weight is unknown, still run the tools, and it is fine for the reply to ask once for their weight.
 - To reference a session you create earlier in this same turn, pass the string "$last" as its id.
 - When you have no explicit planned_session_id, link an actual session with link_to_plan_date (YYYY-MM-DD), using the current date or the plan's date from CONTEXT.
 - Resolve relative dates/times ("tomorrow", "6am") against now_iso in CONTEXT.
@@ -76,14 +78,14 @@ function contextForPrompt(ctx: ContextPackage): string {
       profile: ctx.profile
         ? {
             username: ctx.profile.username,
+            goal: ctx.profile.goal ?? null,
             gender: ctx.profile.gender,
             age: ctx.profile.age,
-            body_weight_kg: ctx.profile.body_weight_kg,
+            body_weight_kg: ctx.profile.body_weight_kg ?? null,
             usual_sports: ctx.profile.usual_sports,
             typical_weekly_sessions: ctx.profile.typical_weekly_sessions,
             usual_bottle_ml: ctx.profile.usual_bottle_ml,
             recent_injuries_note: ctx.profile.recent_injuries_note,
-            self_perception: ctx.profile.self_perception,
             has_measured_sweat_data: Boolean(ctx.profile.known_sweat_data?.length),
           }
         : null,
@@ -115,6 +117,7 @@ const INTENT_BY_TOOL: Record<string, string> = {
   save_actual_session: 'log_actual',
   log_fuel_intake: 'log_fuel',
   save_recovery: 'recovery_check_in',
+  save_profile_fact: 'note_profile_fact',
   propose_memory_update: 'note_saved',
 };
 

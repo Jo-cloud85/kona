@@ -178,7 +178,7 @@ export default function Chat({
         <div className="header-title">
           <h1>Kona</h1>
           <p>
-            {greetingName ? `Hi ${greetingName} — ` : ''}your AI fueling companion for training
+            {greetingName ? `Hi ${greetingName} — ` : ''}your AI endurance companion
             {llm ? ` · ${llm}` : ''}
           </p>
         </div>

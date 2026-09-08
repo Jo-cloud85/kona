@@ -12,7 +12,8 @@ import { getRules } from '../rules/index';
  */
 export interface ProfileDailyBaseline {
   protein_daily_g_per_kg: Range;
-  protein_daily_g: Range;
+  /** null when body weight is not on file yet. */
+  protein_daily_g: Range | null;
   post_session_protein_g: Range;
   /** During-exercise starting reference (not a daily total). */
   training_fluid_ml_per_hour: Range;
@@ -27,7 +28,7 @@ function roundRange(r: Range): Range {
 }
 
 export function profileDailyBaseline(input: {
-  body_weight_kg: number;
+  body_weight_kg?: number;
   methodology_version?: string;
 }): ProfileDailyBaseline {
   const rules = getRules(input.methodology_version);
@@ -35,10 +36,13 @@ export function profileDailyBaseline(input: {
 
   return {
     protein_daily_g_per_kg: { ...rules.protein.daily_g_per_kg },
-    protein_daily_g: roundRange({
-      min: w * rules.protein.daily_g_per_kg.min,
-      max: w * rules.protein.daily_g_per_kg.max,
-    }),
+    protein_daily_g:
+      typeof w === 'number'
+        ? roundRange({
+            min: w * rules.protein.daily_g_per_kg.min,
+            max: w * rules.protein.daily_g_per_kg.max,
+          })
+        : null,
     post_session_protein_g: { ...rules.protein.post_workout_reference_g },
     training_fluid_ml_per_hour: { ...rules.hydration.fallback_fluid_ml_per_hour },
     training_sodium_mg_per_litre: { ...rules.sodium.reference_mg_per_litre },

@@ -20,8 +20,8 @@ export interface DashboardDay {
   is_rest: boolean;
   is_key_day: boolean;
   sessions: DashboardDaySession[];
-  /** Daily protein target — the same every day (weight-based), including rest days. */
-  protein_daily_g: Range;
+  /** Daily protein target — the same every day (weight-based), including rest days. null until body weight is on file. */
+  protein_daily_g: Range | null;
   /** During-exercise targets — null when no session that day has a classifiable duration. */
   carb_g_per_hour: Range | null;
   fluid_ml_per_hour: Range | null;
@@ -36,7 +36,7 @@ export interface Dashboard {
   week_start: string | null;
   week_end: string | null;
   baseline: {
-    protein_daily_g: Range;
+    protein_daily_g: Range | null;
     protein_daily_g_per_kg: Range;
     post_session_protein_g: Range;
   };
@@ -95,7 +95,7 @@ export function buildDashboard(input: {
       needs_detail: s.needs_detail ?? [],
     })),
     profile: {
-      body_weight_kg: input.profile.body_weight_kg,
+      body_weight_kg: input.profile.body_weight_kg ?? undefined,
       usual_bottle_ml: input.profile.usual_bottle_ml,
       known_sweat_data: input.profile.known_sweat_data,
     },

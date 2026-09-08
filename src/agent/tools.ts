@@ -275,7 +275,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         sessions: analysisSessions,
         rest_days: restDays,
         profile: {
-          body_weight_kg: profile?.body_weight_kg ?? 0,
+          body_weight_kg: profile?.body_weight_kg,
           usual_bottle_ml: profile?.usual_bottle_ml,
           known_sweat_data: profile?.known_sweat_data,
         },
@@ -301,7 +301,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         rest_days: plan.rest_days,
         sessions: sessions.map(plannedToWeekSession),
         profile: {
-          body_weight_kg: profile?.body_weight_kg ?? 0,
+          body_weight_kg: profile?.body_weight_kg,
           usual_bottle_ml: profile?.usual_bottle_ml,
           known_sweat_data: profile?.known_sweat_data,
         },
@@ -386,7 +386,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         rest_days: plan.rest_days,
         sessions: sessions.map(plannedToWeekSession),
         profile: {
-          body_weight_kg: profile?.body_weight_kg ?? 0,
+          body_weight_kg: profile?.body_weight_kg,
           usual_bottle_ml: profile?.usual_bottle_ml,
           known_sweat_data: profile?.known_sweat_data,
         },
@@ -566,6 +566,31 @@ export const TOOLS: Record<string, ToolDefinition> = {
       });
     },
   },
+
+  save_profile_fact: {
+    description:
+      "Update a standing fact on the athlete's profile from something they said in passing — their body weight in kg, or their usual bottle size in ml. Do NOT use this for session details or one-off intake.",
+    async run(args, ctx) {
+      const profile = await ctx.repo.getProfile(ctx.userId);
+      if (!profile) throw new ToolError('No profile on file for this user');
+      const patch: { body_weight_kg?: number; usual_bottle_ml?: number } = {};
+
+      const w = num(args, 'body_weight_kg');
+      if (w !== undefined) {
+        if (w < 25 || w > 250) throw new ToolError('body_weight_kg must be between 25 and 250');
+        patch.body_weight_kg = Math.round(w * 10) / 10;
+      }
+      const b = num(args, 'usual_bottle_ml');
+      if (b !== undefined) {
+        if (b < 100 || b > 3000) throw new ToolError('usual_bottle_ml must be between 100 and 3000');
+        patch.usual_bottle_ml = Math.round(b);
+      }
+      if (Object.keys(patch).length === 0) {
+        throw new ToolError('save_profile_fact needs body_weight_kg or usual_bottle_ml');
+      }
+      return ctx.repo.upsertProfile({ ...profile, ...patch });
+    },
+  },
 };
 
 const SPORT_ENUM = [...SPORTS];
@@ -737,6 +762,15 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       certainty: { type: 'string', enum: ['user_reported', 'known'] },
     },
     required: ['key', 'value'],
+  },
+
+  save_profile_fact: {
+    type: 'object',
+    properties: {
+      body_weight_kg: { type: 'number', description: 'Athlete body weight in kg (25–250).' },
+      usual_bottle_ml: { type: 'number', description: 'Their usual bottle size in ml (100–3000).' },
+    },
+    required: [],
   },
 };
 

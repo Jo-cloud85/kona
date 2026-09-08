@@ -5,11 +5,46 @@
 companion* for the self-coached multi-sport recreational athlete — relationship +
 accumulated understanding, not a nutrition tracker. Audit approved in full;
 executing in milestones M14.1 → M21 (see the reset plan). **M14.1 done.**
-Next: M14.2 slim onboarding to 3 questions + weight contextual + trim sports.
+Next: M15 — make the Anthropic client the shipped path + wire `history` /
+recovery / fuel / goal into the prompt context.
+
+### M14.2 — Slim onboarding + contextual weight + endurance-first ✅
+_2026 reset, step 2. The ~13-field intake form was the first impression and it
+read as "medical intake"; every field cut lifts first-conversation completion._
+- **Onboarding is 3 fields**: your name · which endurance sports (Running /
+  Cycling / Swimming / Triathlon / Strength) · "What are you working towards?"
+  (free text → `Profile.goal.text`). Removed height, activity level, the
+  14-option dietary restrictions, the 3× 1–5 self-perception sliders, and made
+  gender / age / weight all optional and not asked at onboarding.
+- **`body_weight_kg` is now optional.** `profileDailyBaseline` and
+  `calculateFuelingTargets` return `protein_daily_g` / `post_workout_protein_per_kg_g`
+  as `null` when weight is unknown; hydration / carb / sodium are unaffected
+  (weight-independent). `buildDashboard` + `DashboardView` handle the null.
+- **New `save_profile_fact` tool** ({ body_weight_kg?, usual_bottle_ml? } →
+  `upsertProfile` merge). Kona collects weight **contextually**: after a plan
+  when weight is unknown the reply asks once ("what do you weigh? … say 'I'm 68
+  kg'"), and "I'm 64 kg" / "my usual bottle is 750 ml" route to
+  `save_profile_fact` (deterministic + Anthropic paths). Intent
+  `note_profile_fact`.
+- **`ProfileForm` has `mode: 'onboard' | 'settings'`** — onboarding shows the 3
+  fields; the Home Profile overlay (settings) adds weight / bottle / sessions /
+  age / gender / injury note, all optional.
+- **`Profile.goal: TrainingGoal`** ({ text; event_date? }) — passed into the
+  Anthropic context; the starter greeting acknowledges it ("You're working
+  towards: …") instead of the old wall of protein/fluid/sodium numbers.
+- **Sports**: `ONBOARDING_SPORTS` = running / cycling / swimming / triathlon /
+  gym(strength). The `Sport` union keeps the wider set so free-text mentions of
+  other activities still parse.
+- Docs: `PRODUCT_VISION.md` target-customer section; header copy re-pointed
+  ("AI endurance companion") in `Chat.tsx`, `layout.tsx`, `starter.ts`.
+- 113 tests green (rewrote `profile-input` / `starter` suites for the new
+  contract; +5 `profile-fact` tests; +1 baseline null-weight test); `tsc`,
+  `eslint`, `next build` clean. Full onboard → greeting → plan → weight-nudge →
+  `save_profile_fact` flow verified in the browser.
 
 ### Reset milestone plan
 - **M14.1** ✅ De-scope: remove the Daily tab + Mifflin–St Jeor energy model + food catalog; nav → Home/Dashboard/Chat; docs re-pointed.
-- **M14.2** Slim onboarding (name · endurance sports · what you're training for); weight collected contextually; trim sports to run/bike/swim/tri (+ strength).
+- **M14.2** ✅ Slim onboarding (name · endurance sports · what you're training for); weight optional + collected contextually via `save_profile_fact`; sports trimmed to run/bike/swim/tri + strength; goal captured.
 - **M15** Anthropic is the shipped path; wire `history` + recovery + fuel + goal into the prompt context.
 - **M16** Deterministic pattern layer — `Insight[]` (FACT / PATTERN / HYPOTHESIS / RECOMMENDATION + `Certainty`); broaden what gets remembered.
 - **M17** "What Kona knows about you" view replacing the chart Dashboard.

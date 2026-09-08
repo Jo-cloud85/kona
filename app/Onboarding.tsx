@@ -11,10 +11,10 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
       <div className="app">
         <div className="landing">
           <h1>Kona</h1>
-          <p className="tagline">Your AI fueling companion for training.</p>
+          <p className="tagline">Your AI endurance companion.</p>
           <p className="blurb">
-            Plan your fueling, tell Kona what actually happened, and get practical advice for next time.
-            First, a few things so the advice fits you.
+            Kona learns what you&apos;re training for, listens to what actually happens, and uses that history
+            the next time. Three quick things and you&apos;re in.
           </p>
           <button className="cta" onClick={() => setStarted(true)}>
             Get started
@@ -28,9 +28,12 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     <div className="app">
       <div className="landing">
         <h1>A bit about you</h1>
-        <p className="blurb">Kona uses this as background — you can change anything later in the Profile tab.</p>
+        <p className="blurb">
+          That&apos;s all Kona needs to start. It&apos;ll pick up the rest — weight, bottle size, preferences —
+          as you talk.
+        </p>
       </div>
-      <ProfileForm submitLabel="Start with Kona" onSaved={() => onDone()} />
+      <ProfileForm mode="onboard" submitLabel="Start with Kona" onSaved={() => onDone()} />
     </div>
   );
 }

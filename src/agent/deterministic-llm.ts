@@ -56,6 +56,30 @@ export class DeterministicLlmClient implements LlmClient {
       text,
     );
 
+    // 0. A standing profile fact stated in passing ("I weigh 68 kg", "my usual
+    //    bottle is 750 ml"). Deliberately narrow — an intake log ("I had a gel
+    //    and my 750ml bottle") must NOT land here.
+    const intakeVerb = /\b(had|drank|used|took|ate|finished)\b/i.test(text);
+    if (distance === undefined && !pastWorkoutMarker && !futureMarker && !intakeVerb) {
+      const weightM =
+        /\bi\s*(?:'m|am|weigh|weight(?:'s| is)?)\s*(?:about |around |roughly |approx\.? )?(\d{2,3}(?:\.\d)?)\s*(?:kg|kgs|kilos?|kilograms?)\b/i.exec(
+          text,
+        ) ?? /^\s*(\d{2,3}(?:\.\d)?)\s*(?:kg|kgs|kilos?|kilograms?)\s*\.?$/i.exec(text);
+      const bottleM =
+        /\bbottle(?:'s| is| =|:)?\s*(?:about |around )?(\d{2,4})\s*ml\b/i.exec(text) ??
+        /\busual\b[^.]{0,20}?(\d{2,4})\s*ml\b/i.exec(text);
+      const args: Record<string, number> = {};
+      if (weightM) args.body_weight_kg = Number(weightM[1]);
+      if (bottleM) args.usual_bottle_ml = Number(bottleM[1]);
+      if (Object.keys(args).length > 0) {
+        return {
+          intent: 'note_profile_fact',
+          tool_calls: [{ tool: 'save_profile_fact', args }],
+          notes: [`Profile fact: ${Object.keys(args).join(', ')}.`],
+        };
+      }
+    }
+
     // 1. Fuel / intake logging
     if (looksLikeFuel && distance === undefined) {
       const items = parseFuelItems(text).map((i) => ({ description: i.description, quantity: i.quantity }));

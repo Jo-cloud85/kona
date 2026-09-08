@@ -12,12 +12,12 @@ export function demoProfile(): Profile {
   return {
     user_id: DEMO_USER_ID,
     username: 'demo',
+    goal: { text: 'Stay consistent across run, bike and swim' },
     body_weight_kg: 64,
     usual_sports: ['running', 'cycling', 'swimming', 'gym'],
     usual_bottle_ml: 750,
     typical_weekly_sessions: 6,
     preferred_product_ids: ['sis-go-isotonic-gel', 'protein-shake-24g'],
-    self_perception: { sleep_quality: 3, hydration: 3, sweat_level: 3 },
     onboarded_at: '2026-01-01T00:00:00Z',
   };
 }

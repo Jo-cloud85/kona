@@ -4,7 +4,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Kona',
-  description: 'Your AI fueling companion for training.',
+  description: 'Your AI endurance companion.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

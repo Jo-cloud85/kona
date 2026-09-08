@@ -19,4 +19,12 @@ describe('profileDailyBaseline', () => {
   it('stamps the methodology version', () => {
     expect(profileDailyBaseline({ body_weight_kg: 70 }).methodology_version).toBe('0.1.0');
   });
+
+  it('returns a null protein target when body weight is not on file yet', () => {
+    const b = profileDailyBaseline({});
+    expect(b.protein_daily_g).toBeNull();
+    // weight-independent references are still there
+    expect(b.post_session_protein_g).toEqual({ min: 20, max: 40 });
+    expect(b.training_fluid_ml_per_hour).toEqual({ min: 400, max: 800 });
+  });
 });

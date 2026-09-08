@@ -6,12 +6,7 @@ const profile: Profile = {
   user_id: 'user_demo',
   username: 'Joan',
   body_weight_kg: 62,
-  height_cm: 168,
-  age: 34,
-  gender: 'female',
-  activity_level: 'moderate',
   usual_sports: ['running', 'gym'],
-  self_perception: { sleep_quality: 3, hydration: 3, sweat_level: 3 },
   onboarded_at: '2026-09-01T00:00:00Z',
 };
 

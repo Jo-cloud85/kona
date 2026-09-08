@@ -11,7 +11,8 @@ import type {
 } from './types';
 
 export interface CalculateProfile {
-  body_weight_kg: number;
+  /** Optional — protein/recovery numbers are omitted until it's on file. */
+  body_weight_kg?: number;
   usual_bottle_ml?: number;
   known_sweat_data?: {
     environment_class: ClassificationResult['environment_class'];
@@ -417,12 +418,16 @@ export function calculateFuelingTargets(input: CalculateInput): FuelingCalculati
     estimates,
     recovery: {
       protein_daily_g_per_kg: { ...rules.protein.daily_g_per_kg },
-      protein_daily_g: roundRange({
-        min: weight * rules.protein.daily_g_per_kg.min,
-        max: weight * rules.protein.daily_g_per_kg.max,
-      }),
+      protein_daily_g:
+        typeof weight === 'number'
+          ? roundRange({
+              min: weight * rules.protein.daily_g_per_kg.min,
+              max: weight * rules.protein.daily_g_per_kg.max,
+            })
+          : null,
       post_workout_protein_reference_g: { ...rules.protein.post_workout_reference_g },
-      post_workout_protein_per_kg_g: Math.round(weight * rules.protein.post_workout_g_per_kg),
+      post_workout_protein_per_kg_g:
+        typeof weight === 'number' ? Math.round(weight * rules.protein.post_workout_g_per_kg) : null,
     },
     recommendation_inputs,
     warnings,

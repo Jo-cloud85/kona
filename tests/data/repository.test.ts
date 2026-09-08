@@ -87,28 +87,25 @@ describe('InMemoryRepository', () => {
     expect(rows.find((r) => r.id === 'c-a')).toMatchObject({ title: 'Tomorrow I run 10km', message_count: 2 });
   });
 
-  it('round-trips a full onboarding profile', async () => {
+  it('round-trips an onboarding profile', async () => {
     const repo = await createSeededRepository();
     const saved = await repo.upsertProfile({
       user_id: DEMO_USER_ID,
       username: 'joan',
-      gender: 'female',
-      age: 34,
-      body_weight_kg: 58,
-      usual_sports: ['running', 'climbing'],
-      typical_weekly_sessions: 6,
+      goal: { text: 'First half-marathon in March' },
+      usual_sports: ['running', 'cycling'],
       recent_injuries_note: 'calf cramp on a hot day',
-      self_perception: { sleep_quality: 4, hydration: 3, sweat_level: 5 },
       onboarded_at: '2026-09-06T00:00:00Z',
     });
     expect(saved.username).toBe('joan');
     const back = await repo.getProfile(DEMO_USER_ID);
     expect(back).toMatchObject({
-      gender: 'female',
-      usual_sports: ['running', 'climbing'],
-      self_perception: { sweat_level: 5 },
+      usual_sports: ['running', 'cycling'],
+      goal: { text: 'First half-marathon in March' },
       onboarded_at: '2026-09-06T00:00:00Z',
     });
+    // weight is optional now — not part of onboarding
+    expect(back?.body_weight_kg).toBeUndefined();
   });
 
   it('stores a weekly plan and links its sessions; re-saving the same week replaces it', async () => {

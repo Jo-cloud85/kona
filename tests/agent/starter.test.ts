@@ -5,42 +5,38 @@ import type { Profile } from '../../src/domain/types';
 const profile: Profile = {
   user_id: 'user_demo',
   username: 'Joan',
-  gender: 'female',
-  age: 34,
-  body_weight_kg: 58,
-  usual_sports: ['running', 'swimming', 'climbing'],
-  typical_weekly_sessions: 6,
+  usual_sports: ['running', 'swimming'],
   recent_injuries_note: 'left hip tight after long runs',
-  self_perception: { sleep_quality: 4, hydration: 3, sweat_level: 5 },
   onboarded_at: '2026-09-06T00:00:00Z',
 };
 
 describe('buildStarter', () => {
-  it('greets by name and echoes the form back', () => {
+  it('introduces itself warmly, by name, without a wall of numbers', () => {
     const s = buildStarter(profile);
     expect(s.greeting).toMatch(/^Hi Joan, I'm Kona/);
-    expect(s.greeting).toMatch(/58 kg/);
-    expect(s.greeting).toMatch(/running, swimming, climbing/);
-    expect(s.greeting).toMatch(/about 6 sessions a week/);
-    expect(s.greeting).toMatch(/sleep 4\/5, hydration 3\/5, sweat 5\/5/);
+    expect(s.greeting).toMatch(/endurance companion/i);
+    expect(s.greeting).toMatch(/running, swimming/);
     expect(s.greeting).toMatch(/left hip tight after long runs/);
+    // no fuelling numbers in the opener
+    expect(s.greeting).not.toMatch(/\d+\s*(g|ml|kcal|mg)\b/);
+    expect(s.greeting).not.toMatch(/protein target|sodium per litre/i);
   });
 
-  it('summarises the daily protein target from the engine, and flags fluid/sodium as per-session', () => {
+  it('asks what they are working towards when no goal is set', () => {
     const s = buildStarter(profile);
-    // 58 kg * 1.4-2.0 => 81-116 g
-    expect(s.greeting).toMatch(/81–116 g/);
-    expect(s.greeting).toMatch(/20–40 g in the meal after/);
-    expect(s.greeting).toMatch(/aren't a fixed daily number/);
-    expect(s.greeting).toMatch(/400–800 ml/);
-    expect(s.greeting).toMatch(/500–700 mg sodium per litre/);
-    expect(s.greeting).toMatch(/starting ranges from general guidance, not exact targets/);
+    expect(s.greeting).toMatch(/working towards/i);
+  });
+
+  it('acknowledges an existing goal instead of asking', () => {
+    const s = buildStarter({ ...profile, goal: { text: 'First half-marathon in March' } });
+    expect(s.greeting).toMatch(/working towards: First half-marathon in March/);
+    expect(s.greeting).not.toMatch(/What are you working towards/i);
   });
 
   it('offers three conversation starters that prefill a parseable stub', () => {
     const s = buildStarter(profile);
     expect(s.prompts.map((p) => p.label)).toEqual([
-      'My typical training week',
+      'My training week',
       "What I'm doing today or tomorrow",
       'My next race',
     ]);

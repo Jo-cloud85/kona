@@ -11,7 +11,7 @@ interface DDay {
   weekday: string;
   is_rest: boolean;
   is_key_day: boolean;
-  protein_daily_g: Range;
+  protein_daily_g: Range | null;
   sessions: { sport: string; duration_class: string | null; is_long: boolean; needs_detail: boolean }[];
   carb_g_per_hour: Range | null;
   fluid_ml_per_hour: Range | null;
@@ -22,7 +22,7 @@ interface Dashboard {
   has_plan: boolean;
   week_start: string | null;
   week_end: string | null;
-  baseline: { protein_daily_g: Range; protein_daily_g_per_kg: Range; post_session_protein_g: Range };
+  baseline: { protein_daily_g: Range | null; protein_daily_g_per_kg: Range; post_session_protein_g: Range };
   days: DDay[];
   methodology_version: string;
 }
@@ -140,7 +140,7 @@ export default function DashboardView() {
 
   const days = data?.days ?? [];
   const training = days.filter((d) => !d.is_rest);
-  const proteinMax = data ? Math.round(data.baseline.protein_daily_g.max * 1.25) : 200;
+  const proteinMax = data?.baseline.protein_daily_g ? Math.round(data.baseline.protein_daily_g.max * 1.25) : 200;
 
   const proteinRows: Row[] = days.map((d) => ({
     label: d.weekday,
@@ -148,6 +148,7 @@ export default function DashboardView() {
       ? 'rest day'
       : `+${data!.baseline.post_session_protein_g.min}–${data!.baseline.post_session_protein_g.max} g after`,
     range: d.protein_daily_g,
+    note: 'add your weight in chat for a target',
     prep: d.prep_for,
   }));
   const carbRows: Row[] = training.map((d) => ({
@@ -236,9 +237,7 @@ export default function DashboardView() {
                   <tr key={d.date}>
                     <td>{d.weekday}</td>
                     <td>{sessionText(d)}</td>
-                    <td>
-                      {d.protein_daily_g.min}–{d.protein_daily_g.max}
-                    </td>
+                    <td>{d.protein_daily_g ? `${d.protein_daily_g.min}–${d.protein_daily_g.max}` : '—'}</td>
                     <td>{d.carb_g_per_hour ? `${d.carb_g_per_hour.min}–${d.carb_g_per_hour.max}` : '—'}</td>
                     <td>{d.fluid_ml_per_hour ? `${d.fluid_ml_per_hour.min}–${d.fluid_ml_per_hour.max}` : '—'}</td>
                     <td>{d.sodium_mg_per_litre ? `${d.sodium_mg_per_litre.min}–${d.sodium_mg_per_litre.max}` : '—'}</td>

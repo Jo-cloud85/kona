@@ -1,49 +1,25 @@
-import type { ActivityLevel, DietaryRestriction, Gender, Profile, Sport } from './types';
+import type { Gender, Profile, Sport, TrainingGoal } from './types';
 
 /**
  * Validation for the onboarding / profile form. Pure and framework-free so it
- * can be unit tested and reused by the API route. Validates external/user input
- * at the boundary (CLAUDE.md).
+ * can be unit tested and reused by the API route (CLAUDE.md: validate at the
+ * boundary).
+ *
+ * The 2026 reset makes onboarding tiny: only a name and at least one sport are
+ * required. Everything else (goal text, weight, bottle size, age, …) is optional
+ * and collected progressively in conversation.
  */
 
-/** Sports offered in the form (a subset of the full Sport union). */
+/** Endurance-first sports offered in the form (a subset of the full Sport union). */
 export const ONBOARDING_SPORTS = [
   'running',
-  'swimming',
   'cycling',
+  'swimming',
+  'triathlon',
   'gym',
-  'climbing',
-  'skating',
-  'combat_sports',
-  'hyrox',
 ] as const satisfies readonly Sport[];
 
 export const GENDERS: readonly Gender[] = ['female', 'male', 'nonbinary', 'other', 'prefer_not_to_say'];
-
-export const ACTIVITY_LEVELS: readonly ActivityLevel[] = [
-  'sedentary',
-  'light',
-  'moderate',
-  'very_active',
-  'extra_active',
-];
-
-export const DIETARY_RESTRICTIONS: readonly DietaryRestriction[] = [
-  'vegetarian',
-  'vegan',
-  'pescatarian',
-  'no_beef',
-  'no_pork',
-  'halal',
-  'kosher',
-  'dairy_free',
-  'lactose_intolerant',
-  'gluten_free',
-  'nut_allergy',
-  'egg_free',
-  'soy_free',
-  'shellfish_allergy',
-];
 
 export type ProfileFormData = Omit<Profile, 'user_id' | 'known_sweat_data' | 'preferred_product_ids' | 'onboarded_at'>;
 
@@ -65,6 +41,21 @@ function numInRange(v: unknown, min: number, max: number): number | undefined {
   return n >= min && n <= max ? Math.round(n * 10) / 10 : undefined;
 }
 
+function parseGoal(v: unknown): TrainingGoal | undefined {
+  if (typeof v === 'string') {
+    const text = v.trim();
+    return text ? { text: text.slice(0, 200) } : undefined;
+  }
+  if (isRecord(v) && typeof v.text === 'string' && v.text.trim()) {
+    const goal: TrainingGoal = { text: v.text.trim().slice(0, 200) };
+    if (typeof v.event_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.event_date)) {
+      goal.event_date = v.event_date;
+    }
+    return goal;
+  }
+  return undefined;
+}
+
 export function validateProfileInput(input: unknown): ProfileValidation {
   if (!isRecord(input)) return { ok: false, error: 'Expected a profile object' };
 
@@ -73,69 +64,58 @@ export function validateProfileInput(input: unknown): ProfileValidation {
     return { ok: false, error: 'Username must be 1–40 characters' };
   }
 
-  const gender = input.gender;
-  if (typeof gender !== 'string' || !GENDERS.includes(gender as Gender)) {
-    return { ok: false, error: 'Please choose a gender option' };
-  }
-
-  const age = intInRange(input.age, 12, 100);
-  if (age === undefined) return { ok: false, error: 'Age must be a whole number between 12 and 100' };
-
-  const height_cm = intInRange(input.height_cm, 120, 230);
-  if (height_cm === undefined) return { ok: false, error: 'Height must be a whole number between 120 and 230 cm' };
-
-  const body_weight_kg = numInRange(input.body_weight_kg, 25, 250);
-  if (body_weight_kg === undefined) {
-    return { ok: false, error: 'Body weight must be between 25 and 250 kg' };
-  }
-
-  const activity_level = input.activity_level;
-  if (typeof activity_level !== 'string' || !ACTIVITY_LEVELS.includes(activity_level as ActivityLevel)) {
-    return { ok: false, error: 'Pick an activity level' };
-  }
-
   const rawSports = Array.isArray(input.usual_sports) ? input.usual_sports : [];
   const usual_sports = [...new Set(rawSports)].filter(
     (s): s is Sport => typeof s === 'string' && (ONBOARDING_SPORTS as readonly string[]).includes(s),
   );
-  if (usual_sports.length === 0) return { ok: false, error: 'Pick at least one type of workout' };
+  if (usual_sports.length === 0) return { ok: false, error: 'Pick at least one sport' };
 
-  const rawDiet = Array.isArray(input.dietary_restrictions) ? input.dietary_restrictions : [];
-  const dietary_restrictions = [...new Set(rawDiet)].filter(
-    (d): d is DietaryRestriction =>
-      typeof d === 'string' && (DIETARY_RESTRICTIONS as readonly string[]).includes(d),
-  );
+  const data: ProfileFormData = { username, usual_sports };
 
-  const typical_weekly_sessions = intInRange(input.typical_weekly_sessions, 0, 40);
-  if (typical_weekly_sessions === undefined) {
-    return { ok: false, error: 'Sessions per week must be a whole number between 0 and 40' };
+  const goal = parseGoal(input.goal);
+  if (goal) data.goal = goal;
+
+  // Everything below is optional — only validated when present.
+  if (input.gender !== undefined && input.gender !== '') {
+    if (typeof input.gender !== 'string' || !GENDERS.includes(input.gender as Gender)) {
+      return { ok: false, error: 'That gender option is not valid' };
+    }
+    data.gender = input.gender as Gender;
   }
 
-  const noteRaw = typeof input.recent_injuries_note === 'string' ? input.recent_injuries_note.trim() : '';
-  if (noteRaw.length > 500) return { ok: false, error: 'Keep the injury note under 500 characters' };
-
-  const p = isRecord(input.self_perception) ? input.self_perception : {};
-  const sleep_quality = intInRange(p.sleep_quality, 1, 5);
-  const hydration = intInRange(p.hydration, 1, 5);
-  const sweat_level = intInRange(p.sweat_level, 1, 5);
-  if (sleep_quality === undefined || hydration === undefined || sweat_level === undefined) {
-    return { ok: false, error: 'Rate sleep, hydration and sweat level from 1 to 5' };
+  if (input.age !== undefined && input.age !== '' && input.age !== null) {
+    const age = intInRange(input.age, 12, 100);
+    if (age === undefined) return { ok: false, error: 'Age must be a whole number between 12 and 100' };
+    data.age = age;
   }
 
-  return {
-    ok: true,
-    data: {
-      username,
-      gender: gender as Gender,
-      age,
-      height_cm,
-      body_weight_kg,
-      activity_level: activity_level as ActivityLevel,
-      usual_sports,
-      dietary_restrictions,
-      typical_weekly_sessions,
-      ...(noteRaw ? { recent_injuries_note: noteRaw } : {}),
-      self_perception: { sleep_quality, hydration, sweat_level },
-    },
-  };
+  if (input.body_weight_kg !== undefined && input.body_weight_kg !== '' && input.body_weight_kg !== null) {
+    const w = numInRange(input.body_weight_kg, 25, 250);
+    if (w === undefined) return { ok: false, error: 'Body weight must be between 25 and 250 kg' };
+    data.body_weight_kg = w;
+  }
+
+  if (input.usual_bottle_ml !== undefined && input.usual_bottle_ml !== '' && input.usual_bottle_ml !== null) {
+    const b = intInRange(input.usual_bottle_ml, 100, 3000);
+    if (b === undefined) return { ok: false, error: 'Bottle size must be between 100 and 3000 ml' };
+    data.usual_bottle_ml = b;
+  }
+
+  if (
+    input.typical_weekly_sessions !== undefined &&
+    input.typical_weekly_sessions !== '' &&
+    input.typical_weekly_sessions !== null
+  ) {
+    const n = intInRange(input.typical_weekly_sessions, 0, 40);
+    if (n === undefined) return { ok: false, error: 'Sessions per week must be a whole number between 0 and 40' };
+    data.typical_weekly_sessions = n;
+  }
+
+  if (typeof input.recent_injuries_note === 'string') {
+    const note = input.recent_injuries_note.trim();
+    if (note.length > 500) return { ok: false, error: 'Keep the injury note under 500 characters' };
+    if (note) data.recent_injuries_note = note;
+  }
+
+  return { ok: true, data };
 }
