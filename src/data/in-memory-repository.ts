@@ -73,7 +73,10 @@ export class InMemoryRepository implements Repository {
   async updatePlannedSession(
     id: string,
     patch: Partial<
-      Pick<PlannedSession, 'intensity' | 'duration_minutes' | 'distance_km' | 'is_long' | 'needs_detail' | 'notes'>
+      Pick<
+        PlannedSession,
+        'intensity' | 'duration_minutes' | 'distance_km' | 'is_long' | 'needs_detail' | 'notes' | 'time_of_day' | 'start_at'
+      >
     >,
   ): Promise<PlannedSession | undefined> {
     const existing = this.planned.get(id);

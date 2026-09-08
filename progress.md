@@ -1,13 +1,59 @@
 # Kona — Progress
 
 ## Current milestone
-**M12 complete — Home tab (bento landing: greeting, week day-strip, What's
-Planned Today, today's fuelling) + nav restructure (Home / Daily / Dashboard /
-Chat, Home default; Profile moved to a top-right overlay).**
+**M13 complete — session `time_of_day` (required, prompted) + morning pre-fuel
+advice; single-day plan updates reply about that day only; end-of-day check-in
+(quiet recovery log + evening popup + avatar dot).**
 Next: a persistence backend to replace the in-memory store; food-estimation
 ranges (§14); historical pattern surfacing (§12).
 
 ## Completed work
+
+### M13 — time-of-day, focused day updates, end-of-day check-in ✅
+_From user feedback: single-day edits shouldn't echo the whole week; sessions
+need a time of day (drives pre-fuel advice — a morning session is likely done
+before breakfast); add an end-of-day check-in._
+
+- **`time_of_day` on every session** (`morning` / `afternoon` / `evening`).
+  New `TimeOfDay` domain type; `MissingDetail` gains `'time_of_day'`. Derived
+  from a stated clock time (`extractTime` → hour bucket) or an explicit word
+  (`extractTimeOfDay`), and **prompted for when missing** alongside type,
+  intensity and distance-or-duration — the weekly-plan option panel gained a
+  Morning/Afternoon/Evening row (`SessionPrompt.ask_time` / `time_options`).
+  `save_weekly_plan` / `save_planned_session` / `update_planned_sessions` all
+  accept and store it; a stored session's `start_at` hour is realigned to the
+  bucket (07:00 / 13:00 / 18:30) so Home & the dashboard show a consistent time.
+  Sessions now read "6 km easy **morning** running".
+- **Morning / evening pre-fuel advice.** `week.ts` prep lines gain a
+  time-of-day clause: a morning session → "have something light 20–30 min
+  before (a banana, a few dates, toast with jam/honey) rather than a full
+  breakfast"; an evening session → "a small carb snack ~1 h before is enough".
+  Qualitative only — no new numbers. `src/data/foods.ts` → `PRE_FUEL_SNACKS`
+  (restriction-filtered on the Home fuelling card). Documented in
+  `CALCULATION_ENGINE_SPEC.md` §9.
+- **Single-day updates stay focused.** `composeClarifyPlanDetail` now echoes
+  only the day(s) the turn actually touched — the updated session line, that
+  day's prep, and any gap still open for that day — instead of re-printing the
+  whole week + "Day by day". The full-week echo is kept for a new/replaced
+  `plan_week`.
+- **End-of-day check-in.** `src/agent/checkin.ts` (`buildCheckinLog` +
+  `checkinReflection`) turns a 4-field popup (feel · went-as-planned ·
+  injuries/pains · free text) into a normal recovery log; it runs through the
+  **same `screenForEscalation` safety screen** as any recovery message.
+  `POST /api/checkin` (validated at the boundary). It is a **quiet log** — the
+  reflection shows in the popup, nothing is added to the Chat thread; "plan
+  didn't go as planned" / pains → record + nudge to chat, never a diagnosis or
+  an overwrite of the planned session. `getHome` returns `checkin: { due, done }`
+  (due = today is a training day with no check-in yet); HomeTab shows a red dot
+  on the profile avatar, a re-entry banner, and auto-opens the popup once after
+  ~22:00 (dismiss remembered per browser session).
+- Tests: +10 (`tests/agent/checkin.test.ts` ×7, `home.test.ts` +3 for
+  time-in-title / pre-fuel note / check-in-due); `week-plan.test.ts` updated for
+  the new `time_of_day` gap + focused single-day reply, +1 test for a
+  time-of-day answer clearing the last gap with a morning pre-fuel note.
+  **116 total**, all green; `tsc`, `eslint`, `next build` clean. Verified in
+  the browser (time row in the option panel, focused single-day reply, morning
+  pre-fuel note on Home, check-in popup + dot lifecycle).
 
 ### M12 — Home tab + nav restructure ✅
 _User wanted a proper landing page: time-based greeting, a Mon–Sun day strip

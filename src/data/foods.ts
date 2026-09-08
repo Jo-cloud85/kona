@@ -73,3 +73,25 @@ export function foodsFor(role: MacroRole, restrictions: readonly DietaryRestrict
     (f) => f.roles.includes(role) && !f.excluded_by.some((r) => restrictions.includes(r)),
   );
 }
+
+/**
+ * Quick, easy-to-digest carbohydrate snacks for a session done before a full
+ * meal — mainly a MORNING session, when the athlete likely hasn't had breakfast.
+ * Small and low-fat/-fibre on purpose; not a target, just examples.
+ */
+export const PRE_FUEL_SNACKS: { name: string; excluded_by: DietaryRestriction[] }[] = [
+  { name: 'a banana', excluded_by: [] },
+  { name: 'a few dates', excluded_by: [] },
+  { name: 'a handful of raisins', excluded_by: [] },
+  { name: 'a slice of toast with honey or jam', excluded_by: GLUTEN },
+  { name: 'a small bowl of cereal', excluded_by: GLUTEN },
+  { name: 'an apple or a pear', excluded_by: [] },
+  { name: 'a rice cake with jam', excluded_by: [] },
+  { name: 'a couple of fig rolls', excluded_by: GLUTEN },
+];
+
+export function preFuelSnacks(restrictions: readonly DietaryRestriction[], count = 3): string[] {
+  return PRE_FUEL_SNACKS.filter((s) => !s.excluded_by.some((r) => restrictions.includes(r)))
+    .slice(0, count)
+    .map((s) => s.name);
+}

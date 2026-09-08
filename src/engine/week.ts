@@ -1,4 +1,4 @@
-import type { DurationClass, Intensity, MissingDetail, Sport } from '../domain/types';
+import type { DurationClass, Intensity, MissingDetail, Sport, TimeOfDay } from '../domain/types';
 import { getRules, type RulesConfig } from '../rules/index';
 import { calculateFuelingTargets, type CalculateProfile } from './calculate';
 import { ClassificationInputError } from './classify';
@@ -20,6 +20,7 @@ export interface WeekSessionInput {
   intensity: Intensity;
   /** ISO-8601 local datetime. */
   start_at: string;
+  time_of_day?: TimeOfDay;
   distance_km?: number;
   duration_minutes?: number;
   /** The user described it as a "long" session (long run, long ride, ...). */
@@ -39,6 +40,7 @@ export interface WeekAnalysisInput {
 export interface WeekDaySession {
   sport: Sport;
   intensity: Intensity;
+  time_of_day?: TimeOfDay;
   distance_km?: number;
   duration_class?: DurationClass;
   is_long: boolean;
@@ -90,8 +92,10 @@ export interface SessionPrompt {
   label: string;
   ask_intensity: boolean;
   ask_size: boolean;
+  ask_time: boolean;
   intensity_options: SessionPromptOption[];
   size_options: SessionPromptOption[];
+  time_options: SessionPromptOption[];
 }
 
 const INTENSITY_OPTIONS: SessionPromptOption[] = [
@@ -107,6 +111,16 @@ const SIZE_OPTIONS: SessionPromptOption[] = [
   { label: '~1.5 hr', value: '90 min', minutes: 90 },
   { label: '~2 hr', value: '120 min', minutes: 120 },
 ];
+
+const TIME_OPTIONS: SessionPromptOption[] = [
+  { label: 'Morning', value: 'morning' },
+  { label: 'Afternoon', value: 'afternoon' },
+  { label: 'Evening', value: 'evening' },
+];
+
+/** Easy-on-the-stomach carbohydrate for a session done before a proper meal. */
+const MORNING_PREFUEL =
+  'something light and easy to digest 20–30 min before — a banana, a few dates, or toast with jam/honey — rather than a full breakfast';
 
 export interface WeekAnalysis {
   week_start: string;
@@ -177,7 +191,8 @@ function sessionIsKey(s: WeekSessionInput, calc: FuelingCalculation | undefined)
 function describeSession(s: WeekDaySession): string {
   const dist = s.distance_km ? `${s.distance_km} km ` : '';
   const effort = s.needs_detail.includes('intensity') ? '' : `${s.intensity} `;
-  return `${dist}${effort}${s.sport}`.trim();
+  const when = s.time_of_day && !s.needs_detail.includes('time_of_day') ? `${s.time_of_day} ` : '';
+  return `${dist}${effort}${when}${s.sport}`.trim();
 }
 
 // --- preparation recommendations ---------------------------------------------
@@ -256,12 +271,32 @@ function lightDayPrep(day: WeekDay): WeekRecommendation {
   };
 }
 
+/** Pre-fuel note keyed off the day's (stated) time of day. Morning sessions are
+ *  likely done before a full breakfast, so recommend lighter, quicker carbs. */
+function timeOfDayNote(day: WeekDay): string {
+  const stated = day.sessions
+    .map((s) => (s.needs_detail.includes('time_of_day') ? undefined : s.time_of_day))
+    .find((t): t is TimeOfDay => t != null);
+  if (stated === 'morning') {
+    return ` Morning session — if you train before a proper breakfast, have ${MORNING_PREFUEL}.`;
+  }
+  if (stated === 'evening') {
+    return ` Evening session — you'll have eaten through the day; if it's been 3+ hours, a small carb snack ~1 hr before is enough.`;
+  }
+  return '';
+}
+
 function prepAction(day: WeekDay, profile: CalculateProfile, rules: RulesConfig): WeekRecommendation {
   const bottle = profile.usual_bottle_ml ? `your usual ${profile.usual_bottle_ml} ml bottle` : 'your bottle';
-  if (day.multi_session) return doubleSessionPrep(day, bottle, rules);
-  if (day.sessions.some((s) => s.is_long)) return longSessionPrep(day, bottle, rules);
-  if (day.is_key_day) return singleKeyPrep(day, bottle, rules);
-  return lightDayPrep(day);
+  const base = day.multi_session
+    ? doubleSessionPrep(day, bottle, rules)
+    : day.sessions.some((s) => s.is_long)
+      ? longSessionPrep(day, bottle, rules)
+      : day.is_key_day
+        ? singleKeyPrep(day, bottle, rules)
+        : lightDayPrep(day);
+  const note = timeOfDayNote(day);
+  return note ? { ...base, action: base.action + note } : base;
 }
 
 // --- structured per-session prompts --------------------------------------
@@ -282,8 +317,10 @@ function buildSessionPrompts(days: WeekDay[]): SessionPrompt[] {
         label: `${day.weekday_label} ${s.sport}${suffix}`,
         ask_intensity: s.needs_detail.includes('intensity'),
         ask_size: s.needs_detail.includes('duration_or_distance'),
+        ask_time: s.needs_detail.includes('time_of_day'),
         intensity_options: INTENSITY_OPTIONS,
         size_options: SIZE_OPTIONS,
+        time_options: TIME_OPTIONS,
       });
     });
   }
@@ -297,21 +334,21 @@ function questionText(sport: Sport, labels: string[], missing: MissingDetail[]):
   const plural = labels.length > 1;
   const wantsEffort = missing.includes('intensity');
   const wantsSize = missing.includes('duration_or_distance');
+  const wantsTime = missing.includes('time_of_day');
 
   const subject =
     sport === 'gym'
       ? `${days} gym session${plural ? 's' : ''}`
       : `${days} ${sport}${plural ? ' sessions' : ''}`;
 
-  if (wantsEffort && wantsSize) {
-    return `How hard ${plural ? 'do' : 'does'} the ${subject} feel — easy, moderate or hard — and roughly how long ${
-      plural ? 'are they' : 'is it'
-    } (or what distance)?`;
-  }
-  if (wantsEffort) {
-    return `How hard ${plural ? 'do' : 'does'} the ${subject} feel — easy, moderate or hard?`;
-  }
-  return `For the ${subject}, what's your typical distance or time?`;
+  const parts: string[] = [];
+  if (wantsEffort) parts.push(`how hard ${plural ? 'they feel' : 'it feels'} (easy, moderate or hard)`);
+  if (wantsSize) parts.push(`roughly how long ${plural ? 'they are' : 'it is'} (or what distance)`);
+  if (wantsTime) parts.push(`what time of day (morning, afternoon or evening)`);
+
+  if (parts.length === 0) return `For the ${subject}, what's your typical distance or time?`;
+  const joined = parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return `For the ${subject}: ${joined}?`;
 }
 
 function buildOpenQuestions(days: WeekDay[]): WeekQuestion[] {
@@ -358,6 +395,7 @@ export function analyzeWeek(input: WeekAnalysisInput): WeekAnalysis {
       return {
         sport: s.sport,
         intensity: s.intensity,
+        time_of_day: s.time_of_day,
         distance_km: s.distance_km,
         duration_class: calc?.session_classification.duration_class,
         is_long: s.is_long ?? false,

@@ -132,4 +132,49 @@ describe('buildHome', () => {
     const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW, selectedDate: 'garbage' });
     expect(h.selected_date).toBe('2026-09-09');
   });
+
+  it('puts the time of day in the session title and adds a morning pre-fuel note', () => {
+    const h = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [session({ start_at: '2026-09-09T07:00:00', distance_km: 6, time_of_day: 'morning' })],
+      now: NOW,
+    });
+    const s = h.selected.sessions[0]!;
+    expect(s.time_of_day).toBe('morning');
+    expect(s.title.toLowerCase()).toContain('morning');
+    expect(h.selected.fuel.pre_fuel_note).toMatch(/morning session/i);
+    expect(h.selected.fuel.pre_fuel_note).toMatch(/banana|dates|toast/i);
+  });
+
+  it('has no pre-fuel note for an afternoon session', () => {
+    const h = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [session({ start_at: '2026-09-09T13:00:00', distance_km: 6, time_of_day: 'afternoon' })],
+      now: NOW,
+    });
+    expect(h.selected.sessions[0]!.time_of_day).toBe('afternoon');
+    expect(h.selected.fuel.pre_fuel_note).toBeNull();
+  });
+
+  it('flags an end-of-day check-in as due on a training day, cleared once done', () => {
+    const withSession = {
+      profile,
+      weeklyPlan: plan(),
+      sessions: [session({ start_at: '2026-09-09T07:00:00', distance_km: 6, time_of_day: 'morning' })],
+      now: NOW,
+    };
+    expect(buildHome(withSession).checkin).toEqual({ due: true, done: false });
+    expect(buildHome({ ...withSession, checkinDoneToday: true }).checkin).toEqual({ due: false, done: true });
+
+    // a rest day (no session today) is never "due"
+    const restToday = buildHome({
+      profile,
+      weeklyPlan: { ...plan(), rest_days: ['2026-09-09'] },
+      sessions: [],
+      now: NOW,
+    });
+    expect(restToday.checkin.due).toBe(false);
+  });
 });

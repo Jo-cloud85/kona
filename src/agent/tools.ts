@@ -1,4 +1,5 @@
-import type { Intensity, MissingDetail, PlannedSession, Sport } from '../domain/types';
+import type { Intensity, MissingDetail, PlannedSession, Sport, TimeOfDay } from '../domain/types';
+import { timeOfDayFromHour } from './parse';
 import type { Repository } from '../data/repository';
 import { getProduct, resolveProductByPhrase } from '../data/products';
 import { newId } from '../data/ids';
@@ -31,10 +32,26 @@ function dateFromWeekStart(weekStart: string, dayIndex: number): string {
 /** Deterministic default start time per same-day sequence position. */
 const SEQUENCE_TIMES = ['07:00', '17:00', '18:30', '20:00'];
 
+const TIMES_OF_DAY: TimeOfDay[] = ['morning', 'afternoon', 'evening'];
+
+/** Canonical clock time we store for a session given only its time-of-day
+ *  bucket, so downstream views (Home, dashboard) show a consistent hour. */
+const TIME_OF_DAY_HHMM: Record<TimeOfDay, string> = {
+  morning: '07:00',
+  afternoon: '13:00',
+  evening: '18:30',
+};
+
+function isoHour(iso: string): number | undefined {
+  const m = /T(\d{2}):/.exec(iso);
+  return m ? Number(m[1]) : undefined;
+}
+
 function plannedToWeekSession(s: PlannedSession): WeekSessionInput {
   return {
     sport: s.sport,
     intensity: s.intensity,
+    time_of_day: s.time_of_day,
     start_at: s.start_at,
     distance_km: s.distance_km,
     duration_minutes: s.duration_minutes,
@@ -43,17 +60,21 @@ function plannedToWeekSession(s: PlannedSession): WeekSessionInput {
   };
 }
 
-/** What the user left unspecified for a planned session, so Kona can ask. */
+/** What the user left unspecified for a planned session, so Kona can ask.
+ *  Per the session-info contract: type, intensity, distance-or-duration, and
+ *  time of day are all required. */
 function computeNeedsDetail(opts: {
   intensity_stated: boolean;
   is_long: boolean;
   has_duration: boolean;
   has_distance: boolean;
+  time_of_day_stated: boolean;
 }): MissingDetail[] {
   const needs: MissingDetail[] = [];
   // A "long" session is conventionally easy/steady — don't nag about effort.
   if (!opts.intensity_stated && !opts.is_long) needs.push('intensity');
   if (!opts.has_duration && !opts.has_distance) needs.push('duration_or_distance');
+  if (!opts.time_of_day_stated) needs.push('time_of_day');
   return needs;
 }
 
@@ -117,6 +138,13 @@ function intensity(args: Record<string, unknown>, key: string): Intensity | unde
   return v as Intensity;
 }
 
+function timeOfDay(args: Record<string, unknown>, key: string): TimeOfDay | undefined {
+  const v = str(args, key, false);
+  if (v === undefined) return undefined;
+  if (!TIMES_OF_DAY.includes(v as TimeOfDay)) throw new ToolError(`Unknown time_of_day: ${v}`);
+  return v as TimeOfDay;
+}
+
 // --- tools ----------------------------------------------------------------
 
 export const TOOLS: Record<string, ToolDefinition> = {
@@ -132,10 +160,14 @@ export const TOOLS: Record<string, ToolDefinition> = {
   save_planned_session: {
     description: 'Persist a planned (intended) training session. Never overwrites an actual session.',
     async run(args, ctx) {
+      const start_at = str(args, 'start_at')!;
+      const h = isoHour(start_at);
+      const time_of_day = timeOfDay(args, 'time_of_day') ?? (h !== undefined ? timeOfDayFromHour(h) : undefined);
       return ctx.repo.savePlannedSession({
         user_id: ctx.userId,
         sport: sport(args, 'sport')!,
-        start_at: str(args, 'start_at')!,
+        start_at,
+        time_of_day,
         distance_km: num(args, 'distance_km'),
         duration_minutes: num(args, 'duration_minutes'),
         intensity: intensity(args, 'intensity') ?? 'easy',
@@ -193,7 +225,10 @@ export const TOOLS: Record<string, ToolDefinition> = {
           const sport_ = sport(s, 'sport')!;
           const intensityStated = s.intensity !== undefined && s.intensity !== null && s.intensity !== '';
           const intensity_ = intensity(s, 'intensity') ?? 'easy';
-          const start_at = `${day.date}T${SEQUENCE_TIMES[Math.min(i, SEQUENCE_TIMES.length - 1)]}:00`;
+          const time_of_day = timeOfDay(s, 'time_of_day');
+          const start_at = time_of_day
+            ? `${day.date}T${TIME_OF_DAY_HHMM[time_of_day]}:00`
+            : `${day.date}T${SEQUENCE_TIMES[Math.min(i, SEQUENCE_TIMES.length - 1)]}:00`;
           const distance_km = num(s, 'distance_km');
           const duration_minutes = num(s, 'duration_minutes');
           const isLong = s.is_long === true;
@@ -202,6 +237,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
             is_long: isLong,
             has_duration: duration_minutes !== undefined,
             has_distance: distance_km !== undefined,
+            time_of_day_stated: time_of_day !== undefined,
           });
 
           saved.push(
@@ -209,6 +245,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
               user_id: ctx.userId,
               sport: sport_,
               start_at,
+              time_of_day,
               distance_km,
               duration_minutes,
               intensity: intensity_,
@@ -222,6 +259,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
           analysisSessions.push({
             sport: sport_,
             intensity: intensity_,
+            time_of_day,
             start_at,
             distance_km,
             duration_minutes,
@@ -299,14 +337,21 @@ export const TOOLS: Record<string, ToolDefinition> = {
       const newIntensity = intensity(args, 'intensity');
       const newDuration = num(args, 'duration_minutes');
       const newDistance = num(args, 'distance_km');
-      if (newIntensity === undefined && newDuration === undefined && newDistance === undefined) {
-        throw new ToolError('update_planned_sessions needs an intensity, duration_minutes, or distance_km');
+      const newTime = timeOfDay(args, 'time_of_day');
+      if (
+        newIntensity === undefined &&
+        newDuration === undefined &&
+        newDistance === undefined &&
+        newTime === undefined
+      ) {
+        throw new ToolError('update_planned_sessions needs an intensity, duration_minutes, distance_km, or time_of_day');
       }
 
-      const applied_fields: ('intensity' | 'duration_minutes' | 'distance_km')[] = [];
+      const applied_fields: ('intensity' | 'duration_minutes' | 'distance_km' | 'time_of_day')[] = [];
       if (newIntensity !== undefined) applied_fields.push('intensity');
       if (newDuration !== undefined) applied_fields.push('duration_minutes');
       if (newDistance !== undefined) applied_fields.push('distance_km');
+      if (newTime !== undefined) applied_fields.push('time_of_day');
 
       const updated = [];
       for (const s of targets) {
@@ -323,6 +368,12 @@ export const TOOLS: Record<string, ToolDefinition> = {
         if (newDistance !== undefined) {
           patch.distance_km = newDistance;
           remaining.delete('duration_or_distance');
+        }
+        if (newTime !== undefined) {
+          patch.time_of_day = newTime;
+          // realign stored start_at so Home / dashboard show the right hour
+          patch.start_at = `${s.start_at.slice(0, 10)}T${TIME_OF_DAY_HHMM[newTime]}:00`;
+          remaining.delete('time_of_day');
         }
         patch.needs_detail = [...remaining];
         updated.push(await ctx.repo.updatePlannedSession(s.id, patch));
@@ -519,6 +570,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
 
 const SPORT_ENUM = [...SPORTS];
 const INTENSITY_ENUM = [...INTENSITIES];
+const TIME_OF_DAY_ENUM = [...TIMES_OF_DAY];
 
 /** JSON Schemas for the tool arguments, consumed by real LLM providers.
  *  The deterministic client ignores these. */
@@ -530,6 +582,11 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
     properties: {
       sport: { type: 'string', enum: SPORT_ENUM },
       start_at: { type: 'string', description: 'ISO-8601 local datetime, e.g. 2026-09-04T06:00:00' },
+      time_of_day: {
+        type: 'string',
+        enum: TIME_OF_DAY_ENUM,
+        description: 'morning / afternoon / evening. Derived from start_at if omitted.',
+      },
       distance_km: { type: 'number' },
       duration_minutes: { type: 'number' },
       intensity: { type: 'string', enum: INTENSITY_ENUM },
@@ -561,6 +618,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
                   distance_km: { type: 'number' },
                   duration_minutes: { type: 'number' },
                   intensity: { type: 'string', enum: INTENSITY_ENUM },
+                  time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening.' },
                   is_long: { type: 'boolean', description: 'The athlete called it a "long" session.' },
                 },
                 required: ['sport'],
@@ -591,6 +649,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       intensity: { type: 'string', enum: INTENSITY_ENUM },
       duration_minutes: { type: 'number' },
       distance_km: { type: 'number' },
+      time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening.' },
     },
     required: [],
   },

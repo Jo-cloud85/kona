@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import CheckinDialog from './CheckinDialog';
 import ProfileForm, { type ProfileValues } from './ProfileForm';
 
 interface Range {
@@ -12,6 +13,8 @@ interface HomeSession {
   title: string;
   intensity: string | null;
   intensity_known: boolean;
+  time_of_day: string | null;
+  time_known: boolean;
   duration_label: string;
   is_long: boolean;
 }
@@ -30,6 +33,7 @@ interface HomeView {
   selected_date: string;
   week: HomeWeekDay[];
   has_plan: boolean;
+  checkin: { due: boolean; done: boolean };
   selected: {
     date: string;
     weekday: string;
@@ -46,6 +50,7 @@ interface HomeView {
         sodium_mg_per_litre: Range | null;
       } | null;
       is_normal_day: boolean;
+      pre_fuel_note: string | null;
       confidence: string;
     };
   };
@@ -97,6 +102,7 @@ export default function HomeTab({
   const [loaded, setLoaded] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileInitial, setProfileInitial] = useState<ProfileValues | null>(null);
+  const [checkinOpen, setCheckinOpen] = useState(false);
 
   const load = useCallback((date?: string) => {
     const qs = date ? `?date=${encodeURIComponent(date)}` : '';
@@ -110,6 +116,28 @@ export default function HomeTab({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Auto-open the end-of-day check-in once, late evening, on a training day it
+  // hasn't been done. Dismissed-for-today is remembered per browser session.
+  useEffect(() => {
+    if (!data?.checkin.due || new Date().getHours() < 22) return;
+    let dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem(`kona.checkin.dismissed.${data.today}`) === '1';
+    } catch {
+      /* ignore */
+    }
+    if (!dismissed) setCheckinOpen(true);
+  }, [data]);
+
+  const dismissCheckin = () => {
+    try {
+      if (data) sessionStorage.setItem(`kona.checkin.dismissed.${data.today}`, '1');
+    } catch {
+      /* ignore */
+    }
+    setCheckinOpen(false);
+  };
 
   const openProfile = () => {
     setProfileOpen(true);
@@ -157,6 +185,7 @@ export default function HomeTab({
         </div>
         <button className="home-avatar" onClick={openProfile} aria-label="Profile">
           {initial}
+          {data.checkin.due && <span className="avatar-dot" aria-hidden />}
         </button>
       </div>
 
@@ -176,6 +205,12 @@ export default function HomeTab({
         ))}
       </div>
 
+      {data.checkin.due && !checkinOpen && (
+        <button className="checkin-nudge" onClick={() => setCheckinOpen(true)}>
+          Evening check-in — log how today went →
+        </button>
+      )}
+
       <section className="home-card">
         <h2>{planTitle}</h2>
         {sel.sessions.length > 0 ? (
@@ -188,6 +223,7 @@ export default function HomeTab({
                     {s.intensity_known ? s.intensity : 'effort not set'}
                   </span>
                   <span className="plan-chip">{s.duration_label}</span>
+                  {!s.time_known && <span className="plan-chip">time not set</span>}
                   {s.is_long && <span className="plan-chip">long session</span>}
                 </div>
               </div>
@@ -272,6 +308,8 @@ export default function HomeTab({
           <p className="fuel-normal">Normal day — the daily average above is all you need.</p>
         )}
 
+        {fuel.pre_fuel_note && <p className="fuel-note">{fuel.pre_fuel_note}</p>}
+
         <button className="home-link" onClick={onOpenDaily}>
           Full breakdown &amp; food ideas →
         </button>
@@ -281,6 +319,16 @@ export default function HomeTab({
         Estimates from general sports-nutrition guidance, not exact targets. Kona is a wellness tool, not a
         dietitian.
       </p>
+
+      {checkinOpen && (
+        <CheckinDialog
+          onClose={dismissCheckin}
+          onDone={() => {
+            setCheckinOpen(false);
+            void load(data.selected_date === data.today ? undefined : data.selected_date);
+          }}
+        />
+      )}
 
       {profileOpen && (
         <div className="profile-overlay" role="dialog" aria-modal="true" aria-label="Profile">

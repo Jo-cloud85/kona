@@ -125,12 +125,18 @@ export interface Profile {
 // ---------------------------------------------------------------------------
 
 /** Details the user did not give for a planned session, so Kona can ask. */
-export type MissingDetail = 'intensity' | 'duration_or_distance';
+export type MissingDetail = 'intensity' | 'duration_or_distance' | 'time_of_day';
+
+/** Coarse time-of-day bucket for a session. Drives pre-fuel advice (a morning
+ *  session is likely done before a full breakfast). */
+export type TimeOfDay = 'morning' | 'afternoon' | 'evening';
 
 export interface SessionInputCore {
   sport: Sport;
   /** ISO-8601 local datetime for the session start. */
   start_at: string;
+  /** Coarse bucket the user gave / we derived from the start time. */
+  time_of_day?: TimeOfDay;
   duration_minutes?: number;
   distance_km?: number;
   intensity: Intensity;

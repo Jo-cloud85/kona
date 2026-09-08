@@ -22,6 +22,7 @@ export {
   type HomeWeekDay,
   type HomeFuel,
 } from './home';
+export { buildCheckinLog, checkinReflection, type CheckinInput, type CheckinLog } from './checkin';
 export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety';
 export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools';
 export type {

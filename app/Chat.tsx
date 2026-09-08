@@ -29,8 +29,10 @@ interface SessionPrompt {
   label: string;
   ask_intensity: boolean;
   ask_size: boolean;
+  ask_time: boolean;
   intensity_options: SPOption[];
   size_options: SPOption[];
+  time_options: SPOption[];
 }
 
 export default function Chat({
@@ -51,7 +53,7 @@ export default function Chat({
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [starter, setStarter] = useState<Starter | null>(null);
   const [prompts, setPrompts] = useState<SessionPrompt[]>([]);
-  const [picks, setPicks] = useState<Record<string, { intensity?: string; size?: string }>>({});
+  const [picks, setPicks] = useState<Record<string, { intensity?: string; size?: string; time?: string }>>({});
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [llm, setLlm] = useState('');
@@ -142,7 +144,7 @@ export default function Chat({
   }, [initialPrefill, onPrefillConsumed, usePrompt]);
 
   const key = (p: SessionPrompt) => `${p.date}#${p.session_index}`;
-  const pick = (p: SessionPrompt, field: 'intensity' | 'size', value: string) =>
+  const pick = (p: SessionPrompt, field: 'intensity' | 'size' | 'time', value: string) =>
     setPicks((prev) => {
       const cur = prev[key(p)] ?? {};
       return { ...prev, [key(p)]: { ...cur, [field]: cur[field] === value ? undefined : value } };
@@ -150,15 +152,15 @@ export default function Chat({
 
   const answeredCount = prompts.filter((p) => {
     const s = picks[key(p)];
-    return s && (s.intensity || s.size);
+    return s && (s.intensity || s.size || s.time);
   }).length;
 
   const submitPicks = () => {
     const clauses = prompts
       .map((p) => {
         const s = picks[key(p)];
-        if (!s || (!s.intensity && !s.size)) return null;
-        const bits = [s.intensity, s.size ? `~${s.size}` : ''].filter(Boolean).join(', ');
+        if (!s || (!s.intensity && !s.size && !s.time)) return null;
+        const bits = [s.intensity, s.size ? `~${s.size}` : '', s.time].filter(Boolean).join(', ');
         return `${p.weekday_label} ${p.sport}: ${bits}`;
       })
       .filter(Boolean);
@@ -217,7 +219,7 @@ export default function Chat({
         {prompts.length > 0 && !busy && (
           <div className="row assistant">
             <div className="prompt-panel">
-              <p className="prompt-panel-title">Set the effort and length for each session:</p>
+              <p className="prompt-panel-title">Set the effort, length and time for each session:</p>
               {prompts.map((p) => (
                 <div key={key(p)} className="prompt-row">
                   <span className="prompt-label">{p.label}</span>
@@ -241,6 +243,19 @@ export default function Chat({
                           key={o.value}
                           className={picks[key(p)]?.size === o.value ? 'on' : ''}
                           onClick={() => pick(p, 'size', o.value)}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {p.ask_time && (
+                    <div className="opts">
+                      {p.time_options.map((o) => (
+                        <button
+                          key={o.value}
+                          className={picks[key(p)]?.time === o.value ? 'on' : ''}
+                          onClick={() => pick(p, 'time', o.value)}
                         >
                           {o.label}
                         </button>

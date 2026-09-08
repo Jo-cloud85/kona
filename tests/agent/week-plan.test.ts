@@ -86,15 +86,18 @@ describe('weekly plan conversation slice', () => {
     expect(turn.reply).not.toMatch(/\bcaused by\b/i);
 
     // It does NOT assert "easy" for sessions the user didn't rate, and asks.
-    expect(turn.reply).toMatch(/Mon: gym \(effort & distance\/time not set\)/);
+    // time of day is a required detail too (drives pre-fuel advice).
+    expect(turn.reply).toMatch(/Mon: gym \(effort & distance\/time & time of day not set\)/);
     expect(turn.reply).not.toMatch(/Mon: easy gym/);
     // advice for every day, plus a nudge to fill the gaps via the option buttons
     expect(turn.reply).toMatch(/Day by day:/);
-    expect(turn.reply).toMatch(/effort and length for \d+ sessions/i);
+    expect(turn.reply).toMatch(/details \(effort, length, time of day\) for \d+ sessions/i);
 
     // structured per-session prompts are produced for the UI to render as buttons
     const analysis = turn.tool_results.find((r) => r.tool === 'save_weekly_plan')!.data as {
-      analysis: { session_prompts: { label: string; ask_intensity: boolean; ask_size: boolean }[] };
+      analysis: {
+        session_prompts: { label: string; ask_intensity: boolean; ask_size: boolean; ask_time: boolean }[];
+      };
     };
     const promptLabels = analysis.analysis.session_prompts.map((p) => p.label);
     expect(promptLabels).toEqual(
@@ -103,6 +106,13 @@ describe('weekly plan conversation slice', () => {
     expect(analysis.analysis.session_prompts.find((p) => p.label === 'Mon gym')).toMatchObject({
       ask_intensity: true,
       ask_size: true,
+      ask_time: true,
+    });
+    // Tuesday's 8 km run has a distance, so only effort + time of day are open.
+    expect(analysis.analysis.session_prompts.find((p) => p.label === 'Tue running')).toMatchObject({
+      ask_intensity: true,
+      ask_size: false,
+      ask_time: true,
     });
   });
 
@@ -117,12 +127,30 @@ describe('weekly plan conversation slice', () => {
     const gymSessions = (await repo.listPlannedSessions(DEMO_USER_ID)).filter((p) => p.sport === 'gym');
     expect(gymSessions).toHaveLength(1); // only Monday in the spec week
     expect(gymSessions[0]).toMatchObject({ intensity: 'hard', duration_minutes: 60 });
-    expect(gymSessions[0]!.needs_detail ?? []).toEqual([]);
+    // effort + length filled from the answer; time of day still open.
+    expect(gymSessions[0]!.needs_detail ?? []).toEqual(['time_of_day']);
 
     expect(turn.reply).toMatch(/Updated: Mon gym → .*60 min.*hard/);
-    // still gaps: swim, running, cycling
-    expect(turn.reply).toMatch(/effort and length for \d+ session/i);
-    expect(turn.reply).toMatch(/swimming/i);
+    // a single-day update stays focused on that day — it does NOT re-echo the
+    // whole week (no mention of the still-open swim / running / cycling days).
+    expect(turn.reply).toMatch(/Mon: hard gym/);
+    expect(turn.reply).toMatch(/time of day/i);
+    expect(turn.reply).not.toMatch(/swimming/i);
+    expect(turn.reply).not.toMatch(/Day by day:/);
+  });
+
+  it('a time-of-day answer clears the last gap and adds a morning pre-fuel note', async () => {
+    await say(SPEC_WEEK);
+    await say('The gym sessions take about an hour and I sweat and pant a lot 15 minutes in.');
+    const turn = await say('The Monday gym session is in the morning.');
+    expect(turn.intent).toBe('clarify_plan_detail');
+
+    const gym = (await repo.listPlannedSessions(DEMO_USER_ID)).find((p) => p.sport === 'gym')!;
+    expect(gym.time_of_day).toBe('morning');
+    expect(gym.needs_detail ?? []).toEqual([]);
+    // morning session -> lighter pre-fuel guidance
+    expect(turn.reply).toMatch(/morning session/i);
+    expect(turn.reply).toMatch(/banana|dates|toast/i);
   });
 
   it('a fresh "Next week: ..." plan replaces the existing week (not read as clarifications)', async () => {
@@ -230,7 +258,8 @@ describe('weekly plan conversation slice', () => {
     const sat = swims.find((p) => p.start_at.startsWith('2026-09-12'))!;
     const wed = swims.find((p) => p.start_at.startsWith('2026-09-09'))!;
     expect(sat.distance_km).toBe(1.5);
-    expect(sat.needs_detail).toEqual(['intensity']); // distance filled, effort still open
+    // distance filled; effort and time of day still open
+    expect(sat.needs_detail).toEqual(['intensity', 'time_of_day']);
     expect(wed.distance_km).toBeUndefined(); // Wednesday untouched
   });
 

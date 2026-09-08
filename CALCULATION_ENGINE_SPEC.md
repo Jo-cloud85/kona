@@ -382,6 +382,21 @@ Kona should emphasize practical preparation the night before:
 - breakfast decision made
 - recovery meal available after
 
+## Trigger: morning session (any) — pre-fuel
+
+Every planned session carries a required `time_of_day` (`morning` /
+`afternoon` / `evening`) — from a stated clock time or an explicit word, and
+prompted for when missing (alongside type, intensity, and distance-or-duration).
+
+When `time_of_day = morning`, Kona adds a pre-fuel line: the athlete has likely
+NOT had a full breakfast, so suggest something small and easy to digest ~20–30
+min before (a banana, a few dates, toast with jam/honey) rather than a full
+meal. When `time_of_day = evening`, the athlete has eaten through the day — a
+small carb snack ~1 h before is enough if it has been 3+ hours since eating.
+These lines are qualitative preparation advice (`src/data/foods.ts` →
+`PRE_FUEL_SNACKS`, restriction-filtered on the Home tab); they introduce no new
+numbers.
+
 ## Trigger: known difficult conditions
 
 Examples:
@@ -450,6 +465,15 @@ Kona may say:
 > “Poor sleep can make a normal session feel harder. I wouldn’t assume fueling is the only reason today felt rough.”
 
 Do not automatically increase calorie/carbohydrate recommendations based solely on poor sleep.
+
+## End-of-day check-in
+
+An optional structured "how did today go?" popup (feel / went-as-planned /
+injuries-or-pains / free text). It is stored as a normal recovery log and passes
+through the **same safety screen** (§18) as any recovery message. Kona does not
+diagnose: a concerning elaboration is pointed at professional care, and "plan
+didn't go as planned" is a nudge to describe the actual in chat — it does not
+overwrite the planned session.
 
 ---
 

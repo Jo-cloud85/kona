@@ -72,7 +72,10 @@ function composePlan(results: ToolResult[]): string {
   if (!planned) return "I couldn't save that plan — could you repeat the session details?";
 
   const dist = planned.distance_km ? `${planned.distance_km} km ` : '';
-  const lines = [`Saved as planned: ${dist}${planned.intensity} ${planned.sport}, ${fmtDateTime(planned.start_at)}.`];
+  const when = planned.time_of_day ? `${planned.time_of_day} ` : '';
+  const lines = [
+    `Saved as planned: ${dist}${planned.intensity} ${when}${planned.sport}, ${fmtDateTime(planned.start_at)}.`,
+  ];
 
   if (calc) {
     const recs = topRecommendations(calc, 3);
@@ -199,7 +202,7 @@ interface WeekPlanResult {
 
 interface UpdatePlanResult extends WeekPlanResult {
   updated: PlannedSession[];
-  applied_fields: ('intensity' | 'duration_minutes' | 'distance_km')[];
+  applied_fields: ('intensity' | 'duration_minutes' | 'distance_km' | 'time_of_day')[];
 }
 
 function describeWeekSession(s: WeekAnalysis['days'][number]['sessions'][number]): string {
@@ -207,12 +210,22 @@ function describeWeekSession(s: WeekAnalysis['days'][number]['sessions'][number]
   // Show a stated effort only. A defaulted "easy" (or an unstated long run) is
   // not asserted — Kona asks instead.
   const effort = s.needs_detail.includes('intensity') || s.is_long ? '' : `${s.intensity} `;
-  let base = `${dist}${effort}${s.is_long ? 'long ' : ''}${s.sport}`.trim();
+  const when = s.time_of_day && !s.needs_detail.includes('time_of_day') ? `${s.time_of_day} ` : '';
+  let base = `${dist}${effort}${when}${s.is_long ? 'long ' : ''}${s.sport}`.trim();
   const gaps: string[] = [];
   if (s.needs_detail.includes('intensity')) gaps.push('effort');
   if (s.needs_detail.includes('duration_or_distance')) gaps.push('distance/time');
+  if (s.needs_detail.includes('time_of_day')) gaps.push('time of day');
   if (gaps.length) base += ` (${gaps.join(' & ')} not set)`;
   return base;
+}
+
+function promptGaps(p: WeekAnalysis['session_prompts'][number]): string {
+  const g: string[] = [];
+  if (p.ask_intensity) g.push('effort');
+  if (p.ask_size) g.push('length');
+  if (p.ask_time) g.push('time of day');
+  return g.join(' & ');
 }
 
 function weekDayRows(analysis: WeekAnalysis, restDays: string[]): string[] {
@@ -264,7 +277,7 @@ function planAdviceLines(analysis: WeekAnalysis): string[] {
   if (analysis.session_prompts.length) {
     out.push(
       '',
-      `I still need the effort and length for ${analysis.session_prompts.length} session${
+      `I still need the details (effort, length, time of day) for ${analysis.session_prompts.length} session${
         analysis.session_prompts.length === 1 ? '' : 's'
       } — use the buttons below, or just tell me.`,
     );
@@ -281,7 +294,8 @@ function composeClarifyPlanDetail(results: ToolResult[]): string {
   const all = results.filter((r) => r.tool === 'update_planned_sessions' && r.ok).map((r) => r.data as UpdatePlanResult);
   if (all.length === 0) return "I couldn't match that to a session in your plan — which day or sport did you mean?";
   const data = all[all.length - 1]!; // last call has the fully-updated analysis
-  const { analysis, rest_days } = data;
+  const { analysis } = data;
+
   // Report only what each call actually changed — don't re-assert defaulted fields.
   const changed = all
     .flatMap((d) =>
@@ -290,12 +304,28 @@ function composeClarifyPlanDetail(results: ToolResult[]): string {
         if (d.applied_fields.includes('distance_km') && s.distance_km) bits.push(`${s.distance_km} km`);
         if (d.applied_fields.includes('duration_minutes') && s.duration_minutes) bits.push(`~${s.duration_minutes} min`);
         if (d.applied_fields.includes('intensity')) bits.push(s.intensity);
+        if (d.applied_fields.includes('time_of_day') && s.time_of_day) bits.push(s.time_of_day);
         return `${weekdayShort(s.start_at.slice(0, 10))} ${s.sport} → ${bits.join(', ') || 'updated'}`;
       }),
     )
     .join('; ');
 
-  const lines = [`Updated: ${changed}.`, '', ...weekDayRows(analysis, rest_days), ...planAdviceLines(analysis)];
+  // Only echo the day(s) this turn actually touched — not the whole week.
+  const touched = new Set(all.flatMap((d) => d.updated.map((s) => s.start_at.slice(0, 10))));
+  const touchedDays = analysis.days
+    .filter((d) => touched.has(d.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const lines = [`Updated: ${changed}.`];
+  for (const day of touchedDays) {
+    lines.push('', `${day.weekday_label}: ${day.sessions.map(describeWeekSession).join(' + ')}`);
+    const rec = analysis.recommendation_inputs.find((r) => r.date === day.date);
+    if (rec) lines.push(`- ${rec.action}`);
+    const gaps = analysis.session_prompts.filter((p) => p.date === day.date).map(promptGaps).filter(Boolean);
+    if (gaps.length) {
+      lines.push(`Still need ${gaps.join('; ')} for ${day.weekday_label} — use the buttons below, or just tell me.`);
+    }
+  }
   return lines.join('\n');
 }
 

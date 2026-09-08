@@ -5,13 +5,17 @@ import type { ProfileFormData } from '../src/domain/profile-input';
 import {
   AnthropicLlmClient,
   DeterministicLlmClient,
+  buildCheckinLog,
   buildDaily,
   buildDashboard,
   buildHome,
   buildStarter,
+  checkinReflection,
   handleMessage,
+  screenForEscalation,
   type AgentDeps,
   type AgentTurn,
+  type CheckinInput,
   type ChatStarter,
   type Dashboard,
   type DailyPlan,
@@ -114,13 +118,43 @@ export async function getDashboard(): Promise<Dashboard | null> {
   return buildDashboard({ profile, weeklyPlan, sessions });
 }
 
+function ymdLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export async function getHome(selectedDate?: string): Promise<HomeView | null> {
   const repo = getRepo();
   const profile = await repo.getProfile(DEMO_USER_ID);
   if (!profile?.onboarded_at) return null;
   const weeklyPlan = (await repo.listWeeklyPlans(DEMO_USER_ID)).at(-1);
   const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
-  return buildHome({ profile, weeklyPlan, sessions, selectedDate });
+  const today = ymdLocal(new Date());
+  const checkinDoneToday = (await repo.listRecoveryLogs(DEMO_USER_ID)).some(
+    (l) => ymdLocal(new Date(l.logged_at)) === today,
+  );
+  return buildHome({ profile, weeklyPlan, sessions, selectedDate, checkinDoneToday });
+}
+
+export interface CheckinResult {
+  ok: true;
+  escalated: boolean;
+  reflection: string;
+}
+
+export async function submitCheckin(input: CheckinInput): Promise<CheckinResult | null> {
+  const repo = getRepo();
+  const profile = await repo.getProfile(DEMO_USER_ID);
+  if (!profile?.onboarded_at) return null;
+
+  const log = buildCheckinLog(input);
+  const screen = screenForEscalation(log.free_text);
+  await repo.saveRecoveryLog({
+    user_id: DEMO_USER_ID,
+    free_text: log.free_text,
+    overall_severity: log.overall_severity,
+    reported_symptoms: log.reported_symptoms,
+  });
+  return { ok: true, escalated: screen.escalate, reflection: checkinReflection(input, screen) };
 }
 
 /** The one-time opening message + conversation starters (only meaningful before

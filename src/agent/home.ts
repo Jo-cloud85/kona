@@ -1,4 +1,5 @@
-import type { Intensity, PlannedSession, Profile, Range, Sport, WeeklyPlan } from '../domain/types';
+import type { Intensity, PlannedSession, Profile, Range, Sport, TimeOfDay, WeeklyPlan } from '../domain/types';
+import { preFuelSnacks } from '../data/foods';
 import { buildDaily } from './daily';
 import { buildDashboard } from './dashboard';
 
@@ -28,11 +29,14 @@ const SPORT_LABEL: Record<Sport, string> = {
 
 export interface HomeSession {
   sport: Sport;
-  /** Human title, e.g. "Long run", "18 km run", "Gym". */
+  /** Human title, e.g. "Long run", "18 km evening run", "Morning gym". */
   title: string;
   /** Stated effort, or null when the user hasn't set it yet. */
   intensity: Intensity | null;
   intensity_known: boolean;
+  /** Stated time-of-day bucket, or null when not set yet. */
+  time_of_day: TimeOfDay | null;
+  time_known: boolean;
   /** "45 min" · "18 km" · "length not set" — never a guessed number. */
   duration_label: string;
   is_long: boolean;
@@ -62,6 +66,8 @@ export interface HomeFuel {
   } | null;
   /** True when there's nothing extra to do — the daily average covers the day. */
   is_normal_day: boolean;
+  /** Time-of-day pre-fuel nudge for the selected day (morning / evening), or null. */
+  pre_fuel_note: string | null;
   confidence: string;
 }
 
@@ -71,6 +77,8 @@ export interface HomeView {
   selected_date: string;
   week: HomeWeekDay[];
   has_plan: boolean;
+  /** End-of-day check-in state (for the profile-avatar dot + evening popup). */
+  checkin: { due: boolean; done: boolean };
   selected: {
     date: string;
     weekday: string;
@@ -126,9 +134,11 @@ function sportLabel(sport: Sport): string {
 
 function titleFor(s: PlannedSession): string {
   const label = sportLabel(s.sport);
-  if (s.is_long) return `Long ${label}`;
-  if (s.distance_km) return `${s.distance_km} km ${label}`;
-  return label.charAt(0).toUpperCase() + label.slice(1);
+  const when = s.time_of_day ? `${s.time_of_day} ` : '';
+  const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+  if (s.is_long) return cap(`long ${when}${label}`);
+  if (s.distance_km) return `${s.distance_km} km ${when}${label}`;
+  return cap(`${when}${label}`);
 }
 
 function durationLabel(s: PlannedSession): string {
@@ -143,14 +153,30 @@ function durationLabel(s: PlannedSession): string {
 
 function sessionView(s: PlannedSession): HomeSession {
   const intensityKnown = !(s.needs_detail ?? []).includes('intensity');
+  const timeKnown = !(s.needs_detail ?? []).includes('time_of_day') && s.time_of_day != null;
   return {
     sport: s.sport,
     title: titleFor(s),
     intensity: intensityKnown ? s.intensity : null,
     intensity_known: intensityKnown,
+    time_of_day: timeKnown ? s.time_of_day! : null,
+    time_known: timeKnown,
     duration_label: durationLabel(s),
     is_long: s.is_long ?? false,
   };
+}
+
+/** Pre-fuel nudge for the selected day, keyed off a session's stated time. */
+function preFuelNote(sessions: HomeSession[], restrictions: Profile['dietary_restrictions'] = []): string | null {
+  const times = new Set(sessions.map((s) => s.time_of_day).filter((t): t is TimeOfDay => t != null));
+  if (times.has('morning')) {
+    const snacks = preFuelSnacks(restrictions ?? []).join(', ');
+    return `Morning session — if you train before a full breakfast, have ${snacks} 20–30 min before rather than a big meal.`;
+  }
+  if (times.has('evening')) {
+    return "Evening session — you'll have eaten through the day; if it's been 3+ hours, a small carb snack about an hour before is plenty.";
+  }
+  return null;
 }
 
 export function buildHome(input: {
@@ -159,6 +185,8 @@ export function buildHome(input: {
   sessions: PlannedSession[];
   now?: Date;
   selectedDate?: string;
+  /** Whether the user has already done an end-of-day check-in today. */
+  checkinDoneToday?: boolean;
 }): HomeView {
   const now = input.now ?? new Date();
   const today = isoDate(now);
@@ -209,12 +237,20 @@ export function buildHome(input: {
     ? selected_date >= weekStart && selected_date <= isoDate(addDays(new Date(`${weekStart}T00:00:00`), 6))
     : false;
 
+  const selectedSessions = (byDate.get(selected_date) ?? []).map(sessionView);
+  const pre_fuel_note = preFuelNote(selectedSessions, input.profile.dietary_restrictions ?? []);
+
+  const todayDay = week.find((d) => d.is_today);
+  const checkinDone = input.checkinDoneToday ?? false;
+  const checkinDue = !checkinDone && !!todayDay && !todayDay.is_rest && todayDay.has_session;
+
   return {
     greeting_name: input.profile.username ?? null,
     today,
     selected_date,
     week,
     has_plan: input.weeklyPlan != null,
+    checkin: { due: checkinDue, done: checkinDone },
     selected: {
       date: selected_date,
       weekday: weekdayLabel(selected_date),
@@ -222,7 +258,7 @@ export function buildHome(input: {
       is_today: selected_date === today,
       in_plan,
       is_rest: restSet.has(selected_date),
-      sessions: (byDate.get(selected_date) ?? []).map(sessionView),
+      sessions: selectedSessions,
       fuel: {
         daily: {
           energy_kcal: daily.energy_kcal,
@@ -232,6 +268,7 @@ export function buildHome(input: {
         },
         during_session: during,
         is_normal_day: during == null,
+        pre_fuel_note,
         confidence: daily.confidence,
       },
     },

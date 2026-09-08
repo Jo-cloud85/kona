@@ -1,4 +1,4 @@
-import type { Intensity, Sport } from '../domain/types';
+import type { Intensity, Sport, TimeOfDay } from '../domain/types';
 
 /** Natural-language parsing helpers for the deterministic interpreter.
  *  These do NOT compute anything numerical about fueling — they only extract
@@ -62,6 +62,22 @@ export function extractTime(text: string): { hh: number; mm: number } | undefine
   const at = /\bat\s+(\d{1,2})(?::(\d{2}))?\b/i.exec(text);
   if (at) return { hh: Number(at[1]), mm: at[2] ? Number(at[2]) : 0 };
   return undefined;
+}
+
+/** Coarse bucket from a 24h hour: morning 4–10, afternoon 11–16, evening 17–3. */
+export function timeOfDayFromHour(hh: number): TimeOfDay {
+  if (hh >= 4 && hh < 11) return 'morning';
+  if (hh >= 11 && hh < 17) return 'afternoon';
+  return 'evening';
+}
+
+/** Explicit time-of-day words, or the bucket implied by a clock time in `text`. */
+export function extractTimeOfDay(text: string): TimeOfDay | undefined {
+  if (/\b(this\s+)?(morning|dawn|sunrise|am run|a\.?m\.?)\b/i.test(text) || /\bbefore work\b/i.test(text)) return 'morning';
+  if (/\b(afternoon|midday|mid-day|lunch ?time|noon|arvo)\b/i.test(text)) return 'afternoon';
+  if (/\b(this\s+)?(evening|tonight|night|after work|pm session)\b/i.test(text)) return 'evening';
+  const t = extractTime(text);
+  return t ? timeOfDayFromHour(t.hh) : undefined;
 }
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -150,6 +166,7 @@ export interface ClarificationAnswer {
   intensity?: Intensity;
   duration_minutes?: number;
   distance_km?: number;
+  time_of_day?: TimeOfDay;
   /** 0 = Monday .. 6 = Sunday, if the user named a day. */
   day_index?: number;
   sport?: Sport;
@@ -164,6 +181,8 @@ export function parseClarificationAnswer(text: string): ClarificationAnswer {
   if (duration !== undefined) answer.duration_minutes = duration;
   const distance = extractDistanceKm(text);
   if (distance !== undefined) answer.distance_km = distance;
+  const timeOfDay = extractTimeOfDay(text);
+  if (timeOfDay) answer.time_of_day = timeOfDay;
   const sport = extractSport(text);
   if (sport) answer.sport = sport;
   for (const { index, re } of DAY_MATCHERS) {
@@ -275,6 +294,7 @@ export interface ParsedWeekSession {
   sport: Sport;
   distance_km?: number;
   intensity?: Intensity;
+  time_of_day?: TimeOfDay;
   /** The user said "long run" / "long ride" etc. without a distance. */
   is_long: boolean;
   raw: string;
@@ -298,6 +318,7 @@ function parseOneSession(chunk: string): ParsedWeekSession | undefined {
     sport,
     distance_km: extractDistanceKm(raw),
     intensity: extractIntensity(raw),
+    time_of_day: extractTimeOfDay(raw),
     is_long: isLong,
     raw,
   };

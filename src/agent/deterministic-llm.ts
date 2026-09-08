@@ -12,6 +12,7 @@ import {
   extractIntensity,
   extractReason,
   extractSport,
+  extractTimeOfDay,
   namedWeekdayIndexes,
   parseClarificationAnswer,
   parseFuelItems,
@@ -91,7 +92,8 @@ export class DeterministicLlmClient implements LlmClient {
       const pendingSports = new Set(pd.groups.map((g) => g.sport));
       const hasAnswerSignal =
         /\d/.test(text) ||
-        /\b(easy|moderate|hard|tempo|steady|comfortable|panting?|sweat\w*|gasping|brutal|chatty)\b/i.test(text);
+        /\b(easy|moderate|hard|tempo|steady|comfortable|panting?|sweat\w*|gasping|brutal|chatty)\b/i.test(text) ||
+        /\b(morning|afternoon|evening|tonight|midday|noon|arvo)\b/i.test(text);
 
       // Per-day answer ("Sunday's long run is 22km, and the Saturday swim is 2km",
       // or "Wed and Fri gym are hard, about an hour. Thu bike is easy").
@@ -105,7 +107,8 @@ export class DeterministicLlmClient implements LlmClient {
             if (!pendingSports.has(s.sport)) continue; // ignore clauses about non-pending sessions
             const eff = parsePerceivedIntensity(s.raw) ?? s.intensity;
             const dur = extractDurationMinutes(s.raw);
-            if (!eff && dur === undefined && s.distance_km === undefined) continue;
+            const tod = s.time_of_day ?? extractTimeOfDay(s.raw);
+            if (!eff && dur === undefined && s.distance_km === undefined && tod === undefined) continue;
             calls.push({
               tool: 'update_planned_sessions',
               args: {
@@ -115,6 +118,7 @@ export class DeterministicLlmClient implements LlmClient {
                 ...(eff ? { intensity: eff } : {}),
                 ...(dur !== undefined ? { duration_minutes: dur } : {}),
                 ...(s.distance_km !== undefined ? { distance_km: s.distance_km } : {}),
+                ...(tod ? { time_of_day: tod } : {}),
               },
             });
           }
@@ -132,6 +136,7 @@ export class DeterministicLlmClient implements LlmClient {
           ...(ans.intensity ? { intensity: ans.intensity } : {}),
           ...(ans.duration_minutes !== undefined ? { duration_minutes: ans.duration_minutes } : {}),
           ...(ans.distance_km !== undefined ? { distance_km: ans.distance_km } : {}),
+          ...(ans.time_of_day ? { time_of_day: ans.time_of_day } : {}),
         };
         if (Object.keys(detail).length > 0) {
           const namedDays = namedWeekdayIndexes(text);
@@ -190,6 +195,7 @@ export class DeterministicLlmClient implements LlmClient {
             sport: s.sport,
             ...(s.distance_km !== undefined ? { distance_km: s.distance_km } : {}),
             ...(s.intensity ? { intensity: s.intensity } : {}),
+            ...(s.time_of_day ? { time_of_day: s.time_of_day } : {}),
             ...(s.is_long ? { is_long: true } : {}),
           })),
         }));
@@ -235,6 +241,7 @@ export class DeterministicLlmClient implements LlmClient {
       const sport = extractSport(text) ?? 'running';
       const start_at = resolveStartAt(context.now_iso, text);
       const intensity = extractIntensity(text) ?? 'easy';
+      const time_of_day = extractTimeOfDay(text);
       const calls: PlannedToolCall[] = [
         {
           tool: 'save_planned_session',
@@ -243,6 +250,7 @@ export class DeterministicLlmClient implements LlmClient {
             start_at,
             distance_km: distance,
             ...(duration ? { duration_minutes: duration } : {}),
+            ...(time_of_day ? { time_of_day } : {}),
             intensity,
           },
         },

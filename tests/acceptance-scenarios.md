@@ -43,6 +43,18 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AH6 | Profile overlay | The Home avatar opens a full-screen overlay with the existing profile form (edit mode, pre-filled). Saving updates the greeting name and the Home fuelling. Profile is not a nav tab. | manual (browser) + `tests/data/repository.test.ts` |
 | AH7 | No weekly plan | With no plan saved, Home still renders the week and the daily-average fuelling; "What's Planned" invites the user to tell Kona their week in chat. | ✅ `tests/agent/home.test.ts` |
 
+## A-tod. Time of day + focused updates + check-in (M13)
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AT1 | Session info contract | Every planned session needs type, intensity, distance-or-duration, **and time of day**. A missing time of day is prompted for — the weekly-plan option panel shows a Morning / Afternoon / Evening row per under-specified session. | ✅ `tests/agent/week-plan.test.ts` (`ask_time`) + manual |
+| AT2 | Time is derived when stated | "18 km run at 6am" / "evening gym" set `time_of_day` without a prompt; the session then reads "… morning running" / "evening gym". | ✅ `tests/agent/week-plan.test.ts`, `tests/agent/home.test.ts` |
+| AT3 | Morning pre-fuel advice | A morning session adds a qualitative pre-fuel line (light, quick carbs 20–30 min before — banana / dates / toast — not a full breakfast), restriction-filtered on the Home card. No new numbers. | ✅ `tests/agent/week-plan.test.ts`, `tests/agent/home.test.ts` |
+| AT4 | Single-day update stays focused | Filling / changing one day replies about **that day only** (updated line + that day's prep + any gap still open for it) — it does not re-echo the whole week or "Day by day". A new/replaced weekly plan still gets the full-week summary. | ✅ `tests/agent/week-plan.test.ts` + manual |
+| AT5 | End-of-day check-in — quiet log | The popup (feel · went-as-planned · injuries/pains · free text) is saved as a recovery log; the reflection shows in the popup, nothing is added to the Chat thread. | ✅ `tests/agent/checkin.test.ts` + manual |
+| AT6 | Check-in safety | A concerning elaboration trips the same safety screen as any recovery message — Kona points to professional care and does not diagnose. "Plan didn't go as planned" is a nudge to describe the actual in chat, not an overwrite. | ✅ `tests/agent/checkin.test.ts` |
+| AT7 | Check-in trigger | `checkin.due` when today is a training day with no check-in yet; a red dot on the profile avatar + a re-entry banner; auto-opens once after ~22:00 (dismiss remembered for the session); the dot clears once done. | ✅ `tests/agent/home.test.ts` + manual |
+
 ## A. Core conversation slice (START_WITH_CLAUDE.md)
 
 | # | Scenario | Expected behaviour | Coverage |
