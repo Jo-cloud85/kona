@@ -1,12 +1,55 @@
 # Kona — Progress
 
 ## Current milestone
-**M11 complete — daily-nutrition energy model, bottom-nav app shell
-(Profile / Daily / Dashboard / Chat), and the dashboard "consistency" rework.**
+**M12 complete — Home tab (bento landing: greeting, week day-strip, What's
+Planned Today, today's fuelling) + nav restructure (Home / Daily / Dashboard /
+Chat, Home default; Profile moved to a top-right overlay).**
 Next: a persistence backend to replace the in-memory store; food-estimation
 ranges (§14); historical pattern surfacing (§12).
 
 ## Completed work
+
+### M12 — Home tab + nav restructure ✅
+_User wanted a proper landing page: time-based greeting, a Mon–Sun day strip
+(bento style, Kona palette — teal accent, not the reference's lime), what's
+planned for the selected day, and the fuelling to aim for. Profile moved off the
+nav into an avatar-triggered overlay._
+
+- `src/agent/home.ts` — `buildHome({ profile, weeklyPlan, sessions, now, selectedDate })`
+  → `HomeView`: the current calendar week laid out Mon–Sun (today + selected
+  flagged, a dot per day that has a session), the selected day's sessions
+  (title + **stated** effort + **estimated** length — `"18 km"` / `"45 min"` /
+  `"length not set"`, never a guessed number), and fuelling. Fuelling = the
+  profile's daily average (energy / protein / carb / fluid from the v0.2.0
+  engine) **plus** the during-session carb / fluid / sodium targets on days the
+  engine can classify the session (reuses `buildDashboard`). A rest day or an
+  unclassifiable day is a "normal day" — daily average only. No new numbers:
+  everything is `buildDaily` + `buildDashboard` reshaped.
+- `GET /api/home?date=YYYY-MM-DD` + `getHome()` in `lib/kona-server.ts` (bad
+  `date` param ignored → today).
+- `app/HomeTab.tsx` — greeting (`Good morning/afternoon/evening, <name>`) + date,
+  a scrollable day-strip (tap a day → refetch for that date), the "What's
+  planned" card (effort / length chips; a CTA that jumps to **Chat** with the
+  composer pre-filled — `"On Wednesday I'm doing "` / `"Change my Sunday session
+  to "` — so plan edits still flow through the chat orchestrator, no parallel
+  editor), and the "Recommended fuelling" card (daily-average stat grid + a
+  "During the session" sub-grid when relevant, else "Normal day — the daily
+  average above is all you need"). A "Full breakdown & food ideas →" link opens
+  the Daily tab.
+- Profile is no longer a nav tab. The Home avatar (top-right) opens a
+  full-screen overlay hosting the existing `ProfileForm` (edit mode); saving
+  updates the greeting name and refetches Home. `app/ProfileTab.tsx` removed
+  (its job is now the overlay). Old `kona.tab === 'profile'` in localStorage
+  migrates to `'home'`.
+- Nav is now **Home · Daily · Dashboard · Chat**; Home is first and the default
+  landing tab. Chat gained an `initialPrefill` prop (consumed once, then the
+  parent clears it) threaded through `Workspace`.
+- Tests: +6 (`tests/agent/home.test.ts` — week layout + today default, planned
+  session surfaced with length/effort + during-session fuel, rest day is a
+  normal day, effort/length "not set" flags, no-plan still returns a week +
+  daily average, malformed `selectedDate` falls back to today). **105 total**,
+  all green; `tsc`, `eslint`, `next build` clean. Verified in the browser
+  (day-switching, profile overlay, chat prefill, mobile + light/dark).
 
 ### M11 — Daily nutrition + app shell + dashboard rework ✅
 _From user feedback on the dashboard and a request for a per-day intake summary.

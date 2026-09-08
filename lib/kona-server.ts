@@ -7,6 +7,7 @@ import {
   DeterministicLlmClient,
   buildDaily,
   buildDashboard,
+  buildHome,
   buildStarter,
   handleMessage,
   type AgentDeps,
@@ -14,6 +15,7 @@ import {
   type ChatStarter,
   type Dashboard,
   type DailyPlan,
+  type HomeView,
   type LlmClient,
 } from '../src/agent/index';
 
@@ -110,6 +112,15 @@ export async function getDashboard(): Promise<Dashboard | null> {
   const weeklyPlan = (await repo.listWeeklyPlans(DEMO_USER_ID)).at(-1);
   const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
   return buildDashboard({ profile, weeklyPlan, sessions });
+}
+
+export async function getHome(selectedDate?: string): Promise<HomeView | null> {
+  const repo = getRepo();
+  const profile = await repo.getProfile(DEMO_USER_ID);
+  if (!profile?.onboarded_at) return null;
+  const weeklyPlan = (await repo.listWeeklyPlans(DEMO_USER_ID)).at(-1);
+  const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  return buildHome({ profile, weeklyPlan, sessions, selectedDate });
 }
 
 /** The one-time opening message + conversation starters (only meaningful before

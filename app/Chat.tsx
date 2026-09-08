@@ -36,11 +36,15 @@ interface SessionPrompt {
 export default function Chat({
   conversationId,
   greetingName,
+  initialPrefill,
+  onPrefillConsumed,
   onActivity,
   onMenu,
 }: {
   conversationId: string;
   greetingName?: string;
+  initialPrefill?: string;
+  onPrefillConsumed?: () => void;
   onActivity?: () => void;
   onMenu?: () => void;
 }) {
@@ -117,7 +121,7 @@ export default function Chat({
     [draft, busy, conversationId, onActivity],
   );
 
-  const usePrompt = (prefill: string) => {
+  const usePrompt = useCallback((prefill: string) => {
     setDraft(prefill);
     requestAnimationFrame(() => {
       const el = inputRef.current;
@@ -126,7 +130,16 @@ export default function Chat({
         el.setSelectionRange(prefill.length, prefill.length);
       }
     });
-  };
+  }, []);
+
+  // A prefill handed in from another tab ("Add a workout in chat") drops into
+  // the composer once, then the parent clears it.
+  useEffect(() => {
+    if (initialPrefill && initialPrefill.trim()) {
+      usePrompt(initialPrefill);
+      onPrefillConsumed?.();
+    }
+  }, [initialPrefill, onPrefillConsumed, usePrompt]);
 
   const key = (p: SessionPrompt) => `${p.date}#${p.session_index}`;
   const pick = (p: SessionPrompt, field: 'intensity' | 'size', value: string) =>

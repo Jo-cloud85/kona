@@ -1,23 +1,23 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Workspace from './Workspace';
 import DashboardView from './DashboardView';
 import DailyTab from './DailyTab';
-import ProfileTab from './ProfileTab';
+import HomeTab from './HomeTab';
 import type { ProfileValues } from './ProfileForm';
 
-type Tab = 'profile' | 'daily' | 'dashboard' | 'chat';
+type Tab = 'home' | 'daily' | 'dashboard' | 'chat';
 const TAB_KEY = 'kona.tab';
 
 const NAV: { tab: Tab; label: string; icon: ReactNode }[] = [
   {
-    tab: 'profile',
-    label: 'Profile',
+    tab: 'home',
+    label: 'Home',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-        <circle cx="12" cy="8" r="3.5" />
-        <path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" />
+        <path d="M4 11.5 12 4l8 7.5" />
+        <path d="M6 10.5V20h12v-9.5" />
       </svg>
     ),
   },
@@ -61,40 +61,56 @@ export default function AppShell({
   greetingName?: string;
   onProfileChange: (p: ProfileValues) => void;
 }) {
-  const [tab, setTab] = useState<Tab>('chat');
+  const [tab, setTab] = useState<Tab>('home');
+  const [chatPrefill, setChatPrefill] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     try {
-      const t = window.localStorage.getItem(TAB_KEY) as Tab | null;
+      const raw = window.localStorage.getItem(TAB_KEY);
+      const t = raw === 'profile' ? 'home' : (raw as Tab | null);
       if (t && NAV.some((n) => n.tab === t)) setTab(t);
     } catch {
       /* ignore */
     }
   }, []);
 
-  const go = (t: Tab) => {
+  const go = useCallback((t: Tab) => {
     setTab(t);
     try {
       window.localStorage.setItem(TAB_KEY, t);
     } catch {
       /* ignore */
     }
-  };
+  }, []);
+
+  const openChat = useCallback(
+    (prefill: string) => {
+      setChatPrefill(prefill);
+      go('chat');
+    },
+    [go],
+  );
 
   return (
     <div className="app-shell">
       <div className="tab-content" key={tab}>
-        {tab === 'profile' && (
-          <ProfileTab
-            onSaved={(p) => {
-              onProfileChange(p);
-              go('daily');
-            }}
+        {tab === 'home' && (
+          <HomeTab
+            greetingName={greetingName}
+            onProfileChange={onProfileChange}
+            onOpenChat={openChat}
+            onOpenDaily={() => go('daily')}
           />
         )}
         {tab === 'daily' && <DailyTab />}
         {tab === 'dashboard' && <DashboardView />}
-        {tab === 'chat' && <Workspace greetingName={greetingName} />}
+        {tab === 'chat' && (
+          <Workspace
+            greetingName={greetingName}
+            initialPrefill={chatPrefill}
+            onPrefillConsumed={() => setChatPrefill(undefined)}
+          />
+        )}
       </div>
 
       <nav className="bottom-nav">

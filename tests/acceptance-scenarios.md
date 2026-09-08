@@ -31,6 +31,18 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AS5 | Food suggestions are examples | The Daily tab shows each macro target with a rotating sample of real foods, filtered by the user's dietary restrictions (e.g. vegan + gluten-free excludes chicken / beef / salmon / egg / dairy / wheat, keeps rice / potato / tofu / beans); framed as "examples, not a meal plan". | ✅ `tests/agent/daily.test.ts` + manual |
 | AS6 | Methodology is versioned separately | Daily nutrition carries `methodology_version` 0.2.0, distinct from the during-session engine's 0.1.0; documented in `CALCULATION_ENGINE_SPEC.md` §23. | ✅ `tests/agent/daily.test.ts` |
 
+## A-home. Home tab (M12)
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AH1 | Landing page | Opening the app lands on **Home** (first nav tab). A time-based greeting (`Good morning/afternoon/evening, <name>`) and today's date sit top-left; a Profile avatar sits top-right. | ✅ `tests/agent/home.test.ts` (greeting name, `today`) + manual |
+| AH2 | Week day-strip | The current calendar week is shown Mon–Sun with the date number; today is ringed, the selected day is filled, and a dot marks days that have a session. Tapping a day reloads "What's Planned" + fuelling for that date. | ✅ `tests/agent/home.test.ts` (week dates/labels, `is_today`, `has_session`) + manual |
+| AH3 | What's Planned | The selected day shows each planned session's title, **stated** effort (or "effort not set"), and **estimated** length (`"18 km"` / `"45 min"` / `"length not set"` — never a guessed number). Rest days and days outside the plan get a plain-language line. | ✅ `tests/agent/home.test.ts` (session view, needs-detail flags) + manual |
+| AH4 | Recommended fuelling | Always shows the profile's daily average (energy / protein / carb / fluid, from the v0.2.0 engine). On a day with a classifiable session it also shows the during-session carb / fluid / sodium targets; a rest day or unclassifiable day says "Normal day — the daily average above is all you need." | ✅ `tests/agent/home.test.ts` (during-session present for a long run, `is_normal_day` for rest / gym-needs-detail / no-plan) + manual |
+| AH5 | Change / add a workout | The card's CTA switches to the **Chat** tab with the composer pre-filled (`"On Wednesday I'm doing "` / `"Change my Sunday session to "`), so plan edits still go through the chat orchestrator. The prefill is applied once and then cleared. | manual (browser) |
+| AH6 | Profile overlay | The Home avatar opens a full-screen overlay with the existing profile form (edit mode, pre-filled). Saving updates the greeting name and the Home fuelling. Profile is not a nav tab. | manual (browser) + `tests/data/repository.test.ts` |
+| AH7 | No weekly plan | With no plan saved, Home still renders the week and the daily-average fuelling; "What's Planned" invites the user to tell Kona their week in chat. | ✅ `tests/agent/home.test.ts` |
+
 ## A. Core conversation slice (START_WITH_CLAUDE.md)
 
 | # | Scenario | Expected behaviour | Coverage |

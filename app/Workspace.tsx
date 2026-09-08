@@ -23,7 +23,15 @@ function initialConversationId(): string {
   }
 }
 
-export default function Workspace({ greetingName }: { greetingName?: string }) {
+export default function Workspace({
+  greetingName,
+  initialPrefill,
+  onPrefillConsumed,
+}: {
+  greetingName?: string;
+  initialPrefill?: string;
+  onPrefillConsumed?: () => void;
+}) {
   const [conversationId, setConversationId] = useState('web');
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -63,6 +71,8 @@ export default function Workspace({ greetingName }: { greetingName?: string }) {
       <Chat
         conversationId={conversationId}
         greetingName={greetingName}
+        initialPrefill={initialPrefill}
+        onPrefillConsumed={onPrefillConsumed}
         onActivity={refreshList}
         onMenu={() => setSidebarOpen(true)}
       />

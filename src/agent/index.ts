@@ -15,6 +15,13 @@ export {
   type DashboardDay,
   type DashboardDaySession,
 } from './dashboard';
+export {
+  buildHome,
+  type HomeView,
+  type HomeSession,
+  type HomeWeekDay,
+  type HomeFuel,
+} from './home';
 export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety';
 export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools';
 export type {
