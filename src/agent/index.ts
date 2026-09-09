@@ -1,4 +1,11 @@
-export { handleMessage, type AgentDeps, type AgentTurn, type HandleMessageInput } from './orchestrator';
+export {
+  handleMessage,
+  recordTurnActivity,
+  type AgentDeps,
+  type AgentTurn,
+  type HandleMessageInput,
+} from './orchestrator';
+export { deriveTurnEvents } from './activity';
 export { DeterministicLlmClient } from './deterministic-llm';
 export {
   AnthropicLlmClient,
@@ -28,6 +35,7 @@ export {
   type KnowsView,
   type KnowsToldLine,
   type KnowsRecentSession,
+  type KnowsTimelineEntry,
 } from './knows';
 export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety';
 export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools';

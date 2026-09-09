@@ -93,4 +93,24 @@ describe('buildKnows', () => {
     const k = buildKnows({ profile, memories: [], actualSessions: sessions, recoveryLogs: [], fuelLogs: [] });
     expect(k.insights.some((i) => i.kind === 'pattern')).toBe(true);
   });
+
+  it('renders the activity timeline (newest first), hiding plan noise, tagging Kona-side steps', () => {
+    const k = buildKnows({
+      profile: { ...profile, goal: undefined },
+      memories: [],
+      actualSessions: [],
+      recoveryLogs: [],
+      fuelLogs: [],
+      events: [
+        { id: 'e3', user_id: 'u', type: 'recommendation_adapted', at: '2026-09-10T09:00:00Z', summary: 'Kona will factor this into your training advice from now on' },
+        { id: 'e2', user_id: 'u', type: 'insight_formed', at: '2026-09-10T09:00:00Z', summary: 'Kona spotted — a pattern' },
+        { id: 'e1', user_id: 'u', type: 'session_logged', at: '2026-09-06T09:00:00Z', summary: 'You logged 40 km cycling' },
+        { id: 'e0', user_id: 'u', type: 'plan_saved', at: '2026-09-05T09:00:00Z', summary: 'You planned your week' },
+      ],
+    });
+    expect(k.has_anything).toBe(true);
+    expect(k.timeline.map((t) => t.type)).toEqual(['recommendation_adapted', 'insight_formed', 'session_logged']);
+    expect(k.timeline[0]).toMatchObject({ date: '10 Sep', by_kona: true });
+    expect(k.timeline.find((t) => t.type === 'session_logged')!.by_kona).toBe(false);
+  });
 });

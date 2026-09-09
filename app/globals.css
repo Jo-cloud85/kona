@@ -1669,3 +1669,50 @@ button.cta:disabled {
   font-size: 14px;
   line-height: 1.55;
 }
+
+/* ---- "How Kona's been learning" timeline (M19) ------------------- */
+
+.tl-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.tl-item {
+  display: grid;
+  grid-template-columns: 52px 12px 1fr;
+  align-items: start;
+  gap: 8px;
+  padding: 7px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.tl-item + .tl-item {
+  border-top: 1px solid var(--border);
+}
+
+.tl-when {
+  color: var(--muted);
+  font-size: 12px;
+  padding-top: 1px;
+}
+
+.tl-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--muted);
+  justify-self: center;
+}
+.tl-item.tl-kona .tl-dot {
+  background: var(--accent);
+}
+.tl-item.tl-kona .tl-summary {
+  color: var(--text);
+}
+.tl-summary {
+  color: var(--muted);
+}

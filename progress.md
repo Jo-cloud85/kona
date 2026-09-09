@@ -3,9 +3,36 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M18 + M15.1 done.** Next: **M19** — make the feedback loop visible.
+**M14.1–M19 + M15.1 done.** Next: **M20** — goal/race context through Home + chat.
 Founder direction: no visual redesign, don't fabricate insights, stop for a
 product review after M21. See the reset milestone plan below + `PRODUCT_VISION.md`.
+
+### M19 — the feedback loop made visible ✅
+_"I told Kona → Kona remembered → it became relevant → Kona changed a future
+recommendation." The founder called this one of the most important product
+experiences._
+- **`activity_events`** — a typed, append-only stream. New `ActivityEvent`
+  domain type + `repo.appendActivityEvent` / `listActivityEvents`. Types:
+  `plan_saved / plan_updated / session_logged / fuel_logged / recovery_logged /
+  checkin_done / fact_learned / insight_formed / recommendation_adapted`. Each
+  carries a pre-computed human `summary`.
+- `src/agent/activity.ts` — `deriveTurnEvents({ toolResults, knownInsightTexts,
+  insightsAfter })`: action events from the turn's tool results, plus — for any
+  **new** pattern / fact that just crossed its evidence threshold —
+  `insight_formed` ("Kona spotted — …") and, for patterns and fuelling facts,
+  `recommendation_adapted` ("Kona will factor this into your … advice from now
+  on"). Recommendation-kind insights emit nothing (downstream advice). Emitted
+  once per insight (dedup against prior `insight_formed` summaries).
+- `orchestrator.recordTurnActivity()` runs after a turn's tools; `submitCheckin`
+  runs the insight-detection pass too. Best-effort, never throws.
+- Memory tab gains a **"How Kona's been learning"** timeline (newest first) —
+  grey markers for "you did/told", accent markers for the Kona-side steps.
+  `buildKnows` takes `events`, hides plan noise, caps 14.
+- `ARCHITECTURE.md` §6a documents the log as the seam a future XP layer consumes.
+- Tests: +4 (`activity.test.ts`), +1 repo, +1 knows timeline. **136 total**;
+  `tsc` / `eslint` / `next build` clean. Live-tested: logging 3 rides →
+  timeline shows "You logged 60/45/50 km" → "Kona spotted — your last 3 cycling
+  sessions all went to plan" → "Kona will factor this into your training advice".
 
 ### M18 — Home is a daily briefing ✅
 _"I've looked at your day, your history and your goal — here's what you should
@@ -160,7 +187,7 @@ integrations are out of this cycle. **Stop for a product review after M21.**
 - **M16** ✅ Deterministic pattern layer — `deriveInsights()` → `Insight[]` (fact / pattern / hypothesis / recommendation + certainty).
 - **M17** ✅ "What Kona knows about you" view replaces the chart Dashboard — insights with expandable "Why Kona thinks this" evidence, "what you’ve told Kona" (goal + memories), recent training on record; honest empty state.
 - **M18** ✅ Home is a daily briefing — YOUR DAY (prose; numbers only when the session earns them) / ONE THING TO THINK ABOUT (next key session + a real "this worked" pattern line, never fabricated) / KONA REMEMBERS (recurring facts). Day strip + check-in kept; no visual redesign.
-- **M19** Make the feedback loop **visible**: told → remembered → recurred → recommendation changed. Introduce a typed activity/event log (also future-proofs a possible XP layer — see `PRODUCT_VISION.md` "Future direction").
+- **M19** ✅ Feedback loop made **visible** — a typed `activity_events` log + a "How Kona's been learning" timeline on Memory (you logged X → Kona remembered → spotted a pattern → advice adapts). The event log is the seam a future XP layer would consume.
 - **M20** Goal context appears naturally through Home + relevant chat ("Week 6 of 12", "11 weeks until your triathlon") — context for the assistant, not a generic plan app.
 - **M21** Stop prompting for every session up front — only the next 1–2 key ones. Chat should also *initiate* useful context ("Tomorrow's your first 2-hour ride of this block — want to sort fuelling first?").
 

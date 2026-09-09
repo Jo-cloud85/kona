@@ -87,6 +87,17 @@ Suggested tables:
 - personal_memories
 - recommendations
 - subscriptions
+- activity_events
+
+### 6a. Activity log (M19)
+`activity_events` is a typed, append-only stream of meaningful events
+(`session_logged`, `fuel_logged`, `checkin_done`, `fact_learned`,
+`insight_formed`, `recommendation_adapted`, …), each with a pre-computed
+human `summary`. It powers the visible **"how Kona's been learning"** timeline
+(told → remembered → became relevant → advice changed) and is the clean seam a
+future XP/progression layer would consume — see `PRODUCT_VISION.md` "Future
+direction". Emitted from the orchestrator after a turn's tools run
+(`recordTurnActivity`) and from the check-in path.
 
 ## Important design rule
 Never pass the entire user history to the LLM on every message.

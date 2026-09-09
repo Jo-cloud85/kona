@@ -1,12 +1,14 @@
-import type { ActualSession, PersistedMemory, Profile, RecoveryLog } from '../domain/types';
+import type { ActivityEvent, ActualSession, PersistedMemory, Profile, RecoveryLog } from '../domain/types';
 import { deriveInsights, type Insight } from './insights';
 
 /**
  * The "What Kona knows about you" payload — evidence of learning, not a dump of
- * database fields. Three honest strands:
+ * database fields. Four honest strands:
  *   - what Kona has *worked out* (the deterministic insight/pattern layer),
  *   - what the athlete has *told* Kona (goal + durable memories),
- *   - what's *on record* recently (recent sessions + how they felt).
+ *   - what's *on record* recently (recent sessions + how they felt),
+ *   - *how Kona's been learning* — the activity timeline (told → remembered →
+ *     became relevant → advice changed).
  * When there's nothing real to show, `has_anything` is false and the UI shows an
  * honest empty state — never invented content.
  */
@@ -38,12 +40,24 @@ export interface KnowsRecentSession {
   status?: string;
 }
 
+export interface KnowsTimelineEntry {
+  date: string;
+  type: ActivityEvent['type'];
+  summary: string;
+  /** true for Kona-side steps (learned / spotted / adapted), false for "you did/told". */
+  by_kona: boolean;
+}
+
 export interface KnowsView {
   has_anything: boolean;
   insights: Insight[];
   told: KnowsToldLine[];
   recent: KnowsRecentSession[];
+  timeline: KnowsTimelineEntry[];
 }
+
+const KONA_SIDE = new Set<ActivityEvent['type']>(['fact_learned', 'insight_formed', 'recommendation_adapted']);
+const TIMELINE_HIDE = new Set<ActivityEvent['type']>(['plan_saved', 'plan_updated']);
 
 const MEM_LABEL: Record<string, string> = {
   next_race: 'Next race',
@@ -87,6 +101,7 @@ export function buildKnows(input: {
   actualSessions: ActualSession[];
   recoveryLogs: RecoveryLog[];
   fuelLogs: Parameters<typeof deriveInsights>[0]['fuelLogs'];
+  events?: ActivityEvent[];
 }): KnowsView {
   const insights = deriveInsights({
     actualSessions: input.actualSessions,
@@ -104,10 +119,21 @@ export function buildKnows(input: {
 
   const recent = recentSessions(input.actualSessions, input.recoveryLogs);
 
+  const timeline: KnowsTimelineEntry[] = (input.events ?? [])
+    .filter((e) => !TIMELINE_HIDE.has(e.type))
+    .slice(0, 14)
+    .map((e) => ({
+      date: human(e.at),
+      type: e.type,
+      summary: e.summary,
+      by_kona: KONA_SIDE.has(e.type),
+    }));
+
   return {
-    has_anything: insights.length > 0 || told.length > 0 || recent.length > 0,
+    has_anything: insights.length > 0 || told.length > 0 || recent.length > 0 || timeline.length > 0,
     insights,
     told,
     recent,
+    timeline,
   };
 }

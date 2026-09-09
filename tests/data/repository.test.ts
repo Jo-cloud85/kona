@@ -87,6 +87,19 @@ describe('InMemoryRepository', () => {
     expect(rows.find((r) => r.id === 'c-a')).toMatchObject({ title: 'Tomorrow I run 10km', message_count: 2 });
   });
 
+  it('appendActivityEvent / listActivityEvents — newest first, scoped, limited', async () => {
+    let t = Date.UTC(2026, 8, 6, 12, 0, 0);
+    const repo = await createSeededRepository({ now: () => new Date((t += 1000)) });
+    await repo.appendActivityEvent({ user_id: DEMO_USER_ID, type: 'session_logged', summary: 'You logged a 40 km ride' });
+    await repo.appendActivityEvent({ user_id: DEMO_USER_ID, type: 'insight_formed', summary: 'Kona spotted — a pattern' });
+    await repo.appendActivityEvent({ user_id: 'other', type: 'checkin_done', summary: 'not mine' });
+
+    const all = await repo.listActivityEvents(DEMO_USER_ID);
+    expect(all.map((e) => e.type)).toEqual(['insight_formed', 'session_logged']); // newest first
+    expect(all.every((e) => e.id.startsWith('evt_') && e.at)).toBe(true);
+    expect(await repo.listActivityEvents(DEMO_USER_ID, 1)).toHaveLength(1);
+  });
+
   it('deleteMessagesFrom removes a message and everything after it in that conversation only', async () => {
     let t = Date.UTC(2026, 8, 6, 12, 0, 0);
     const repo = await createSeededRepository({ now: () => new Date((t += 1000)) });

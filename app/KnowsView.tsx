@@ -16,6 +16,7 @@ interface KnowsView {
   insights: Insight[];
   told: { label: string; value: string }[];
   recent: { date: string; text: string; felt?: string; status?: string }[];
+  timeline: { date: string; type: string; summary: string; by_kona: boolean }[];
 }
 
 const KIND_LABEL: Record<Insight['kind'], string> = {
@@ -118,6 +119,23 @@ export default function KnowsView() {
                 {r.felt && <span className="recent-felt">“{r.felt}”</span>}
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {data.timeline.length > 0 && (
+        <section className="knows-section">
+          <h2 className="knows-h2">How Kona&apos;s been learning</h2>
+          <div className="home-card">
+            <ol className="tl-list">
+              {data.timeline.map((e, n) => (
+                <li key={n} className={`tl-item${e.by_kona ? ' tl-kona' : ''}`}>
+                  <span className="tl-when">{e.date}</span>
+                  <span className="tl-dot" aria-hidden />
+                  <span className="tl-summary">{e.summary}</span>
+                </li>
+              ))}
+            </ol>
           </div>
         </section>
       )}

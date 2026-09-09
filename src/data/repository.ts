@@ -1,9 +1,11 @@
 import type {
+  ActivityEvent,
   ActualSession,
   ChatMessage,
   ConversationSummary,
   FuelLog,
   MemoryCandidate,
+  NewActivityEvent,
   PersistedMemory,
   PlannedSession,
   Profile,
@@ -104,6 +106,10 @@ export interface Repository {
   deleteMessagesFrom(conversationId: string, messageId: string): Promise<number>;
   /** One summary row per conversation that has messages, newest activity first. */
   listConversations(userId: string): Promise<ConversationSummary[]>;
+
+  appendActivityEvent(input: NewActivityEvent): Promise<ActivityEvent>;
+  /** Newest first. */
+  listActivityEvents(userId: string, limit?: number): Promise<ActivityEvent[]>;
 
   proposeMemory(candidate: MemoryCandidate): Promise<PersistedMemory>;
   listMemories(userId: string): Promise<PersistedMemory[]>;

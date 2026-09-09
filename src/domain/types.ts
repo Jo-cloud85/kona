@@ -247,6 +247,36 @@ export interface PersistedMemory extends MemoryCandidate {
 }
 
 // ---------------------------------------------------------------------------
+// Activity log — a typed stream of meaningful events. Powers the visible
+// "how Kona's been learning" timeline, and is the clean seam a future
+// XP/progression layer would consume (see PRODUCT_VISION "Future direction").
+// ---------------------------------------------------------------------------
+
+export type ActivityEventType =
+  | 'plan_saved'
+  | 'plan_updated'
+  | 'session_logged'
+  | 'fuel_logged'
+  | 'recovery_logged'
+  | 'checkin_done'
+  | 'fact_learned' // a durable memory or profile fact was captured
+  | 'insight_formed' // a pattern/fact crossed the evidence threshold
+  | 'recommendation_adapted'; // Kona will now factor a new insight into future advice
+
+export interface ActivityEvent {
+  id: string;
+  user_id: string;
+  type: ActivityEventType;
+  at: string; // ISO-8601
+  /** One-line, human, ready to show. */
+  summary: string;
+  /** Optional structured payload for later use (drill-down, XP rules). */
+  meta?: Record<string, unknown>;
+}
+
+export type NewActivityEvent = Omit<ActivityEvent, 'id' | 'at'> & { at?: string };
+
+// ---------------------------------------------------------------------------
 // Conversation persistence (ARCHITECTURE.md §6)
 // ---------------------------------------------------------------------------
 

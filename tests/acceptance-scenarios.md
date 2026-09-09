@@ -41,6 +41,8 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AK2 | Honest empty state | With nothing on record, `has_anything` is false and the tab says "Kona's still getting to know you… this page fills in as it learns" — no fabricated content. | ✅ `tests/agent/knows.test.ts` |
 | AK3 | Non-diagnostic | A recurring body-part FACT shows its quoted evidence and a "(felt significant)" tag; the footer states Kona doesn't diagnose. | ✅ `tests/agent/insights.test.ts` + manual |
 | AK4 | Visual restraint | Reuses the existing dark card aesthetic — no charts, no redesign. | manual (browser, light + dark) |
+| AK5 | Feedback loop visible (M19) | A **"How Kona's been learning"** timeline: "You logged …" / "You told …" entries, then Kona-side steps — "Kona remembered: …", "Kona spotted — <pattern/fact>", "Kona will factor this into your … advice". Newest first; plan noise hidden. | ✅ `tests/agent/activity.test.ts`, `tests/agent/knows.test.ts` + manual |
+| AK6 | Loop events fire once | `insight_formed` / `recommendation_adapted` are recorded the turn an observation crosses its threshold, and not again on later turns. `activity_events` is append-only and typed (future XP seam). | ✅ `tests/agent/activity.test.ts`, `tests/data/repository.test.ts` |
 
 ## A-home. Home tab (M12 → **daily briefing** in M18)
 

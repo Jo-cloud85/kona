@@ -1,9 +1,11 @@
 import type {
+  ActivityEvent,
   ActualSession,
   ChatMessage,
   ConversationSummary,
   FuelLog,
   MemoryCandidate,
+  NewActivityEvent,
   PersistedMemory,
   PlannedSession,
   Profile,
@@ -36,6 +38,7 @@ export class InMemoryRepository implements Repository {
   private messages: ChatMessage[] = [];
   private memories: PersistedMemory[] = [];
   private weeklyPlans: WeeklyPlan[] = [];
+  private activity: ActivityEvent[] = [];
   private readonly now: () => Date;
 
   constructor(opts: InMemoryRepositoryOptions = {}) {
@@ -229,6 +232,19 @@ export class InMemoryRepository implements Repository {
       });
     }
     return rows.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  }
+
+  async appendActivityEvent(input: NewActivityEvent): Promise<ActivityEvent> {
+    const event: ActivityEvent = { ...input, id: newId('evt'), at: input.at ?? this.iso() };
+    this.activity.push(event);
+    return event;
+  }
+
+  async listActivityEvents(userId: string, limit?: number): Promise<ActivityEvent[]> {
+    const rows = this.activity
+      .filter((e) => e.user_id === userId)
+      .sort((a, b) => b.at.localeCompare(a.at));
+    return limit ? rows.slice(0, limit) : rows;
   }
 
   async proposeMemory(candidate: MemoryCandidate): Promise<PersistedMemory> {

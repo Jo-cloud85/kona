@@ -1,8 +1,35 @@
 import type { Repository } from '../data/repository';
+import { deriveTurnEvents } from './activity';
 import { buildContext } from './context';
+import { deriveInsights } from './insights';
 import type { LlmClient, ToolResult } from './llm-client';
 import { safetyMessage, screenForEscalation, type SafetyScreen } from './safety';
 import { runTool, TOOL_SCHEMAS } from './tools';
+
+/** Record activity events for a completed turn — action events + any insight
+ *  that just crossed its evidence threshold. Best-effort; never throws.
+ *  Pass toolResults `[]` to only run the insight-detection pass (e.g. a check-in). */
+export async function recordTurnActivity(repo: Repository, userId: string, toolResults: ToolResult[]): Promise<void> {
+  try {
+    const [actualSessions, recoveryLogs, fuelLogs, memories, priorEvents] = await Promise.all([
+      repo.listActualSessions(userId),
+      repo.listRecoveryLogs(userId),
+      repo.listFuelLogs(userId),
+      repo.listMemories(userId),
+      repo.listActivityEvents(userId),
+    ]);
+    const insightsAfter = deriveInsights({ actualSessions, recoveryLogs, fuelLogs, memories });
+    const knownInsightTexts = new Set(
+      priorEvents
+        .filter((e) => e.type === 'insight_formed')
+        .map((e) => e.summary.replace(/^Kona spotted — /, '')),
+    );
+    const events = deriveTurnEvents({ userId, toolResults, knownInsightTexts, insightsAfter });
+    for (const e of events) await repo.appendActivityEvent(e);
+  } catch {
+    /* activity logging is non-critical */
+  }
+}
 
 export interface AgentDeps {
   repo: Repository;
@@ -140,6 +167,8 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
     role: 'assistant',
     content: reply,
   });
+
+  await recordTurnActivity(repo, input.userId, results);
 
   return {
     reply,

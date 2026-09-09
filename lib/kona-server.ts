@@ -12,6 +12,7 @@ import {
   checkinReflection,
   deriveInsights,
   handleMessage,
+  recordTurnActivity,
   screenForEscalation,
   type AgentDeps,
   type AgentTurn,
@@ -143,13 +144,14 @@ export async function getKnows(): Promise<KnowsView | null> {
   const repo = getRepo();
   const profile = await repo.getProfile(DEMO_USER_ID);
   if (!profile?.onboarded_at) return null;
-  const [memories, actualSessions, recoveryLogs, fuelLogs] = await Promise.all([
+  const [memories, actualSessions, recoveryLogs, fuelLogs, events] = await Promise.all([
     repo.listMemories(DEMO_USER_ID),
     repo.listActualSessions(DEMO_USER_ID),
     repo.listRecoveryLogs(DEMO_USER_ID),
     repo.listFuelLogs(DEMO_USER_ID),
+    repo.listActivityEvents(DEMO_USER_ID, 40),
   ]);
-  return buildKnows({ profile, memories, actualSessions, recoveryLogs, fuelLogs });
+  return buildKnows({ profile, memories, actualSessions, recoveryLogs, fuelLogs, events });
 }
 
 export async function getHome(selectedDate?: string): Promise<HomeView | null> {
@@ -199,6 +201,8 @@ export async function submitCheckin(input: CheckinInput): Promise<CheckinResult 
     overall_severity: log.overall_severity,
     reported_symptoms: log.reported_symptoms,
   });
+  await repo.appendActivityEvent({ user_id: DEMO_USER_ID, type: 'checkin_done', summary: 'You did an end-of-day check-in' });
+  await recordTurnActivity(repo, DEMO_USER_ID, []); // insight-detection pass only
   return { ok: true, escalated: screen.escalate, reflection: checkinReflection(input, screen) };
 }
 
