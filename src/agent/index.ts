@@ -29,7 +29,7 @@ export {
   type HomeBriefing,
 } from './home';
 export { buildCheckinLog, checkinReflection, type CheckinInput, type CheckinLog } from './checkin';
-export { deriveInsights, type Insight, type InsightKind, type InsightInput } from './insights';
+export { deriveInsights, type Insight, type InsightKind, type InsightBasis, type InsightInput } from './insights';
 export {
   buildKnows,
   type KnowsView,

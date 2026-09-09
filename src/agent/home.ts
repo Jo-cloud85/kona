@@ -346,10 +346,16 @@ function buildNextKey(opts: {
     line = 'The hard one this week. Normal meals; make sure the meal afterwards has protein.';
   }
 
-  // "This worked before" — only from a real pattern, never fabricated.
+  // "This worked before" — only from a pattern that is actually outcome-backed
+  // (never from a frequency count, and never from a low-certainty / mixed /
+  // condition-dependent read). Never fabricated.
   const sports = new Set(planned.map((s) => s.sport as string));
   const pattern = opts.insights.find(
-    (i) => i.kind === 'pattern' && [...sports].some((sp) => i.text.toLowerCase().includes(sp)),
+    (i) =>
+      i.kind === 'pattern' &&
+      i.basis === 'outcome' &&
+      i.certainty !== 'low' &&
+      [...sports].some((sp) => i.text.toLowerCase().includes(sp)),
   );
   const staple = opts.insights.find((i) => i.kind === 'fact' && i.topic === 'fuelling' && /staple/i.test(i.text));
   if (pattern && !opts.usedTexts.has(pattern.text)) {

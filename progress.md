@@ -3,9 +3,53 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M21 + M15.1 done.** → **STOP for the founder product review** before any further milestones.
+**M14.1–M22 + M15.1 done.** → **STOP for the founder product review** before any further milestones (persistence included).
 Founder direction: no visual redesign, don't fabricate insights, stop for a
 product review after M21. See the reset milestone plan below + `PRODUCT_VISION.md`.
+
+### M22 — Product Truth Audit ✅
+_Strengthen the line between what the athlete **reported**, what Kona has seen
+**repeated**, what Kona has learned from **outcomes**, and what Kona has actually
+**adapted**. No new UI, no persistence._
+- **`Insight.basis`** (`reported` / `repeated` / `outcome` / `adaptation`) added
+  alongside `kind`. Every detector sets it; it's in the chat context and drives
+  `COMPOSE_SYSTEM`. Documented in `insights.ts`, `ARCHITECTURE.md` §5a,
+  `CALCULATION_ENGINE_SPEC.md` §6.5, `PRODUCT_VISION.md`.
+- **`workingSetup` removed.** It fired a "your routine is working — keep it"
+  recommendation from **frequency alone** (≥3 completed, same sport). Replaced by
+  `sportReads`, which for a per-sport window emits at most:
+  - a **frequency fact** (`basis: 'repeated'`) — "completed your last N as
+    planned". A count. Never "it works".
+  - then exactly one outcome read, only when there's a real result signal
+    (session status + same-session/day recovery note):
+    · **working setup** (`outcome` pattern + recommendation) — every recent one
+      completed, ≥2⁄3 felt good, none went badly.
+    · **condition-dependent** (`outcome` pattern, low certainty) — good vs bad
+      split cleanly on one variable (fed/fasted · time of day · heat); names the
+      condition, asserts no cause, gives no "keep it".
+    · **repeated trouble** (`outcome` fact, high) — window dominated by flagged
+      bad sessions (≥2, ≤1 ok); non-diagnostic, no blame, no recommendation.
+    · **mixed / inconclusive** (`outcome` fact, low) — good and bad, no clean
+      reason → "not enough to change anything on"; **no recommendation**.
+  - `unprovenSetup` — one session with an outcome note → "once so far — not
+    enough" (`repeated`, low). Resists over-reading a single data point.
+- **`recommendation_adapted` is now evidence-based.** The old code emitted it the
+  instant an insight formed ("Kona will factor this in from now on") — a promise.
+  Now: a new outcome recommendation is recorded as `insight_formed` ("Kona's
+  take — …"); `recommendation_adapted` fires only on a **later** turn where that
+  recommendation was already on file **and** the turn actually produced advice
+  (fuelling calc / week plan). Once per insight. Never for a pattern/fact.
+  `orchestrator` passes `adviceProducedThisTurn` + `alreadyAdaptedFrom`.
+- `home.ts` `buildNextKey` now only borrows a pattern that is `basis: 'outcome'`
+  and not low-certainty — never the bare frequency line, never the mixed read.
+- Tests: new `tests/agent/product-truth.test.ts` (11) — successful repetition
+  (with/without outcome), repeated failure, conflicting evidence, unproven
+  setup, condition split (fed/fasted + heat), and real recommendation
+  adaptation. `insights` / `activity` / `home` / `knows` tests updated to the
+  honest shapes. **165 total**; `tsc` / `eslint` / `next build` clean.
+  Live-checked against the real model: given 2-of-4 "hit the wall" on an
+  identical route it declined a "your fuelling works, keep it" verdict, named
+  other possible variables without asserting a cause, and asked to log more.
 
 ### M21 — stop demanding every detail up front + a chat that opens with context ✅
 _A companion doesn't hand you a form. It chases the 1–2 things that matter now
@@ -255,8 +299,9 @@ integrations are out of this cycle. **Stop for a product review after M21.**
 - **M19** ✅ Feedback loop made **visible** — a typed `activity_events` log + a "How Kona's been learning" timeline on Memory (you logged X → Kona remembered → spotted a pattern → advice adapts). The event log is the seam a future XP layer would consume.
 - **M20** ✅ Goal context surfaces naturally — a slim "N weeks to your <goal>" line on Home; `goalContext()` computes weeks/days-until from a parsed or stated `event_date`; the chat model gets `weeks_until` and a nudge to weave timing in without acting like a periodised plan; `save_profile_fact` can set/update the goal + date from chat.
 - **M21** ✅ Stop prompting for every session up front — the engine flags only the next 1–2 key sessions `in_focus` (key days first, then soonest), the composer + real model chase just those and say the rest can wait, and the chat opener leads with the nearest notable upcoming session instead of a generic greeting.
+- **M22** ✅ Product Truth Audit — `Insight.basis` (reported / repeated / outcome / adaptation); frequency no longer implies effectiveness (`workingSetup` removed → `sportReads`: frequency fact, then one honest outcome read — working / condition-dependent / repeated-trouble / mixed-inconclusive); `unprovenSetup` for a single data point; `recommendation_adapted` fires only once a *later* turn's advice actually used an earlier recommendation. No UI change, no persistence.
 
-**→ M14.1–M21 complete. STOP HERE for the founder product review before starting anything new.**
+**→ M14.1–M22 complete. STOP HERE for the founder product review before starting anything new (persistence included).**
 
 ## Completed work
 
@@ -573,3 +618,12 @@ M21 follow-ups worth a mention: the real model's prose can name a third key
 session the button prompts don't (`FOCUS_PROMPT_LIMIT` = 2) — harmless but worth
 a decision; the contextual opener says "your cycling" with no descriptor when the
 session is still undetailed.
+
+M22 deliberate deferrals: `offPlanRun` (cross-sport, status-only) and the new
+sport-scoped `repeated-trouble` read can both fire for a single-sport history —
+two honest but overlapping "things went wrong" facts; left as-is rather than
+adding suppression coupling. Condition detection covers fed/fasted · time of day
+· a coarse heat flag (temp ≥ 24 °C or humidity ≥ 70 %); richer environment
+splits (sleep, terrain, pacing) are out of scope. The deterministic chat client
+tends to log past sessions as `modified`, so the outcome reads are best
+exercised through the real model or seeded history (the unit tests seed directly).

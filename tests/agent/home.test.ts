@@ -122,10 +122,22 @@ describe('buildHome', () => {
     expect(h.briefing.your_day.line).toMatch(/sort it in chat/i);
   });
 
-  it('ONE THING TO THINK ABOUT: points at the next key day and folds in a real pattern', () => {
-    // Thu 2026-09-10 is a long ride; three prior easy rides establish a pattern.
-    const priorRides = ['2026-08-30', '2026-09-03', '2026-09-06'].map((d) =>
-      actual({ sport: 'cycling', start_at: `${d}T07:00:00`, distance_km: 40 }),
+  it('ONE THING TO THINK ABOUT: points at the next key day and folds in a real outcome-backed pattern', () => {
+    // Thu 2026-09-10 is a long ride; three prior rides that ALL completed and
+    // felt good — an outcome-backed working setup, not just three repetitions.
+    const dates = ['2026-08-30', '2026-09-03', '2026-09-06'];
+    const priorRides = dates.map((d) =>
+      actual({ sport: 'cycling', start_at: `${d}T07:00:00`, distance_km: 40, status: 'completed' }),
+    );
+    const feltGood = dates.map(
+      (d, i) =>
+        ({
+          id: `rg${i}`,
+          user_id: 'u',
+          logged_at: `${d}T20:00:00Z`,
+          free_text: 'felt strong, no issues',
+          overall_severity: 'none',
+        }) as RecoveryLog,
     );
     const h = buildHome({
       profile,
@@ -133,13 +145,15 @@ describe('buildHome', () => {
       sessions: [session({ start_at: '2026-09-10T07:00:00', sport: 'cycling', distance_km: 90, is_long: true })],
       now: NOW,
       actualSessions: priorRides,
+      recoveryLogs: feltGood,
     });
     const nk = h.briefing.next_key;
     expect(nk).not.toBeNull();
     expect(nk!.when).toBe('Tomorrow');
     expect(nk!.headline.toLowerCase()).toContain('long');
     expect(nk!.line).toMatch(/big fuelling day/i);
-    expect(nk!.line).toMatch(/last 3 cycling sessions all went to plan/i); // the real pattern
+    expect(nk!.line).toMatch(/cycling sessions have been going well/i); // the outcome-backed pattern
+    expect(nk!.line).not.toMatch(/all went to plan/i); // not the bare frequency line
   });
 
   it('ONE THING TO THINK ABOUT is null when nothing notable is coming up', () => {
@@ -170,8 +184,13 @@ describe('buildHome', () => {
   });
 
   it('does not repeat the same pattern in ONE THING and KONA REMEMBERS', () => {
-    const priorRuns = ['2026-08-30', '2026-09-03', '2026-09-06'].map((d) =>
-      actual({ sport: 'running', start_at: `${d}T07:00:00`, distance_km: 8 }),
+    const dates = ['2026-08-30', '2026-09-03', '2026-09-06'];
+    const priorRuns = dates.map((d) =>
+      actual({ sport: 'running', start_at: `${d}T07:00:00`, distance_km: 8, status: 'completed' }),
+    );
+    const feltGood = dates.map(
+      (d, i) =>
+        ({ id: `rr${i}`, user_id: 'u', logged_at: `${d}T20:00:00Z`, free_text: 'went well', overall_severity: 'low' }) as RecoveryLog,
     );
     const h = buildHome({
       profile,
@@ -179,9 +198,10 @@ describe('buildHome', () => {
       sessions: [session({ start_at: '2026-09-10T07:00:00', distance_km: 20, is_long: true })],
       now: NOW,
       actualSessions: priorRuns,
+      recoveryLogs: feltGood,
     });
     const inNext = h.briefing.next_key?.line ?? '';
-    const patternText = 'Your last 3 running sessions all went to plan';
+    const patternText = 'running sessions have been going well';
     expect(inNext).toContain(patternText);
     expect(h.briefing.remembers.some((t) => t.includes(patternText))).toBe(false);
   });

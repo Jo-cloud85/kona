@@ -74,6 +74,24 @@ Stores durable facts such as:
 
 Do not store every conversation detail as a permanent memory.
 
+#### 5a. Pattern layer — product-truth discipline (M22)
+`src/agent/insights.ts` derives observations from history. Every `Insight`
+carries a `kind` (fact / pattern / hypothesis / recommendation) **and** a
+`basis` that must not be blurred:
+- `reported` — the athlete literally said it.
+- `repeated` — it happened N times. **Frequency only** — never proof a setup
+  works. "You've done this 3 times" is a count, not effectiveness.
+- `outcome` — repetition **plus** a consistent good/bad result signal
+  (completed as planned AND felt good / no GI / no bonk, or the mirror image).
+  Only `outcome` may call a setup "working" or "repeatedly having problems",
+  and even then asserts no cause.
+- `adaptation` — reserved; produced by the activity log, not here.
+
+When results are mixed or thin, the honest output is "too early / not enough to
+change anything on" **with no recommendation**. Condition-dependent outcomes are
+only claimed when good vs bad split cleanly on one variable. Full rules:
+`CALCULATION_ENGINE_SPEC.md` §6.5.
+
 ### 6. Database
 Suggested tables:
 - profiles
@@ -98,6 +116,14 @@ human `summary`. It powers the visible **"how Kona's been learning"** timeline
 future XP/progression layer would consume — see `PRODUCT_VISION.md` "Future
 direction". Emitted from the orchestrator after a turn's tools run
 (`recordTurnActivity`) and from the check-in path.
+
+**`recommendation_adapted` is evidence-based (M22).** It is *not* a
+forward-looking promise. It fires only when (a) a standing `recommendation`
+insight with `basis: 'outcome'` was already on file from an **earlier** turn,
+and (b) *this* turn actually produced a piece of advice (a fuelling calc or a
+week plan). A newly-formed recommendation is recorded as `insight_formed`
+("Kona's take — …") so a later turn can tell it was already known; it does not
+by itself claim any recommendation changed. Once per insight.
 
 ## Important design rule
 Never pass the entire user history to the LLM on every message.

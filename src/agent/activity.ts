@@ -29,8 +29,13 @@ function trimInsight(text: string): string {
 export function deriveTurnEvents(input: {
   userId: string;
   toolResults: ToolResult[];
+  /** Insight texts (pattern/fact/recommendation) Kona had already recorded BEFORE this turn. */
   knownInsightTexts: Set<string>;
   insightsAfter: Insight[];
+  /** This turn produced a fresh piece of advice (a fuelling calc or a week plan). */
+  adviceProducedThisTurn?: boolean;
+  /** Recommendation-insight texts Kona has already reported as `recommendation_adapted`. */
+  alreadyAdaptedFrom?: Set<string>;
 }): NewActivityEvent[] {
   const { userId, toolResults: r } = input;
   const out: NewActivityEvent[] = [];
@@ -93,17 +98,35 @@ export function deriveTurnEvents(input: {
     ev('fact_learned', `Kona noted ${bits.join(' and ') || 'a detail about you'}`);
   }
 
-  // Newly-formed observations — "it became relevant" + "Kona changed future advice".
-  // Only patterns and facts are "spotted"; recommendation-kind insights are
-  // downstream advice, covered by recommendation_adapted below.
+  // The learning chain, kept honest about what has actually happened:
+  //  - a NEW pattern/fact that just crossed its threshold → `insight_formed`
+  //    ("Kona spotted — …"). This is "it became relevant", nothing more.
+  //  - a NEW outcome-based recommendation → `insight_formed` ("Kona's take — …").
+  //    Recorded so a later turn can tell it was already on file — but NOT yet a
+  //    claim that any recommendation changed.
+  //  - `recommendation_adapted` fires ONLY on a LATER turn: the standing
+  //    recommendation insight was already known, and this turn actually produced
+  //    a piece of advice that had it available. Once per insight.
+  const adviceThisTurn = Boolean(input.adviceProducedThisTurn);
+  const alreadyAdapted = input.alreadyAdaptedFrom ?? new Set<string>();
   for (const i of input.insightsAfter) {
-    if (input.knownInsightTexts.has(trimInsight(i.text))) continue;
-    if (i.kind !== 'pattern' && i.kind !== 'fact') continue;
-    ev('insight_formed', `Kona spotted — ${trimInsight(i.text)}`, { kind: i.kind, topic: i.topic });
-    if (i.kind === 'pattern' || i.topic === 'fuelling') {
-      ev('recommendation_adapted', `Kona will factor this into your ${i.topic} advice from now on`, {
-        from: trimInsight(i.text),
-      });
+    const t = trimInsight(i.text);
+    const known = input.knownInsightTexts.has(t);
+
+    if (i.kind === 'pattern' || i.kind === 'fact') {
+      if (!known) ev('insight_formed', `Kona spotted — ${t}`, { kind: i.kind, basis: i.basis, topic: i.topic });
+      continue;
+    }
+
+    if (i.kind === 'recommendation' && i.basis === 'outcome') {
+      if (!known) {
+        ev('insight_formed', `Kona's take — ${t}`, { kind: 'recommendation', basis: i.basis, topic: i.topic });
+      } else if (adviceThisTurn && !alreadyAdapted.has(t)) {
+        ev('recommendation_adapted', `Kona applied what it's learned to today's ${i.topic} advice — ${t}`, {
+          from: t,
+          topic: i.topic,
+        });
+      }
     }
   }
 

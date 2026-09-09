@@ -38,21 +38,21 @@ describe('deriveInsights', () => {
     ).toEqual([]); // only 2 sessions — below the 3 threshold
   });
 
-  it('PATTERN + RECOMMENDATION when a per-sport routine keeps going to plan', () => {
+  it('three completions with NO outcome signal is a frequency fact only — not "it works"', () => {
     const sessions = ['2026-09-01', '2026-09-04', '2026-09-08'].map((d) =>
       actual({ sport: 'running', start_at: `${d}T06:00:00`, status: 'completed' }),
     );
     const out = deriveInsights({ ...EMPTY, actualSessions: sessions });
-    const pattern = out.find((i) => i.kind === 'pattern');
-    const rec = out.find((i) => i.kind === 'recommendation');
-    expect(pattern?.text).toMatch(/last 3 running sessions all went to plan/i);
-    expect(pattern?.certainty).toBe('moderate');
-    expect(pattern?.evidence).toHaveLength(3); // one line per session
-    expect(pattern?.evidence[0]).toMatch(/running/);
-    expect(rec?.text).toMatch(/keep it rather than change/i);
+    const freq = out.find((i) => i.kind === 'fact' && /completed your last 3 running sessions as planned/i.test(i.text));
+    expect(freq?.basis).toBe('repeated');
+    expect(freq?.certainty).toBe('high');
+    // frequency alone must NOT produce a pattern or a "keep it" recommendation
+    expect(out.some((i) => i.kind === 'pattern')).toBe(false);
+    expect(out.some((i) => i.kind === 'recommendation')).toBe(false);
+    expect(out.some((i) => /working|keep it/i.test(i.text))).toBe(false);
   });
 
-  it('strengthens the pattern when recovery on those days was positive', () => {
+  it('becomes an outcome-backed working setup only when recovery on those days was positive', () => {
     const sessions = ['2026-09-01', '2026-09-04', '2026-09-08'].map((d) =>
       actual({ sport: 'running', start_at: `${d}T06:00:00` }),
     );
@@ -60,7 +60,13 @@ describe('deriveInsights', () => {
       recovery({ logged_at: `${d}T20:00:00Z`, free_text: 'legs felt great', overall_severity: 'none' }),
     );
     const out = deriveInsights({ ...EMPTY, actualSessions: sessions, recoveryLogs: recs });
-    expect(out.find((i) => i.kind === 'pattern')?.text).toMatch(/felt good after them/i);
+    const pattern = out.find((i) => i.kind === 'pattern');
+    const rec = out.find((i) => i.kind === 'recommendation');
+    expect(pattern?.basis).toBe('outcome');
+    expect(pattern?.text).toMatch(/going well/i);
+    expect(pattern?.text).toMatch(/felt good afterwards \(3 of 3\)/i);
+    expect(rec?.basis).toBe('outcome');
+    expect(rec?.text).toMatch(/looks like it's working/i);
   });
 
   it('FACT for a body part mentioned more than once — non-diagnostic', () => {

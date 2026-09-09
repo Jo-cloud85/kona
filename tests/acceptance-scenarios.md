@@ -95,10 +95,24 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | # | Scenario | Expected behaviour | Coverage |
 |---|----------|--------------------|----------|
 | AI1 | Deterministic, not invented | `deriveInsights()` computes observations from history in code; each is labelled **fact / pattern / hypothesis / recommendation** with a certainty and an evidence count. | ✅ `tests/agent/insights.test.ts` |
-| AI2 | Conservative | Nothing is emitted below the thresholds (a routine needs ≥3 same-sport completed sessions; a recurring symptom ≥2 mentions; an off-plan run ≥3 of ≤6; a staple fuel item ≥3 logs). Empty history → `[]`. | ✅ `tests/agent/insights.test.ts` |
+| AI2 | Conservative | Nothing is emitted below the thresholds (a frequency fact needs ≥3 same-sport completed sessions; an *outcome* read needs ≥3 with result signals — see **A-truth**; a recurring symptom ≥2 mentions; an off-plan run ≥3 of ≤6; a staple fuel item ≥3 logs). Empty history → `[]`. | ✅ `tests/agent/insights.test.ts` |
 | AI3 | Non-diagnostic | A recurring body-part mention is a FACT ("noted calf 2 times… Kona doesn't diagnose"); a moderate+ mention adds a gentle "get it assessed" recommendation. No cause is ever asserted. | ✅ `tests/agent/insights.test.ts` + manual (live model) |
-| AI4 | Model leans on them | Insights are in the chat context (`kind` + `text`); the reply references them keeping the tag's meaning (a "pattern" is not upgraded to certainty). | manual (live model) + `COMPOSE_SYSTEM` |
+| AI4 | Model leans on them | Insights are in the chat context (`kind` + `basis` + `text`); the reply references them keeping the tag's meaning (a "pattern" is not upgraded to certainty). | manual (live model) + `COMPOSE_SYSTEM` |
 | AI5 | `GET /api/insights` | Returns the current `Insight[]` for the demo user (feeds the M17 "What Kona knows" view). | manual + `getInsights()` |
+
+## A-truth. Product Truth Audit — reported vs repeated vs learned vs adapted (M22)
+
+Every `Insight` carries a `basis`: `reported` (they said it) · `repeated` (frequency only) · `outcome` (repetition + a result) · `adaptation` (activity-log only). Conservative, no-diagnosis philosophy preserved.
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AT-R1 | Successful repetition | 3 completed same-sport sessions with **no** outcome signal → a `repeated` **fact** only ("completed your last 3 as planned"). **No** pattern, **no** "it's working", **no** "keep it". | ✅ `tests/agent/product-truth.test.ts`, `tests/agent/insights.test.ts` |
+| AT-R2 | Successful repetition, earned | 3 completed **and** most felt good **and** none went badly → an `outcome` **pattern** ("going well… felt good afterwards (N of N)") + an `outcome` **recommendation** ("looks like it's working — keep it steady"). | ✅ `tests/agent/product-truth.test.ts` |
+| AT-F1 | Repeated failure | A window dominated by sessions the athlete flagged as bad (≥2, ≤1 ok) → an `outcome` **fact** ("repeatedly run into problems you flagged — N of M; Kona doesn't diagnose"). No blame, no cause, **no** "keep it" recommendation. | ✅ `tests/agent/product-truth.test.ts` |
+| AT-C1 | Conflicting evidence | Both good and bad in the window, no clean explanatory variable → a low-certainty `outcome` **fact** ("results have been mixed… not enough to change anything on"). **No recommendation.** | ✅ `tests/agent/product-truth.test.ts` |
+| AT-U1 | New / unproven setup | A single session with an outcome note → a low-certainty `repeated` **fact** ("once so far — one session isn't enough…"). Never a working-setup pattern or recommendation. | ✅ `tests/agent/product-truth.test.ts` |
+| AT-K1 | Different outcomes by conditions | Good vs bad split cleanly on one variable (fed/fasted, time of day, heat) → a low-certainty `outcome` **pattern** naming the condition ("the bad ones were all done fasted… Kona isn't pinning down a cause"). **No** "keep it" recommendation, **no** causal claim. | ✅ `tests/agent/product-truth.test.ts` |
+| AT-A1 | Actual recommendation adaptation | A new `outcome` recommendation → `insight_formed` ("Kona's take — …") only. `recommendation_adapted` fires **only** on a later turn where the recommendation was already known **and** the turn produced advice (fuelling calc / week plan); once per insight; never for a pattern/fact; never as a promise. | ✅ `tests/agent/product-truth.test.ts`, `tests/agent/activity.test.ts` |
 
 ## A-goal. Goal / race context (M20)
 

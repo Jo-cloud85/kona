@@ -6,7 +6,8 @@ import type { InMemoryRepository } from '../../src/data/in-memory-repository';
 
 const pattern: Insight = {
   kind: 'pattern',
-  text: 'Your last 3 running sessions all went to plan.',
+  basis: 'outcome',
+  text: 'Your cycling sessions have been going well — completed as planned, and you have felt good afterwards (3 of 3).',
   certainty: 'moderate',
   evidence_count: 3,
   topic: 'training',
@@ -14,10 +15,20 @@ const pattern: Insight = {
 };
 const staple: Insight = {
   kind: 'fact',
+  basis: 'repeated',
   text: 'You have logged sis gel 3 times.',
   certainty: 'moderate',
   evidence_count: 3,
   topic: 'fuelling',
+  evidence: [],
+};
+const recommendation: Insight = {
+  kind: 'recommendation',
+  basis: 'outcome',
+  text: "What you're doing for cycling looks like it's working — worth keeping it steady rather than changing several things at once.",
+  certainty: 'moderate',
+  evidence_count: 3,
+  topic: 'training',
   evidence: [],
 };
 
@@ -37,17 +48,63 @@ describe('deriveTurnEvents', () => {
     expect(events[1]!.summary).toMatch(/porridge, 2 SIS gels/);
   });
 
-  it('emits insight_formed + recommendation_adapted for a NEW pattern or fuelling fact', () => {
+  it('spots a NEW pattern/fact but does NOT claim any recommendation was adapted', () => {
     const events = deriveTurnEvents({
       userId: 'u',
       toolResults: [{ tool: 'save_recovery', ok: true }],
       knownInsightTexts: new Set(),
       insightsAfter: [pattern, staple],
+      adviceProducedThisTurn: true, // even so — nothing here is a recommendation
     });
-    const types = events.map((e) => e.type);
-    expect(types.filter((t) => t === 'insight_formed')).toHaveLength(2);
-    expect(types.filter((t) => t === 'recommendation_adapted')).toHaveLength(2);
+    expect(events.map((e) => e.type)).toEqual(['recovery_logged', 'insight_formed', 'insight_formed']);
+    expect(events.every((e) => e.type !== 'recommendation_adapted')).toBe(true);
     expect(events.find((e) => e.type === 'insight_formed')!.summary).toMatch(/^Kona spotted — /);
+  });
+
+  it('recommendation_adapted fires only on a LATER turn whose advice used a known recommendation, once', () => {
+    // turn A: the outcome-based recommendation is brand new → recorded as "Kona's take", not adapted
+    const a = deriveTurnEvents({
+      userId: 'u',
+      toolResults: [{ tool: 'calculate_fueling_targets', ok: true }],
+      knownInsightTexts: new Set(),
+      insightsAfter: [recommendation],
+      adviceProducedThisTurn: true,
+    });
+    expect(a.map((e) => e.type)).toEqual(['insight_formed']);
+    expect(a[0]!.summary).toMatch(/^Kona's take — /);
+
+    // turn B: recommendation is now known AND this turn produced advice → adapted, once
+    const known = new Set([recommendation.text]);
+    const b = deriveTurnEvents({
+      userId: 'u',
+      toolResults: [{ tool: 'calculate_fueling_targets', ok: true }],
+      knownInsightTexts: known,
+      insightsAfter: [recommendation],
+      adviceProducedThisTurn: true,
+    });
+    expect(b.map((e) => e.type)).toEqual(['recommendation_adapted']);
+    expect(b[0]!.summary).toMatch(/applied what it's learned to today's training advice/i);
+
+    // turn C: already reported as adapted → silent
+    const c = deriveTurnEvents({
+      userId: 'u',
+      toolResults: [{ tool: 'calculate_fueling_targets', ok: true }],
+      knownInsightTexts: known,
+      insightsAfter: [recommendation],
+      adviceProducedThisTurn: true,
+      alreadyAdaptedFrom: new Set([recommendation.text]),
+    });
+    expect(c.some((e) => e.type === 'recommendation_adapted')).toBe(false);
+
+    // turn D: recommendation known but NO advice produced this turn → nothing to adapt
+    const d = deriveTurnEvents({
+      userId: 'u',
+      toolResults: [{ tool: 'save_recovery', ok: true }],
+      knownInsightTexts: known,
+      insightsAfter: [recommendation],
+      adviceProducedThisTurn: false,
+    });
+    expect(d.some((e) => e.type === 'recommendation_adapted')).toBe(false);
   });
 
   it('does not re-emit an insight Kona already recorded', () => {
@@ -69,9 +126,10 @@ describe('activity loop through handleMessage', () => {
   beforeEach(async () => {
     repo = await createSeededRepository({ now: () => NOW });
     deps = { repo, llm: new DeterministicLlmClient() };
-    // three completed rides already on record
+    // three completed rides, each with a same-day "felt good" note — a genuine
+    // outcome-backed run, not just three repetitions.
     for (const d of ['2026-09-04', '2026-09-07', '2026-09-10']) {
-      await repo.saveActualSession({
+      const s = await repo.saveActualSession({
         user_id: DEMO_USER_ID,
         sport: 'cycling',
         intensity: 'easy',
@@ -79,27 +137,37 @@ describe('activity loop through handleMessage', () => {
         distance_km: 40,
         status: 'completed',
       });
+      await repo.saveRecoveryLog({
+        user_id: DEMO_USER_ID,
+        session_id: s.id,
+        free_text: 'legs felt great, no issues',
+        overall_severity: 'none',
+      });
     }
   });
   const say = (message: string) =>
     handleMessage(deps, { userId: DEMO_USER_ID, conversationId: 'c', message, now: NOW });
 
-  it('records the loop: a pattern forms → advice adapts, and only once', async () => {
-    // a turn that fires a tool triggers the insight-detection pass
+  it('records the loop: spotted → later advice actually applies it, and only once', async () => {
+    // turn 1 — a recovery note. The outcome pattern + Kona's take get recorded,
+    // but nothing is "adapted" yet (no advice this turn).
     await say('My legs feel good after that ride.');
+    let events = await repo.listActivityEvents(DEMO_USER_ID);
+    expect(events.map((e) => e.type)).toContain('insight_formed');
+    expect(events.some((e) => e.type === 'recommendation_adapted')).toBe(false);
+    expect(events.find((e) => /^Kona's take — /.test(e.summary))?.summary).toMatch(/looks like it's working/i);
 
-    const events = await repo.listActivityEvents(DEMO_USER_ID);
-    const types = events.map((e) => e.type);
-    expect(types).toContain('recovery_logged');
-    expect(types).toContain('insight_formed');
-    expect(types).toContain('recommendation_adapted');
-    expect(events.find((e) => e.type === 'insight_formed')!.summary).toMatch(
-      /^Kona spotted — Your last 3 cycling sessions all went to plan/,
-    );
+    // turn 2 — planning a ride produces a fuelling calc; the standing
+    // recommendation is now on file, so this is where advice actually adapts.
+    await say("Tomorrow I'm doing a 35km ride at 7am.");
+    events = await repo.listActivityEvents(DEMO_USER_ID);
+    const adapted = events.filter((e) => e.type === 'recommendation_adapted');
+    expect(adapted).toHaveLength(1);
+    expect(adapted[0]!.summary).toMatch(/applied what it's learned/i);
 
-    const formedBefore = events.filter((e) => e.type === 'insight_formed').length;
-    await say('My legs still feel fine today.');
-    const formedAfter = (await repo.listActivityEvents(DEMO_USER_ID)).filter((e) => e.type === 'insight_formed').length;
-    expect(formedAfter).toBe(formedBefore); // the same pattern is not recorded again
+    // turn 3 — another planning turn does not re-fire it.
+    await say("Actually make tomorrow a 40km ride at 7am.");
+    const adaptedAfter = (await repo.listActivityEvents(DEMO_USER_ID)).filter((e) => e.type === 'recommendation_adapted');
+    expect(adaptedAfter).toHaveLength(1);
   });
 });

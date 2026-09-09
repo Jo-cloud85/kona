@@ -87,11 +87,20 @@ describe('buildKnows', () => {
   });
 
   it('includes computed insights when the history supports them', () => {
-    const sessions = ['2026-09-01', '2026-09-04', '2026-09-08'].map((d) =>
-      actual({ start_at: `${d}T07:00:00`, distance_km: 7 }),
+    const dates = ['2026-09-01', '2026-09-04', '2026-09-08'];
+    const sessions = dates.map((d) => actual({ start_at: `${d}T07:00:00`, distance_km: 7 }));
+
+    // frequency alone → a "repeated" fact, no pattern / recommendation
+    const freqOnly = buildKnows({ profile, memories: [], actualSessions: sessions, recoveryLogs: [], fuelLogs: [] });
+    expect(freqOnly.insights.some((i) => i.kind === 'fact' && i.basis === 'repeated')).toBe(true);
+    expect(freqOnly.insights.some((i) => i.kind === 'pattern')).toBe(false);
+
+    // add positive outcomes → an outcome-backed pattern appears
+    const recoveryLogs = dates.map(
+      (d, i) => ({ id: `rk${i}`, user_id: 'u', logged_at: `${d}T20:00:00Z`, free_text: 'felt great' }) as RecoveryLog,
     );
-    const k = buildKnows({ profile, memories: [], actualSessions: sessions, recoveryLogs: [], fuelLogs: [] });
-    expect(k.insights.some((i) => i.kind === 'pattern')).toBe(true);
+    const withOutcome = buildKnows({ profile, memories: [], actualSessions: sessions, recoveryLogs, fuelLogs: [] });
+    expect(withOutcome.insights.some((i) => i.kind === 'pattern' && i.basis === 'outcome')).toBe(true);
   });
 
   it('renders the activity timeline (newest first), hiding plan noise, tagging Kona-side steps', () => {

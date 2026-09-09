@@ -281,6 +281,37 @@ Example:
 
 > “Your last three severe calf-cramp episodes happened after high-fatigue sessions. Your sodium and fluid intake were also lower on two of those sessions. That’s a pattern worth watching, but it doesn’t establish a single cause.”
 
+## 6.5 Product-truth discipline for the pattern layer (M22)
+
+The deterministic insight layer (`src/agent/insights.ts`) must keep four things
+apart. Each `Insight` carries both a `kind` (grammatical form) and a `basis`
+(what the claim is grounded in):
+
+| basis | means | may it say a setup "works"? |
+|---|---|---|
+| `reported` | the athlete literally said it (count of mentions) | no |
+| `repeated` | it happened N times — **frequency only** | **no** — "you've done this 3 times" is not "this works" |
+| `outcome` | repetition **and** a consistent good/bad result signal | yes, and still names no cause |
+| `adaptation` | a *later* recommendation actually used earlier evidence | n/a — activity-log concept, not an insight |
+
+Rules:
+- Frequency never implies effectiveness. Three completed sessions is a
+  `repeated` fact ("completed your last 3 as planned"), nothing more.
+- A "working setup" pattern/recommendation requires `basis: 'outcome'`:
+  completed as planned **and** most of the window felt good **and** none went
+  badly.
+- Repeated failure is an `outcome` fact, non-diagnostic, with no "keep it"
+  recommendation and no cause asserted.
+- When results are mixed with no clean explanatory variable, the honest output
+  is "not enough to change anything on" — **no recommendation**.
+- Different conditions can give different outcomes: only claim a condition
+  split when the good and bad sessions separate cleanly on one variable
+  (fed/fasted, time of day, heat), and still assert no cause.
+- One session is never a proven setup — say it's too early.
+- `recommendation_adapted` (activity log) is emitted only once a *subsequent*
+  turn's advice has actually drawn on a standing recommendation insight — never
+  as a forward-looking promise.
+
 ---
 
 # 7. Carbohydrate engine

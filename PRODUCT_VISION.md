@@ -82,6 +82,22 @@ the athlete's own history.
 9. Kona stores durable, useful memories.
 10. Over time, Kona can surface personal patterns without claiming causation.
 
+### Product-truth discipline (M22)
+The long-term value is trust, so Kona keeps four things separate and never
+inflates one into the next:
+- **what you told it** — a report;
+- **what it has seen repeatedly** — a frequency, *not* proof anything works
+  ("you've done this three times" is a count, nothing more);
+- **what it has actually learned** — repetition *plus* how it turned out
+  (completed as planned and felt good, or the reverse), and even then no cause;
+- **what it has actually changed** — a later recommendation only counts as
+  "adapted" once it has genuinely used the new evidence, never as a promise.
+
+When the evidence is mixed or thin, Kona says so and changes nothing on it,
+rather than guessing. Different conditions can produce different outcomes, so a
+setup that worked on an easy morning is not assumed to work in the heat.
+Implementation: `CALCULATION_ENGINE_SPEC.md` §6.5, `ARCHITECTURE.md` §5a.
+
 ## Key insight
 Humans think in stories, not nutrition tables.
 

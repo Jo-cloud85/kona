@@ -22,9 +22,25 @@ export async function recordTurnActivity(repo: Repository, userId: string, toolR
     const knownInsightTexts = new Set(
       priorEvents
         .filter((e) => e.type === 'insight_formed')
-        .map((e) => e.summary.replace(/^Kona spotted — /, '')),
+        .map((e) => e.summary.replace(/^Kona(?:'s take| spotted) — /, '')),
     );
-    const events = deriveTurnEvents({ userId, toolResults, knownInsightTexts, insightsAfter });
+    const alreadyAdaptedFrom = new Set(
+      priorEvents
+        .filter((e) => e.type === 'recommendation_adapted')
+        .map((e) => String((e.meta as { from?: string } | undefined)?.from ?? ''))
+        .filter(Boolean),
+    );
+    const adviceProducedThisTurn = toolResults.some(
+      (r) => r.ok && (r.tool === 'calculate_fueling_targets' || r.tool === 'save_weekly_plan'),
+    );
+    const events = deriveTurnEvents({
+      userId,
+      toolResults,
+      knownInsightTexts,
+      insightsAfter,
+      adviceProducedThisTurn,
+      alreadyAdaptedFrom,
+    });
     for (const e of events) await repo.appendActivityEvent(e);
   } catch {
     /* activity logging is non-critical */
