@@ -6,8 +6,8 @@ import {
   AnthropicLlmClient,
   DeterministicLlmClient,
   buildCheckinLog,
-  buildDashboard,
   buildHome,
+  buildKnows,
   buildStarter,
   checkinReflection,
   deriveInsights,
@@ -17,9 +17,9 @@ import {
   type AgentTurn,
   type CheckinInput,
   type ChatStarter,
-  type Dashboard,
   type HomeView,
   type Insight,
+  type KnowsView,
   type LlmClient,
 } from '../src/agent/index';
 
@@ -124,15 +124,6 @@ export async function listConversations() {
   return getRepo().listConversations(DEMO_USER_ID);
 }
 
-export async function getDashboard(): Promise<Dashboard | null> {
-  const repo = getRepo();
-  const profile = await repo.getProfile(DEMO_USER_ID);
-  if (!profile?.onboarded_at) return null;
-  const weeklyPlan = (await repo.listWeeklyPlans(DEMO_USER_ID)).at(-1);
-  const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
-  return buildDashboard({ profile, weeklyPlan, sessions });
-}
-
 function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -146,6 +137,19 @@ export async function getInsights(): Promise<Insight[]> {
     repo.listMemories(DEMO_USER_ID),
   ]);
   return deriveInsights({ actualSessions, recoveryLogs, fuelLogs, memories });
+}
+
+export async function getKnows(): Promise<KnowsView | null> {
+  const repo = getRepo();
+  const profile = await repo.getProfile(DEMO_USER_ID);
+  if (!profile?.onboarded_at) return null;
+  const [memories, actualSessions, recoveryLogs, fuelLogs] = await Promise.all([
+    repo.listMemories(DEMO_USER_ID),
+    repo.listActualSessions(DEMO_USER_ID),
+    repo.listRecoveryLogs(DEMO_USER_ID),
+    repo.listFuelLogs(DEMO_USER_ID),
+  ]);
+  return buildKnows({ profile, memories, actualSessions, recoveryLogs, fuelLogs });
 }
 
 export async function getHome(selectedDate?: string): Promise<HomeView | null> {

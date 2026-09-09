@@ -31,6 +31,8 @@ export interface Insight {
   topic: 'training' | 'fuelling' | 'recovery' | 'preference';
   /** Most recent supporting date (YYYY-MM-DD), when relevant. */
   as_of?: string;
+  /** Short human lines naming the observations behind it — "why Kona believes this". */
+  evidence: string[];
 }
 
 export interface InsightInput {
@@ -59,12 +61,31 @@ const SYMPTOMS: { token: string; label: string; re: RegExp }[] = [
   { token: 'blister', label: 'blisters', re: /\bblisters?\b/i },
 ];
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 function dateOf(iso: string): string {
   return iso.slice(0, 10);
 }
 
+/** "9 Sep" from a YYYY-MM-DD (or ISO) string. */
+function human(iso: string): string {
+  const [, m, d] = dateOf(iso).split('-').map(Number) as [number, number, number];
+  return `${d} ${MONTHS[m - 1]}`;
+}
+
 function positiveFeel(text: string): boolean {
   return /\b(felt |feeling )?(great|good|strong|fresh|solid|easy|comfortable|no issues|nailed it)\b/i.test(text);
+}
+
+function describeSession(s: ActualSession): string {
+  const dist = s.distance_km ? `${s.distance_km} km ` : '';
+  const dur = !s.distance_km && s.duration_minutes ? `${s.duration_minutes} min ` : '';
+  return `${human(s.start_at)} · ${dist}${dur}${s.intensity} ${s.sport}`.replace(/\s+/g, ' ').trim();
+}
+
+function snippet(text: string, max = 70): string {
+  const t = text.trim().replace(/\s+/g, ' ');
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
 // --- detectors ------------------------------------------------------------
@@ -88,6 +109,8 @@ function workingSetup(input: InsightInput): Insight[] {
         (r.overall_severity === 'none' || r.overall_severity === 'low' || positiveFeel(r.free_text)),
     );
 
+    const evidence = recent.map(describeSession);
+    const as_of = dateOf(recent[0]!.start_at);
     out.push({
       kind: 'pattern',
       text: feltGood
@@ -96,7 +119,8 @@ function workingSetup(input: InsightInput): Insight[] {
       certainty: 'moderate',
       evidence_count: recent.length,
       topic: 'training',
-      as_of: dateOf(recent[0]!.start_at),
+      as_of,
+      evidence,
     });
     out.push({
       kind: 'recommendation',
@@ -104,7 +128,8 @@ function workingSetup(input: InsightInput): Insight[] {
       certainty: 'moderate',
       evidence_count: recent.length,
       topic: 'training',
-      as_of: dateOf(recent[0]!.start_at),
+      as_of,
+      evidence,
     });
   }
   return out;
@@ -112,36 +137,41 @@ function workingSetup(input: InsightInput): Insight[] {
 
 /** A body part / symptom the athlete has mentioned more than once. FACT. */
 function recurringSymptom(input: InsightInput): Insight[] {
-  type Hit = { date: string; severe: boolean };
+  type Hit = { date: string; severe: boolean; quote: string };
   const hits = new Map<string, Hit[]>();
 
-  const record = (label: string, date: string, severe: boolean) => {
-    (hits.get(label) ?? hits.set(label, []).get(label)!).push({ date, severe });
+  const record = (label: string, date: string, severe: boolean, quote: string) => {
+    (hits.get(label) ?? hits.set(label, []).get(label)!).push({ date, severe, quote });
   };
 
   for (const r of input.recoveryLogs) {
     const date = dateOf(r.logged_at);
     const severe = r.overall_severity === 'moderate' || r.overall_severity === 'high';
     const hay = `${r.free_text} ${(r.reported_symptoms ?? []).join(' ')}`;
-    for (const s of SYMPTOMS) if (s.re.test(hay)) record(s.label, date, severe);
+    const quote = r.free_text || (r.reported_symptoms ?? []).join(', ');
+    for (const s of SYMPTOMS) if (s.re.test(hay)) record(s.label, date, severe, quote);
   }
   for (const a of input.actualSessions) {
     if (!a.reason) continue;
-    for (const s of SYMPTOMS) if (s.re.test(a.reason)) record(s.label, dateOf(a.start_at), true);
+    for (const s of SYMPTOMS) if (s.re.test(a.reason)) record(s.label, dateOf(a.start_at), true, a.reason);
   }
 
   const out: Insight[] = [];
   for (const [label, list] of hits) {
     if (list.length < 2) continue;
-    const dates = [...new Set(list.map((h) => h.date))].sort();
-    const last = dates[dates.length - 1]!;
+    const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
+    const last = sorted[sorted.length - 1]!.date;
+    const evidence = sorted.map(
+      (h) => `${human(h.date)} · "${snippet(h.quote)}"${h.severe ? ' (felt significant)' : ''}`,
+    );
     out.push({
       kind: 'fact',
-      text: `You've noted ${label} ${list.length} times — most recently ${last}. Kona doesn't diagnose; this is just a flag.`,
+      text: `You've noted ${label} ${list.length} times — most recently ${human(last)}. Kona doesn't diagnose; this is just a flag.`,
       certainty: 'high',
       evidence_count: list.length,
       topic: 'recovery',
       as_of: last,
+      evidence,
     });
     if (list.some((h) => h.severe)) {
       out.push({
@@ -151,6 +181,7 @@ function recurringSymptom(input: InsightInput): Insight[] {
         evidence_count: list.length,
         topic: 'recovery',
         as_of: last,
+        evidence,
       });
     }
   }
@@ -173,13 +204,14 @@ function offPlanRun(input: InsightInput): Insight[] {
       evidence_count: off.length,
       topic: 'training',
       as_of: dateOf(recent[0]!.start_at),
+      evidence: off.map((s) => `${describeSession(s)} — ${s.status.replace('_', ' ')}${s.reason ? ` (${snippet(s.reason, 40)})` : ''}`),
     },
   ];
 }
 
 /** A fuel item that shows up again and again. FACT. */
 function stapleFuel(input: InsightInput): Insight[] {
-  const tally = new Map<string, { n: number; last: string }>();
+  const tally = new Map<string, { n: number; last: string; dates: string[] }>();
   for (const log of input.fuelLogs) {
     const date = dateOf(log.logged_at);
     for (const item of log.items) {
@@ -190,8 +222,9 @@ function stapleFuel(input: InsightInput): Insight[] {
         .replace(/(\w)s$/, '$1') // fold a trailing plural: "gels" -> "gel"
         .trim();
       if (!key) continue;
-      const cur = tally.get(key) ?? { n: 0, last: date };
+      const cur = tally.get(key) ?? { n: 0, last: date, dates: [] };
       cur.n += 1;
+      cur.dates.push(date);
       if (date > cur.last) cur.last = date;
       tally.set(key, cur);
     }
@@ -207,6 +240,7 @@ function stapleFuel(input: InsightInput): Insight[] {
       evidence_count: v.n,
       topic: 'fuelling' as const,
       as_of: v.last,
+      evidence: [`logged on ${[...new Set(v.dates)].sort().map(human).join(', ')}`],
     }));
 }
 

@@ -3,9 +3,31 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M16 + M15.1 done.** Next: **M17** — the "What Kona knows about you" view.
+**M14.1–M17 + M15.1 done.** Next: **M18** — Home as a daily briefing.
 Founder direction: no visual redesign, don't fabricate insights, stop for a
 product review after M21. See the reset milestone plan below + `PRODUCT_VISION.md`.
+
+### M17 — "What Kona knows about you" (replaces the chart Dashboard) ✅
+_Show evidence of learning, not raw DB fields. No visual redesign — reuses the
+existing dark cards._
+- Removed `app/DashboardView.tsx`, `app/dashboard/`, `app/api/dashboard/route.ts`,
+  `getDashboard()`. `buildDashboard` stays (Home still uses it for during-session
+  numbers). Nav is now **Home · Memory · Chat** (`kona.tab` migrates
+  `dashboard` → `memory`).
+- `src/agent/knows.ts` — `buildKnows()` → `KnowsView` with three honest strands:
+  **what Kona's worked out** (the M16 `Insight[]`, each with an expandable
+  "Why Kona thinks this" listing the supporting observations), **what you've told
+  Kona** (`profile.goal` + durable memories, keys turned into readable labels),
+  **recent training on record** (last 6 actual sessions + a same-day "felt"
+  snippet). `has_anything=false` → an honest empty state, never invented content.
+- `Insight` gained `evidence: string[]` — populated by every detector ("9 Sep ·
+  50 km easy cycling", `"5 Sep · \"calf sore\" (felt significant)"`).
+- `GET /api/knows`; `KnowsView.tsx` renders it.
+- Tests: +4 (`tests/agent/knows.test.ts`), updated insights tests for `evidence`.
+  **127 total**; `tsc` / `eslint` / `next build` clean. Live-tested: after a few
+  ride + calf logs the view shows the cycling PATTERN, the calf FACT with quoted
+  evidence, the two SUGGESTIONs, the goal + an auto-remembered "recurring calf
+  issue", and the recent rides.
 
 ### M16 — deterministic pattern layer ✅
 _The half of the loop that makes Kona "know" the athlete: turn accumulated
@@ -110,7 +132,7 @@ integrations are out of this cycle. **Stop for a product review after M21.**
 - **M15** ✅ Anthropic is the shipped conversational path; `history` + `goal` wired into the prompts; model answers no-tool questions directly.
 - **M15.1** ✅ Edit a sent chat message → regenerate the reply.
 - **M16** ✅ Deterministic pattern layer — `deriveInsights()` → `Insight[]` (fact / pattern / hypothesis / recommendation + certainty).
-- **M17** "What Kona knows about you" view (replaces the chart Dashboard) — show *evidence of learning*, not raw DB fields; each insight shows its supporting evidence ("why Kona believes this"); honest empty state.
+- **M17** ✅ "What Kona knows about you" view replaces the chart Dashboard — insights with expandable "Why Kona thinks this" evidence, "what you’ve told Kona" (goal + memories), recent training on record; honest empty state.
 - **M18** Home = a genuine daily briefing answering: what am I doing today? does anything about today matter? what to prepare for next? anything relevant from history? Sections like YOUR DAY / ONE THING TO THINK ABOUT / KONA REMEMBERS. Not a stats dashboard.
 - **M19** Make the feedback loop **visible**: told → remembered → recurred → recommendation changed. Introduce a typed activity/event log (also future-proofs a possible XP layer — see `PRODUCT_VISION.md` "Future direction").
 - **M20** Goal context appears naturally through Home + relevant chat ("Week 6 of 12", "11 weeks until your triathlon") — context for the assistant, not a generic plan app.

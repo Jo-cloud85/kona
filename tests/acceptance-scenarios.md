@@ -18,13 +18,13 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AO7 | Typing indicator | While a reply is generating, a three-dot wave shows in an assistant bubble. | manual (browser) |
 | AO8 | Option-button prompts | A saved week gives a prep line for **every** day and renders per-session effort/length option buttons; picking them + Save updates the plan. | ✅ `tests/engine/week.test.ts`, `tests/agent/week-plan.test.ts` + manual |
 | AO9 | History sidebar | Multiple conversations listed (title from first message, newest first); "New chat" and switching work; continuing sends more messages. | ✅ `tests/data/repository.test.ts` + manual |
-| AO10 | Dashboard | Four visually-consistent range-bar panels (protein daily target · carb · fluid · sodium), all from the engine; rest days appear and carry the daily protein target; a `⚑ prep for <day>` flag marks the day before a long / double-session day (qualitative, no invented number); a lead paragraph explains why the during-session ranges repeat; table view lists all 7 days. | ✅ `tests/agent/dashboard.test.ts` + manual |
+| AO10 | ~~Dashboard~~ | The chart Dashboard was **removed in M17** and replaced by the "Memory" tab (A-know). `buildDashboard` is retained internally for Home's during-session numbers. | ✅ `tests/agent/dashboard.test.ts` (engine only) |
 
 ## A-shell. App shell (M11 → trimmed in the 2026 reset)
 
 | # | Scenario | Expected behaviour | Coverage |
 |---|----------|--------------------|----------|
-| AS2 | Bottom nav | Tabs **Home · Dashboard · Chat** (the Daily tab was removed in the reset); active tab persists across reloads; nav stays pinned while tab content scrolls. Profile opens as an overlay from the Home avatar. | manual (browser) |
+| AS2 | Bottom nav | Tabs **Home · Memory · Chat** (Daily removed in M14, chart Dashboard replaced by Memory in M17); active tab persists across reloads; nav stays pinned while tab content scrolls. Profile opens as an overlay from the Home avatar. | manual (browser) |
 | AS3 | Profile overlay | Opens the profile form pre-filled with the saved profile ("Save changes"); saving updates the Home advice. | manual (browser) + `tests/data/repository.test.ts` |
 
 > **Removed in the 2026 reset:** the "Daily" tab, the Mifflin–St Jeor daily
@@ -32,6 +32,15 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 > portion catalog (`src/data/foods.ts`). Kona no longer shows a daily
 > energy/macro breakdown — see `PRODUCT_VISION.md` and
 > `CALCULATION_ENGINE_SPEC.md` §23. Scenarios AS1 / AS4 / AS5 / AS6 retired.
+
+## A-know. "What Kona knows about you" — the Memory tab (M17)
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AK1 | Evidence of learning, not DB fields | Three sections: **what Kona's worked out** (M16 insights, each with an expandable "Why Kona thinks this" listing the supporting observations), **what you've told Kona** (goal + durable memories with readable labels), **recent training on record** (last 6 sessions + a same-day "felt" snippet). | ✅ `tests/agent/knows.test.ts` + manual |
+| AK2 | Honest empty state | With nothing on record, `has_anything` is false and the tab says "Kona's still getting to know you… this page fills in as it learns" — no fabricated content. | ✅ `tests/agent/knows.test.ts` |
+| AK3 | Non-diagnostic | A recurring body-part FACT shows its quoted evidence and a "(felt significant)" tag; the footer states Kona doesn't diagnose. | ✅ `tests/agent/insights.test.ts` + manual |
+| AK4 | Visual restraint | Reuses the existing dark card aesthetic — no charts, no redesign. | manual (browser, light + dark) |
 
 ## A-home. Home tab (M12)
 

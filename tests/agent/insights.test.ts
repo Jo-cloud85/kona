@@ -47,6 +47,8 @@ describe('deriveInsights', () => {
     const rec = out.find((i) => i.kind === 'recommendation');
     expect(pattern?.text).toMatch(/last 3 running sessions all went to plan/i);
     expect(pattern?.certainty).toBe('moderate');
+    expect(pattern?.evidence).toHaveLength(3); // one line per session
+    expect(pattern?.evidence[0]).toMatch(/running/);
     expect(rec?.text).toMatch(/keep it rather than change/i);
   });
 
@@ -72,8 +74,11 @@ describe('deriveInsights', () => {
     const fact = out.find((i) => i.kind === 'fact' && /hip/i.test(i.text));
     expect(fact?.certainty).toBe('high');
     expect(fact?.evidence_count).toBe(2);
-    expect(fact?.text).toMatch(/most recently 2026-09-05/);
+    expect(fact?.text).toMatch(/most recently 5 Sep/);
     expect(fact?.text.toLowerCase()).toContain("doesn't diagnose");
+    // evidence explains why Kona believes it
+    expect(fact?.evidence).toHaveLength(2);
+    expect(fact?.evidence.some((e) => /felt significant/.test(e))).toBe(true);
     // a moderate+ severity also yields a gentle recommendation
     expect(out.some((i) => i.kind === 'recommendation' && /get it assessed/i.test(i.text))).toBe(true);
   });

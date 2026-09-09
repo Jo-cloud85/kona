@@ -23,6 +23,12 @@ export {
 } from './home';
 export { buildCheckinLog, checkinReflection, type CheckinInput, type CheckinLog } from './checkin';
 export { deriveInsights, type Insight, type InsightKind, type InsightInput } from './insights';
+export {
+  buildKnows,
+  type KnowsView,
+  type KnowsToldLine,
+  type KnowsRecentSession,
+} from './knows';
 export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety';
 export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools';
 export type {
