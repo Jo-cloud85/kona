@@ -3,9 +3,43 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M19 + M15.1 done.** Next: **M20** — goal/race context through Home + chat.
+**M14.1–M20 + M15.1 done.** Next: **M21** — defer plan-detail prompts + proactive chat context, then STOP for product review.
 Founder direction: no visual redesign, don't fabricate insights, stop for a
 product review after M21. See the reset milestone plan below + `PRODUCT_VISION.md`.
+
+### M20 — goal/race context, surfaced naturally ✅
+_The goal is context for the assistant, not a periodised training plan. It should
+show up quietly where it matters — on Home and in chat — never as a countdown app._
+- `src/domain/goal.ts` — pure helpers. `parseGoalDate(text, now)` reads a date
+  out of free-text goal text: an explicit ISO date, "`<Month> <day>`" /
+  "`<day> <Month> <year>`" (next future year when no year given), "in N weeks",
+  or a bare "in `<Month>`" (→ the 1st, so we never say "race week" prematurely);
+  `undefined` when nothing dateable is stated. `goalContext(goal, now)` →
+  `{ text, event_date, days_until, weeks_until, phrase }` — `phrase` is the one
+  ready-to-show line, tightening as the day approaches: "11 weeks to your
+  `<goal>`." → "`N` days to your `<goal>`." (≤21) → "Race week — `<goal>` in
+  `N` days." (≤7) → "Race day — `<goal>`." → `null` once it's passed. The goal
+  text is stripped of its trailing date clause for display.
+- `parseGoal` in `profile-input.ts` now stores a derived `event_date` on the
+  `TrainingGoal` when onboarding text contains one.
+- `buildHome` returns `goal_line` (= `goalContext(...).phrase`); `HomeTab.tsx`
+  renders it as one slim accent line under the date. No new card.
+- `contextForPrompt` enriches `profile.goal` with `event_date` / `weeks_until` /
+  `context_line`; `COMPOSE_SYSTEM` says to weave the timing in where it matters
+  and explicitly **not** to behave like a periodised plan; `INTERPRET_SYSTEM`
+  lets `save_profile_fact` capture a goal / event-date change stated in passing.
+- `save_profile_fact` tool + schema gained `goal_text` / `goal_event_date`
+  (date validated `YYYY-MM-DD`, may update the date alone); `activity.ts`
+  `fact_learned` summary now mentions the goal.
+- Deliberately **not** done: "Week X of Y" — needs a periodised-block model we
+  don't have and would pull toward a plan app. Noted for later.
+- Tests: +11 (`tests/domain/goal.test.ts`), +1 `home.test.ts` (`goal_line`),
+  +1 `profile-fact.test.ts` (`save_profile_fact` goal). **149 total**;
+  `tsc` / `eslint` / `next build` clean. Live-tested: seeded "First
+  Olympic-distance triathlon in June" → Home shows "40 weeks to your First
+  Olympic-distance triathlon."; "My triathlon is on June 14th this year." →
+  model updates the goal + date and replies in-voice without turning into a
+  countdown.
 
 ### M19 — the feedback loop made visible ✅
 _"I told Kona → Kona remembered → it became relevant → Kona changed a future
@@ -188,7 +222,7 @@ integrations are out of this cycle. **Stop for a product review after M21.**
 - **M17** ✅ "What Kona knows about you" view replaces the chart Dashboard — insights with expandable "Why Kona thinks this" evidence, "what you’ve told Kona" (goal + memories), recent training on record; honest empty state.
 - **M18** ✅ Home is a daily briefing — YOUR DAY (prose; numbers only when the session earns them) / ONE THING TO THINK ABOUT (next key session + a real "this worked" pattern line, never fabricated) / KONA REMEMBERS (recurring facts). Day strip + check-in kept; no visual redesign.
 - **M19** ✅ Feedback loop made **visible** — a typed `activity_events` log + a "How Kona's been learning" timeline on Memory (you logged X → Kona remembered → spotted a pattern → advice adapts). The event log is the seam a future XP layer would consume.
-- **M20** Goal context appears naturally through Home + relevant chat ("Week 6 of 12", "11 weeks until your triathlon") — context for the assistant, not a generic plan app.
+- **M20** ✅ Goal context surfaces naturally — a slim "N weeks to your <goal>" line on Home; `goalContext()` computes weeks/days-until from a parsed or stated `event_date`; the chat model gets `weeks_until` and a nudge to weave timing in without acting like a periodised plan; `save_profile_fact` can set/update the goal + date from chat.
 - **M21** Stop prompting for every session up front — only the next 1–2 key ones. Chat should also *initiate* useful context ("Tomorrow's your first 2-hour ride of this block — want to sort fuelling first?").
 
 ## Completed work

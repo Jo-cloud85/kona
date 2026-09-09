@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSeededRepository, DEMO_USER_ID } from '../../src/data/index';
-import { DeterministicLlmClient, handleMessage, type AgentDeps } from '../../src/agent/index';
+import { DeterministicLlmClient, handleMessage, runTool, type AgentDeps } from '../../src/agent/index';
 import type { InMemoryRepository } from '../../src/data/in-memory-repository';
 
 const NOW = new Date(2026, 8, 9, 9, 0, 0);
@@ -46,5 +46,24 @@ describe('save_profile_fact — contextual profile facts', () => {
     await say("I'm 70 kg");
     const turn = await say("Tomorrow I'm doing a 12km run at 6am");
     expect(turn.reply).not.toMatch(/what do you weigh/i);
+  });
+
+  it('save_profile_fact can set the goal + event date (used by the real model)', async () => {
+    await runTool(
+      'save_profile_fact',
+      { goal_text: 'Berlin Marathon', goal_event_date: '2026-09-20' },
+      { repo, userId: DEMO_USER_ID },
+    );
+    expect((await repo.getProfile(DEMO_USER_ID))?.goal).toEqual({
+      text: 'Berlin Marathon',
+      event_date: '2026-09-20',
+    });
+
+    // a later date-only update keeps the existing goal text
+    await runTool('save_profile_fact', { goal_event_date: '2026-09-27' }, { repo, userId: DEMO_USER_ID });
+    expect((await repo.getProfile(DEMO_USER_ID))?.goal).toEqual({
+      text: 'Berlin Marathon',
+      event_date: '2026-09-27',
+    });
   });
 });

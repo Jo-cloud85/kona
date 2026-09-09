@@ -1716,3 +1716,11 @@ button.cta:disabled {
 .tl-summary {
   color: var(--muted);
 }
+
+/* ---- Home: goal context line (M20) ------------------------------- */
+.home-goal {
+  margin: 3px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}

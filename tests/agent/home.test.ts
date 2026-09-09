@@ -191,6 +191,27 @@ describe('buildHome', () => {
     expect(h.selected_date).toBe('2026-09-09');
   });
 
+  it('surfaces a goal_line when the goal has a (parseable) date, null otherwise', () => {
+    const withDate = buildHome({
+      profile: { ...profile, goal: { text: 'Chicago Marathon on 2026-10-11' } },
+      weeklyPlan: plan(),
+      sessions: [],
+      now: NOW,
+    });
+    expect(withDate.goal_line).toMatch(/weeks to your Chicago Marathon/i);
+
+    const noDate = buildHome({
+      profile: { ...profile, goal: { text: 'Stay consistent' } },
+      weeklyPlan: plan(),
+      sessions: [],
+      now: NOW,
+    });
+    expect(noDate.goal_line).toBeNull();
+
+    const noGoal = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
+    expect(noGoal.goal_line).toBeNull();
+  });
+
   it('the session title carries the time of day and the morning pre-fuel note folds into the line', () => {
     const h = buildHome({
       profile,

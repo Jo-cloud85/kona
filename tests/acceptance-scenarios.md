@@ -100,6 +100,17 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AI4 | Model leans on them | Insights are in the chat context (`kind` + `text`); the reply references them keeping the tag's meaning (a "pattern" is not upgraded to certainty). | manual (live model) + `COMPOSE_SYSTEM` |
 | AI5 | `GET /api/insights` | Returns the current `Insight[]` for the demo user (feeds the M17 "What Kona knows" view). | manual + `getInsights()` |
 
+## A-goal. Goal / race context (M20)
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AG1 | Date parsed from goal text | `parseGoalDate` reads an ISO date, "`<Month> <day>`", "`<day> <Month> <year>`" (next future year when the year is omitted), "in N weeks", or a bare "in `<Month>`" (→ the 1st). Nothing dateable → `undefined`; onboarding stores the derived `event_date` on the goal. | ✅ `tests/domain/goal.test.ts`, `tests/domain/profile-input.test.ts` |
+| AG2 | One quiet line, tightening over time | `goalContext().phrase`: "`N` weeks to your `<goal>`." → "`N` days to your `<goal>`." (≤21) → "Race week — `<goal>` in `N` days." (≤7) → "Race day — `<goal>`." → `null` once passed. The trailing date clause is stripped from the shown goal text. | ✅ `tests/domain/goal.test.ts` |
+| AG3 | Home surfaces it | `buildHome` returns `goal_line`; Home renders it as one slim accent line under the date — no new card. `null` when the goal has no parseable date or there's no goal. | ✅ `tests/agent/home.test.ts` + manual (browser) |
+| AG4 | Model gets timing, not a schedule | `contextForPrompt` passes `event_date` / `weeks_until` / `context_line`; `COMPOSE_SYSTEM` weaves the timing in where it matters and explicitly does **not** behave like a periodised plan. | manual (live model) + `COMPOSE_SYSTEM` |
+| AG5 | Goal change stated in chat | "My triathlon is on June 14th this year." routes to `save_profile_fact` (`goal_text` / `goal_event_date`, date validated `YYYY-MM-DD`, may update the date alone); the `fact_learned` activity entry names the goal. | ✅ `tests/agent/profile-fact.test.ts` + manual (live model) |
+| AG6 | Not a plan app | No "Week X of Y" (needs a periodised-block model Kona doesn't have); the goal is context, never a training schedule. | by design |
+
 ## A-week. Weekly multi-day planning (PRODUCT_VISION.md "Weekly planning")
 
 | # | Scenario | Expected behaviour | Coverage |

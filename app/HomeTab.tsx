@@ -33,6 +33,7 @@ interface HomeView {
   selected_date: string;
   week: HomeWeekDay[];
   has_plan: boolean;
+  goal_line: string | null;
   checkin: { due: boolean; done: boolean };
   selected: {
     date: string;
@@ -175,6 +176,7 @@ export default function HomeTab({
             {greetingFor(new Date().getHours())}, {name}
           </p>
           <p className="home-date">{longDate(data.today)}</p>
+          {data.goal_line && <p className="home-goal">{data.goal_line}</p>}
         </div>
         <button className="home-avatar" onClick={openProfile} aria-label="Profile">
           {initial}

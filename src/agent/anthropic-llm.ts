@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { goalContext } from '../domain/goal';
 import type {
   ComposeRequest,
   ContextPackage,
@@ -55,7 +56,7 @@ Guidance:
 - Food, drink or products consumed -> log_fuel_intake with each item and the quantity they stated. Never invent nutrition values. Do this even when it's mentioned alongside a session log ("rode 60k, had porridge and two gels").
 - How they feel / recovery / soreness / sleep -> save_recovery with their words as free_text and a coarse overall_severity. Do this even for a passing "felt great" / "legs were heavy" in the same message as a session log.
 - A durable fact worth remembering -> propose_memory_update with a short descriptive key and the value in their words. Do this alongside a plan tool when both apply. Remember: upcoming races (key "next_race"), their typical week ("typical_week"), standing preferences ("prefers_fasted_rides", "dislikes_gels", "goes_by_feel_not_pace"), constraints ("only_trains_mornings", "no_pool_access_weekends"), go-to products/setups ("usual_long_ride_fuel"), and recurring things they flag about their body. Don't remember one-off trivia.
-- A standing profile fact stated in passing — their body weight in kg, or their usual bottle size in ml ("I weigh 68 kg", "my bottle is 750 ml") -> save_profile_fact. Not for one-off intake.
+- A standing profile fact stated in passing — body weight in kg, usual bottle size in ml ("I weigh 68 kg", "my bottle is 750 ml"), or a change to their goal / target event and its date ("my tri is on June 14", "I've signed up for the Berlin marathon", "I'm now aiming at a sub-40 10k") -> save_profile_fact (goal_text and/or goal_event_date). Not for one-off intake.
 - CONTEXT.profile.body_weight_kg may be null. If a fuelling calculation would benefit and weight is unknown, still run the tools, and it is fine for the reply to ask once for their weight.
 - To reference a session you create earlier in this same turn, pass the string "$last" as its id.
 - When you have no explicit planned_session_id, link an actual session with link_to_plan_date (YYYY-MM-DD), using the current date or the plan's date from CONTEXT.
@@ -73,7 +74,8 @@ Hard rules:
 - Shape: acknowledge what happened; give the most useful next action; add brief context; note what to prepare next time if useful.
 
 Use the athlete's history — this is what makes you a companion, not a calculator:
-- CONTEXT.history holds their recent sessions, recovery notes and fuel logs. CONTEXT.profile.goal is what they're training for. CONTEXT.memories are durable facts they've told you.
+- CONTEXT.history holds their recent sessions, recovery notes and fuel logs. CONTEXT.memories are durable facts they've told you.
+- CONTEXT.profile.goal is what they're training for; when weeks_until is set, weave the timing in naturally where it matters ("with your tri ~11 weeks out, this block is about building the engine"). Don't turn every reply into countdown talk, and don't behave like a periodised training plan — the goal is context, not a schedule.
 - CONTEXT.insights are observations Kona has already computed from the full history, each tagged fact / pattern / recommendation. Lean on these — keep the tag's meaning (don't upgrade a "pattern" to a certainty) and don't contradict them.
 - When a prior similar session or a recurring pattern would genuinely help, reference it plainly: "Last time you rode this long you felt good on your usual breakfast" / "That's twice now you've mentioned GI trouble after this before running."
 - Distinguish clearly: a FACT is something they reported ("you've reported this twice"); a PATTERN is something you're inferring ("you seem to tolerate this better before rides"); a HYPOTHESIS is tentative ("the bigger breakfast may be a factor"). Never state a hypothesis as medical certainty.
@@ -82,13 +84,21 @@ Use the athlete's history — this is what makes you a companion, not a calculat
 - If a tool result has "ok": false, briefly say you could not record that part.`;
 
 function contextForPrompt(ctx: ContextPackage): string {
+  const gc = goalContext(ctx.profile?.goal, new Date(ctx.now_iso));
   return JSON.stringify(
     {
       now_iso: ctx.now_iso,
       profile: ctx.profile
         ? {
             username: ctx.profile.username,
-            goal: ctx.profile.goal ?? null,
+            goal: ctx.profile.goal
+              ? {
+                  text: ctx.profile.goal.text,
+                  event_date: gc.event_date,
+                  weeks_until: gc.weeks_until,
+                  context_line: gc.phrase,
+                }
+              : null,
             gender: ctx.profile.gender,
             age: ctx.profile.age,
             body_weight_kg: ctx.profile.body_weight_kg ?? null,

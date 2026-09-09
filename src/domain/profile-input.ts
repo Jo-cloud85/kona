@@ -1,3 +1,4 @@
+import { parseGoalDate } from './goal';
 import type { Gender, Profile, Sport, TrainingGoal } from './types';
 
 /**
@@ -43,13 +44,19 @@ function numInRange(v: unknown, min: number, max: number): number | undefined {
 
 function parseGoal(v: unknown): TrainingGoal | undefined {
   if (typeof v === 'string') {
-    const text = v.trim();
-    return text ? { text: text.slice(0, 200) } : undefined;
+    const text = v.trim().slice(0, 200);
+    if (!text) return undefined;
+    const event_date = parseGoalDate(text);
+    return event_date ? { text, event_date } : { text };
   }
   if (isRecord(v) && typeof v.text === 'string' && v.text.trim()) {
-    const goal: TrainingGoal = { text: v.text.trim().slice(0, 200) };
+    const text = v.text.trim().slice(0, 200);
+    const goal: TrainingGoal = { text };
     if (typeof v.event_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.event_date)) {
       goal.event_date = v.event_date;
+    } else {
+      const parsed = parseGoalDate(text);
+      if (parsed) goal.event_date = parsed;
     }
     return goal;
   }

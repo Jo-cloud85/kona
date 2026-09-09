@@ -569,11 +569,15 @@ export const TOOLS: Record<string, ToolDefinition> = {
 
   save_profile_fact: {
     description:
-      "Update a standing fact on the athlete's profile from something they said in passing — their body weight in kg, or their usual bottle size in ml. Do NOT use this for session details or one-off intake.",
+      "Update a standing fact on the athlete's profile from something they said in passing — body weight (kg), usual bottle size (ml), or their training goal / target event and its date. Do NOT use this for session details or one-off intake.",
     async run(args, ctx) {
       const profile = await ctx.repo.getProfile(ctx.userId);
       if (!profile) throw new ToolError('No profile on file for this user');
-      const patch: { body_weight_kg?: number; usual_bottle_ml?: number } = {};
+      const patch: {
+        body_weight_kg?: number;
+        usual_bottle_ml?: number;
+        goal?: { text: string; event_date?: string };
+      } = {};
 
       const w = num(args, 'body_weight_kg');
       if (w !== undefined) {
@@ -585,8 +589,21 @@ export const TOOLS: Record<string, ToolDefinition> = {
         if (b < 100 || b > 3000) throw new ToolError('usual_bottle_ml must be between 100 and 3000');
         patch.usual_bottle_ml = Math.round(b);
       }
+      const goalText = str(args, 'goal_text', false);
+      const goalDate = str(args, 'goal_event_date', false);
+      if (goalText || goalDate) {
+        const text = goalText?.slice(0, 200) ?? profile.goal?.text;
+        if (!text) throw new ToolError('goal_event_date needs an existing goal or goal_text');
+        const goal: { text: string; event_date?: string } = { text };
+        const date = goalDate ?? profile.goal?.event_date;
+        if (date) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ToolError('goal_event_date must be YYYY-MM-DD');
+          goal.event_date = date;
+        }
+        patch.goal = goal;
+      }
       if (Object.keys(patch).length === 0) {
-        throw new ToolError('save_profile_fact needs body_weight_kg or usual_bottle_ml');
+        throw new ToolError('save_profile_fact needs body_weight_kg, usual_bottle_ml, or goal_text/goal_event_date');
       }
       return ctx.repo.upsertProfile({ ...profile, ...patch });
     },
@@ -769,6 +786,8 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
     properties: {
       body_weight_kg: { type: 'number', description: 'Athlete body weight in kg (25–250).' },
       usual_bottle_ml: { type: 'number', description: 'Their usual bottle size in ml (100–3000).' },
+      goal_text: { type: 'string', description: 'Their training goal / target event, in their words.' },
+      goal_event_date: { type: 'string', description: 'YYYY-MM-DD of the target event, when they give one.' },
     },
     required: [],
   },

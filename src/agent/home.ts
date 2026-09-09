@@ -11,6 +11,7 @@ import type {
   TimeOfDay,
   WeeklyPlan,
 } from '../domain/types';
+import { goalContext } from '../domain/goal';
 import { buildDashboard } from './dashboard';
 import { deriveInsights, type Insight } from './insights';
 
@@ -91,6 +92,8 @@ export interface HomeView {
   selected_date: string;
   week: HomeWeekDay[];
   has_plan: boolean;
+  /** One-line goal context ("11 weeks to your first Olympic-distance triathlon"), or null. */
+  goal_line: string | null;
   /** End-of-day check-in state (for the profile-avatar dot + evening popup). */
   checkin: { due: boolean; done: boolean };
   selected: {
@@ -476,6 +479,7 @@ export function buildHome(input: {
     selected_date,
     week,
     has_plan: input.weeklyPlan != null,
+    goal_line: goalContext(input.profile.goal, now).phrase,
     checkin: { due: checkinDue, done: checkinDone },
     selected: {
       date: selected_date,

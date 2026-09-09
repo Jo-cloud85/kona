@@ -80,10 +80,15 @@ export function deriveTurnEvents(input: {
 
   const fact = find(r, 'save_profile_fact');
   if (fact) {
-    const d = fact.data as { body_weight_kg?: number; usual_bottle_ml?: number } | undefined;
+    const d = fact.data as
+      | { body_weight_kg?: number; usual_bottle_ml?: number; goal?: { text?: string; event_date?: string } }
+      | undefined;
     const bits = [
       typeof d?.body_weight_kg === 'number' ? `${d.body_weight_kg} kg` : null,
       typeof d?.usual_bottle_ml === 'number' ? `a ${d.usual_bottle_ml} ml bottle` : null,
+      d?.goal?.text
+        ? `your goal — ${d.goal.text}${d.goal.event_date ? ` (${d.goal.event_date})` : ''}`
+        : null,
     ].filter(Boolean);
     ev('fact_learned', `Kona noted ${bits.join(' and ') || 'a detail about you'}`);
   }
