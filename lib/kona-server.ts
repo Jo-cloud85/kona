@@ -38,8 +38,12 @@ function getRepo(): InMemoryRepository {
   return repo;
 }
 
-/** deterministic unless KONA_LLM=anthropic (or an ANTHROPIC_API_KEY is present
- *  and KONA_LLM isn't forced to 'deterministic'). */
+/**
+ * The real Anthropic model is the shipped conversational path. The deterministic
+ * stub is only a fallback — no API key on the box (local dev / CI / offline), or
+ * `KONA_LLM=deterministic` set explicitly. It cannot reason over history or feel
+ * like a companion; it exists so tests and no-key runs still work.
+ */
 function useAnthropic(): boolean {
   const forced = process.env.KONA_LLM;
   if (forced === 'deterministic') return false;
@@ -50,6 +54,7 @@ function useAnthropic(): boolean {
 function getLlm(): LlmClient {
   if (!llm) {
     llm = useAnthropic() ? new AnthropicLlmClient() : new DeterministicLlmClient();
+    console.log(`[kona] conversation client: ${llmName()}`);
   }
   return llm;
 }

@@ -5,8 +5,36 @@
 companion* for the self-coached multi-sport recreational athlete — relationship +
 accumulated understanding, not a nutrition tracker. Audit approved in full;
 executing in milestones M14.1 → M21 (see the reset plan). **M14.1 done.**
-Next: M15 — make the Anthropic client the shipped path + wire `history` /
-recovery / fuel / goal into the prompt context.
+Next: M16 — deterministic pattern layer (`Insight[]`: FACT / PATTERN /
+HYPOTHESIS / RECOMMENDATION + `Certainty`) + broaden what gets remembered.
+
+### M15 — real model is the shipped path + full context wiring ✅
+_The Anthropic client existed but (a) the launch config forced the deterministic
+stub and (b) `context.history` was fetched and never serialized into the
+prompt — so the "companion that knows me" half of the loop was dead._
+- **`.claude/launch.json`** no longer forces `KONA_LLM=deterministic`. The real
+  model is used whenever `ANTHROPIC_API_KEY` is set (via a git-ignored
+  `.env.local`); the deterministic stub is the fallback for no-key / CI /
+  `KONA_LLM=deterministic`. `getLlm()` logs which client is active.
+- **`RelevantHistory` gained `recent_fuel_logs`**; `context.ts` requests recent
+  activity across all sports (limit 6, no sport filter — "what have you been
+  doing"). `get_relevant_history` stays for deeper sport-specific lookups.
+- **`contextForPrompt()` now serializes `history`** (recent_sessions /
+  recent_recovery / recent_fuel) and `profile.goal` into *both* the interpret
+  and compose prompts. `COMPOSE_SYSTEM` gained the FACT / PATTERN / HYPOTHESIS
+  distinction and "if a setup has repeatedly worked, keep it" guidance.
+- **`INTERPRET_SYSTEM` reworked**: when no tool is needed and the athlete asked
+  a question answerable from context ("what do you know about my long rides?",
+  "how's my week looking?"), the model writes the reply itself instead of
+  emitting reasoning like "no tool calls needed here". Also nudged to log fuel
+  and feelings mentioned *alongside* a session ("rode 60k, had porridge and two
+  gels, felt strong").
+- Docs: `ARCHITECTURE.md` context-package example updated (goal + history/fuel).
+- Live-tested against `claude-sonnet-5`: a session-log message logs
+  session+fuel+recovery; "what do you know about me" returns a real summary;
+  a repeat-ride planning question references the prior ride and says "that
+  worked once — keep it". 114 tests green (+1 asserting goal/history reach both
+  prompts); `tsc`, `eslint`, `next build` clean.
 
 ### M14.2 — Slim onboarding + contextual weight + endurance-first ✅
 _2026 reset, step 2. The ~13-field intake form was the first impression and it
@@ -45,7 +73,7 @@ read as "medical intake"; every field cut lifts first-conversation completion._
 ### Reset milestone plan
 - **M14.1** ✅ De-scope: remove the Daily tab + Mifflin–St Jeor energy model + food catalog; nav → Home/Dashboard/Chat; docs re-pointed.
 - **M14.2** ✅ Slim onboarding (name · endurance sports · what you're training for); weight optional + collected contextually via `save_profile_fact`; sports trimmed to run/bike/swim/tri + strength; goal captured.
-- **M15** Anthropic is the shipped path; wire `history` + recovery + fuel + goal into the prompt context.
+- **M15** ✅ Anthropic is the shipped conversational path; `history` (recent sessions + recovery + fuel logs) + `goal` wired into the interpret & compose prompts; the model now answers no-tool questions directly (was leaking "no tool calls needed").
 - **M16** Deterministic pattern layer — `Insight[]` (FACT / PATTERN / HYPOTHESIS / RECOMMENDATION + `Certainty`); broaden what gets remembered.
 - **M17** "What Kona knows about you" view replacing the chart Dashboard.
 - **M18** Home = narrative briefing; numbers inline and only when earned.

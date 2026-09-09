@@ -181,29 +181,30 @@ The AI may propose a memory candidate; application code validates and persists i
 
 ## Context package example
 
-PROFILE
-- 64kg
-- sports: running, cycling, swimming, gym
+Built by `src/agent/context.ts` and serialized into both the interpret and
+compose prompts (`src/agent/anthropic-llm.ts`). Never the whole history — a
+compact package the turn plausibly needs.
+
+GOAL
+- "First Olympic-distance triathlon in June" (event_date if known)
+
+PROFILE (self-reported)
+- weight: 64kg  (may be null — collected contextually)
+- sports: running, cycling, swimming, strength
 - bottle: 750ml
-- usual gel: SIS
-- usual protein shake: 24g
 
-CURRENT WEEK
-- Tue: 8km run
-- Wed: swim
-- Fri: bike + run
-- Sun: 18km long run
+CURRENT WEEK PLAN + pending_plan_details (sessions still missing effort/length/time)
 
-RELEVANT HISTORY
-- Previous 18km morning run: felt good, one SIS gel, no cramps
-- Previous hot afternoon run: early thirst
-- Previous long cycling session: severe calf cramp
-- Recent poor sleep before brick session
+CURRENT / LAST SESSION
+- current_plan (next upcoming) · last_actual_session
 
-CURRENT SESSION
-- 18km run
-- 6am
-- moderate intensity
+HISTORY  (recent, all sports — deeper lookups via get_relevant_history)
+- recent_sessions: date, sport, status, distance/duration, intensity, reason
+- recent_recovery: date, the athlete's words, coarse severity, symptoms
+- recent_fuel: date, items (description, quantity, known label values, certainty)
+
+MEMORIES
+- durable facts the athlete has told Kona (next_race, typical_week, preferences)
 
 ## Agent loop
 

@@ -83,6 +83,58 @@ describe('AnthropicLlmClient (fake transport, no network)', () => {
     expect(composeText).toMatch(/methodology_version/);
   });
 
+  it('puts the goal and recent history into both prompts', async () => {
+    const create = vi
+      .fn<AnthropicLike['messages']['create']>()
+      .mockResolvedValueOnce(
+        msg([
+          {
+            type: 'tool_use',
+            id: 'a',
+            name: 'save_planned_session',
+            input: { sport: 'cycling', start_at: '2026-09-04T07:00:00', distance_km: 40, intensity: 'easy' },
+          },
+          { type: 'tool_use', id: 'b', name: 'calculate_fueling_targets', input: { planned_session_id: '$last', phase: 'planning' } },
+        ]),
+      )
+      .mockResolvedValueOnce(msg([{ type: 'text', text: 'Logged.' }]));
+
+    const fake: AnthropicLike = { messages: { create } };
+    const repo = await createSeededRepository();
+    // some history to reference
+    await repo.saveActualSession({
+      user_id: DEMO_USER_ID,
+      sport: 'cycling',
+      intensity: 'easy',
+      start_at: '2026-08-30T07:00:00',
+      distance_km: 38,
+      status: 'completed',
+    });
+    await repo.saveRecoveryLog({ user_id: DEMO_USER_ID, free_text: 'legs felt great after the long ride' });
+    await repo.saveFuelLog({
+      user_id: DEMO_USER_ID,
+      items: [{ description: 'SIS gel', quantity: 2, certainty: 'user_reported' }],
+    });
+
+    const deps: AgentDeps = { repo, llm: new AnthropicLlmClient({ client: fake }) };
+    await handleMessage(deps, {
+      userId: DEMO_USER_ID,
+      conversationId: 'ch',
+      message: "Tomorrow I'm doing a 40km ride",
+      now: new Date(2026, 8, 3, 20, 0, 0),
+    });
+
+    const interpretText = JSON.stringify(create.mock.calls[0]![0].messages);
+    const composeText = JSON.stringify(create.mock.calls[1]![0].messages);
+    for (const text of [interpretText, composeText]) {
+      expect(text).toMatch(/goal/);
+      expect(text).toMatch(/Stay consistent across run, bike and swim/); // the goal text
+      expect(text).toMatch(/recent_sessions/);
+      expect(text).toMatch(/legs felt great after the long ride/); // recovery note
+      expect(text).toMatch(/SIS gel/); // fuel log
+    }
+  });
+
   it('a text-only interpret response short-circuits to a clarifying question (no compose call)', async () => {
     const create = vi
       .fn<AnthropicLike['messages']['create']>()

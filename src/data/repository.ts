@@ -50,6 +50,7 @@ export interface NewRecoveryLog {
 export interface RelevantHistory {
   recent_actual_sessions: ActualSession[];
   recent_recovery_logs: RecoveryLog[];
+  recent_fuel_logs: FuelLog[];
 }
 
 /**

@@ -63,10 +63,10 @@ export async function buildContext(
     }
   }
 
-  const history = await repo.getRelevantHistory(userId, {
-    sport: current_plan?.sport ?? last_actual_session?.sport,
-    limit: 5,
-  });
+  // Recent activity across all sports — "what have you been doing" — so the
+  // model can reference it. Deeper sport-specific lookups use the
+  // get_relevant_history tool.
+  const history = await repo.getRelevantHistory(userId, { limit: 6 });
 
   return {
     now_iso: nowIso,

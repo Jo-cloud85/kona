@@ -255,6 +255,7 @@ export class InMemoryRepository implements Repository {
       .slice(-limit)
       .reverse();
     const recovery = (await this.listRecoveryLogs(userId)).slice(-limit).reverse();
-    return { recent_actual_sessions: sessions, recent_recovery_logs: recovery };
+    const fuel = (await this.listFuelLogs(userId)).slice(-limit).reverse();
+    return { recent_actual_sessions: sessions, recent_recovery_logs: recovery, recent_fuel_logs: fuel };
   }
 }

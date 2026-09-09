@@ -67,6 +67,16 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | A4 | "My legs feel tired but okay." | Minimal recovery record (severity `low`, symptom `legs`); reply reflects in plain language, gives a safety-aware next action referencing the prior hip stop-early, asks one useful question. No percentage analytics. | ✅ `tests/agent/acceptance.test.ts` |
 | A5 | Conversation persistence | User + assistant messages stored per conversation. | ✅ `tests/agent/acceptance.test.ts` |
 
+## A-ctx. Context-aware chat (M15)
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AC1 | Shipped client | The real Anthropic model is used when `ANTHROPIC_API_KEY` is set (`.env.local`); the deterministic stub is the fallback for no-key / CI / `KONA_LLM=deterministic`. | manual + `lib/kona-server.ts` |
+| AC2 | History reaches the model | `context.history` (recent sessions + recovery + fuel logs) and `profile.goal` are serialized into both the interpret and compose prompts. | ✅ `tests/agent/anthropic-llm.test.ts` |
+| AC3 | References the past | Planning a session similar to a prior one, the reply names what happened last time and — if it worked — says to keep it rather than change several things. | manual (live model) |
+| AC4 | Answers from context | "What do you know about my training?" / "how's my week looking?" get a real spoken answer (no tools), not "no tool calls needed here". | manual (live model) + `INTERPRET_SYSTEM` |
+| AC5 | FACT vs PATTERN vs HYPOTHESIS | The reply keeps "you reported this twice" (fact), "you seem to tolerate X better" (pattern) and "the bigger breakfast may be a factor" (hypothesis) distinct; never states a hypothesis as certainty. | manual (live model) + `COMPOSE_SYSTEM` |
+
 ## A-week. Weekly multi-day planning (PRODUCT_VISION.md "Weekly planning")
 
 | # | Scenario | Expected behaviour | Coverage |
