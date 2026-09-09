@@ -23,6 +23,19 @@ Architecture: **foundation model + structured athlete context + longitudinal
 memory + deterministic calculation/rules engine + conversation.** We do not train
 our own model. The goal is a rich personal athlete model.
 
+### The UX distinction (drives M17–M21)
+Every screen should communicate **"I've looked at your situation, your history
+and your goal — here's what I think you should know"**, not "here is information
+about your training." Home is a *daily briefing*, not a stats dashboard. Chat is
+visually plain; the work is Kona *initiating* useful context, not being a blank
+chatbot. **Never fabricate insights, examples or "Kona remembers" content when
+the real data isn't there — show an honest empty state.**
+
+No major visual redesign in this cycle: keep the dark theme, layout, restrained
+palette, bottom nav, cards and typography direction. Polish (transitions, type
+hierarchy, contextual icons, richer cards, learn-feedback cues, better empty
+states, Kona personality) is explicitly later.
+
 ## Target customer
 The self-coached, moderately serious multi-sport recreational athlete. Typically:
 trains ~4–8×/week; running, cycling, swimming and/or triathlon; may use Garmin /
@@ -292,6 +305,27 @@ Do not optimise pricing before validating repeat usage.
 - Automated supplement selling
 - Native mobile app
 - Autonomous notifications
+- Persistence backend (still in-memory during the reset)
+- Gamification / XP / avatar cosmetics (see the future direction below)
+
+## Future direction — Kona progression system (NOT in scope; do not build)
+An eventual **retention layer**: users earn points/XP for healthy *engagement
+with the training & fuelling process* and spend it on cosmetics for an athlete
+avatar (clothing, shoes, bike/swim gear, accessories, home/environment items,
+race memorabilia). Future milestones could unlock cosmetics.
+
+Reward **behaviours and engagement** only — e.g. completing planned sessions,
+preparing fuelling, checking in after workouts, recording how a session felt,
+adapting sensibly when a plan changes, consistent training, giving Kona useful
+information.
+
+**Guardrail:** never reward "being pain-free" or imply that pain/injury is a
+failure. Reward behaviours, never health outcomes outside the user's control.
+
+For now: keep the data model clean enough that XP could be layered on later
+without a rewrite. Concretely, M19 ("make the feedback loop visible") introduces
+a typed activity/event log, which a future XP system would consume. Do not build
+XP UI or mechanics.
 
 ## MVP success signal
 The strongest early signal is repeated use:

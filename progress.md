@@ -1,12 +1,11 @@
 # Kona — Progress
 
 ## Current milestone
-**Product reset (2026) in progress.** Founder re-scoped Kona to an *AI endurance
-companion* for the self-coached multi-sport recreational athlete — relationship +
-accumulated understanding, not a nutrition tracker. Audit approved in full;
-executing in milestones M14.1 → M21 (see the reset plan). **M14.1 done.**
-Next: M17 — a "What Kona knows about you" view (replaces the chart Dashboard)
-rendering the M16 insights + recent history in plain language.
+**Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
+companion* — relationship + accumulated understanding, not a nutrition tracker.
+**M14.1–M16 + M15.1 done.** Next: **M17** — the "What Kona knows about you" view.
+Founder direction: no visual redesign, don't fabricate insights, stop for a
+product review after M21. See the reset milestone plan below + `PRODUCT_VISION.md`.
 
 ### M16 — deterministic pattern layer ✅
 _The half of the loop that makes Kona "know" the athlete: turn accumulated
@@ -99,15 +98,23 @@ read as "medical intake"; every field cut lifts first-conversation completion._
   `save_profile_fact` flow verified in the browser.
 
 ### Reset milestone plan
+UX north-star: every screen says _"I've looked at your situation, your history
+and your goal — here's what I think you should know"_, not "here is information
+about your training." **No major visual redesign** (keep dark theme, layout,
+palette, bottom nav, cards, typography). **Never fabricate insights / examples
+when real data is missing — honest empty states.** Persistence, gamification and
+integrations are out of this cycle. **Stop for a product review after M21.**
+
 - **M14.1** ✅ De-scope: remove the Daily tab + Mifflin–St Jeor energy model + food catalog; nav → Home/Dashboard/Chat; docs re-pointed.
 - **M14.2** ✅ Slim onboarding (name · endurance sports · what you're training for); weight optional + collected contextually via `save_profile_fact`; sports trimmed to run/bike/swim/tri + strength; goal captured.
-- **M15** ✅ Anthropic is the shipped conversational path; `history` (recent sessions + recovery + fuel logs) + `goal` wired into the interpret & compose prompts; the model now answers no-tool questions directly (was leaking "no tool calls needed").
-- **M16** Deterministic pattern layer — `Insight[]` (FACT / PATTERN / HYPOTHESIS / RECOMMENDATION + `Certainty`); broaden what gets remembered.
-- **M17** "What Kona knows about you" view replacing the chart Dashboard.
-- **M18** Home = narrative briefing; numbers inline and only when earned.
-- **M19** Close the check-in / logging loops — they visibly change the next recommendation + enter visible history.
-- **M20** Goal/race anchoring ("week X of Y before <event>") through Home + plan.
-- **M21** Defer plan-detail prompts to the next 1–2 key sessions.
+- **M15** ✅ Anthropic is the shipped conversational path; `history` + `goal` wired into the prompts; model answers no-tool questions directly.
+- **M15.1** ✅ Edit a sent chat message → regenerate the reply.
+- **M16** ✅ Deterministic pattern layer — `deriveInsights()` → `Insight[]` (fact / pattern / hypothesis / recommendation + certainty).
+- **M17** "What Kona knows about you" view (replaces the chart Dashboard) — show *evidence of learning*, not raw DB fields; each insight shows its supporting evidence ("why Kona believes this"); honest empty state.
+- **M18** Home = a genuine daily briefing answering: what am I doing today? does anything about today matter? what to prepare for next? anything relevant from history? Sections like YOUR DAY / ONE THING TO THINK ABOUT / KONA REMEMBERS. Not a stats dashboard.
+- **M19** Make the feedback loop **visible**: told → remembered → recurred → recommendation changed. Introduce a typed activity/event log (also future-proofs a possible XP layer — see `PRODUCT_VISION.md` "Future direction").
+- **M20** Goal context appears naturally through Home + relevant chat ("Week 6 of 12", "11 weeks until your triathlon") — context for the assistant, not a generic plan app.
+- **M21** Stop prompting for every session up front — only the next 1–2 key ones. Chat should also *initiate* useful context ("Tomorrow's your first 2-hour ride of this block — want to sort fuelling first?").
 
 ## Completed work
 
