@@ -110,5 +110,30 @@ describe('analyzeWeek', () => {
     });
     expect(a.session_prompts[0]!.intensity_options.map((o) => o.value)).toEqual(['easy', 'moderate', 'hard']);
     expect(a.session_prompts[0]!.size_options.map((o) => o.minutes)).toEqual([30, 45, 60, 90, 120]);
+    // one gap, so it's in focus
+    expect(a.session_prompts[0]!.in_focus).toBe(true);
+  });
+
+  it('only puts the next 1–2 sessions in focus — key days first — and defers the rest', () => {
+    const a = analyzeWeek({
+      week_start: '2026-09-07',
+      sessions: [
+        s('2026-09-07', { sport: 'gym', needs_detail: ['intensity', 'duration_or_distance', 'time_of_day'] }),
+        s('2026-09-08', { sport: 'swimming', needs_detail: ['intensity', 'duration_or_distance', 'time_of_day'] }),
+        s('2026-09-09', { sport: 'cycling', needs_detail: ['intensity', 'duration_or_distance', 'time_of_day'] }),
+        // Friday long run — a key day, but last in the week
+        s('2026-09-11', { sport: 'running', is_long: true, needs_detail: ['duration_or_distance', 'time_of_day'], start_at: '2026-09-11T07:00:00' }),
+      ],
+      profile,
+    });
+
+    const focus = a.session_prompts.filter((p) => p.in_focus);
+    expect(focus).toHaveLength(2);
+    // the key (long) session is pulled into focus even though it's latest
+    expect(focus.some((p) => p.sport === 'running' && p.is_key)).toBe(true);
+    // the very first non-key session fills the other slot
+    expect(focus.some((p) => p.sport === 'gym')).toBe(true);
+    // the middle two wait
+    expect(a.session_prompts.filter((p) => !p.in_focus).map((p) => p.sport).sort()).toEqual(['cycling', 'swimming']);
   });
 });

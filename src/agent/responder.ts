@@ -223,6 +223,11 @@ function describeWeekSession(s: WeekAnalysis['days'][number]['sessions'][number]
   return base;
 }
 
+function listLabels(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] ?? '';
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
+
 function promptGaps(p: WeekAnalysis['session_prompts'][number]): string {
   const g: string[] = [];
   if (p.ask_intensity) g.push('effort');
@@ -279,12 +284,18 @@ function planAdviceLines(analysis: WeekAnalysis): string[] {
   }
 
   if (analysis.session_prompts.length) {
+    const focus = analysis.session_prompts.filter((p) => p.in_focus);
+    const shown = focus.length ? focus : analysis.session_prompts;
+    const deferred = analysis.session_prompts.length - shown.length;
     out.push(
       '',
-      `I still need the details (effort, length, time of day) for ${analysis.session_prompts.length} session${
-        analysis.session_prompts.length === 1 ? '' : 's'
-      } — use the buttons below, or just tell me.`,
+      `Let's pin down the ${shown.length === 1 ? 'session that matters most' : `${shown.length} sessions that matter most`} first — ${listLabels(
+        shown.map((p) => p.label),
+      )} (effort, length, time of day). Use the buttons below, or just tell me.`,
     );
+    if (deferred > 0) {
+      out.push(`The other ${deferred} we can sort a day or two out, when ${deferred === 1 ? 'it' : 'they'} matter.`);
+    }
   } else if (analysis.open_questions.length) {
     out.push('', "A few things I'd pin down so the fueling advice is right:");
     for (const q of analysis.open_questions.slice(0, 4)) out.push(`- ${q.text}`);

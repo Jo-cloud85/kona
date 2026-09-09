@@ -96,7 +96,15 @@ export interface SessionPrompt {
   intensity_options: SessionPromptOption[];
   size_options: SessionPromptOption[];
   time_options: SessionPromptOption[];
+  /** This session is on a key day (long / hard / double) — worth pinning down now. */
+  is_key: boolean;
+  /** One of the next 1–2 sessions that actually matter. The rest are deferred —
+   *  surfaced per-day as they come up, not demanded when the week is saved. */
+  in_focus: boolean;
 }
+
+/** How many under-specified sessions Kona pins down up front. The rest wait. */
+const FOCUS_PROMPT_LIMIT = 2;
 
 const INTENSITY_OPTIONS: SessionPromptOption[] = [
   { label: 'Easy', value: 'easy' },
@@ -321,9 +329,19 @@ function buildSessionPrompts(days: WeekDay[]): SessionPrompt[] {
         intensity_options: INTENSITY_OPTIONS,
         size_options: SIZE_OPTIONS,
         time_options: TIME_OPTIONS,
+        is_key: day.is_key_day,
+        in_focus: false,
       });
     });
   }
+  // Only chase the next 1–2 sessions that matter now: key days first, then
+  // soonest. `days` is already date-ordered, so a stable sort by key-ness keeps
+  // the earliest key session ahead of a later one. Everything past the limit is
+  // deferred — the daily briefing picks those up a day out.
+  const ranked = prompts
+    .map((p, idx) => ({ p, idx }))
+    .sort((a, b) => Number(b.p.is_key) - Number(a.p.is_key) || a.idx - b.idx);
+  for (const { p } of ranked.slice(0, FOCUS_PROMPT_LIMIT)) p.in_focus = true;
   return prompts;
 }
 

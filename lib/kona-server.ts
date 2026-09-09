@@ -96,8 +96,13 @@ export async function sendMessage(conversationId: string, message: string): Prom
   const turn = await handleMessage(deps(), { userId: DEMO_USER_ID, conversationId, message });
   let session_prompts: unknown[] = [];
   for (const r of turn.tool_results) {
-    const analysis = (r.data as { analysis?: { session_prompts?: unknown[] } } | undefined)?.analysis;
-    if (r.ok && Array.isArray(analysis?.session_prompts)) session_prompts = analysis.session_prompts;
+    const analysis = (r.data as { analysis?: { session_prompts?: { in_focus?: boolean }[] } } | undefined)?.analysis;
+    if (r.ok && Array.isArray(analysis?.session_prompts)) {
+      // Only surface the 1–2 sessions Kona is chasing now — the rest are
+      // deferred (M21). Fall back to all if nothing is flagged.
+      const focus = analysis.session_prompts.filter((p) => p.in_focus);
+      session_prompts = focus.length ? focus : analysis.session_prompts;
+    }
   }
   return { turn, session_prompts };
 }
@@ -209,6 +214,10 @@ export async function submitCheckin(input: CheckinInput): Promise<CheckinResult 
 /** The one-time opening message + conversation starters (only meaningful before
  *  the conversation has any messages). Null until the user has onboarded. */
 export async function getStarter(): Promise<ChatStarter | null> {
-  const profile = await getRepo().getProfile(DEMO_USER_ID);
-  return profile?.onboarded_at ? buildStarter(profile) : null;
+  const repo = getRepo();
+  const profile = await repo.getProfile(DEMO_USER_ID);
+  if (!profile?.onboarded_at) return null;
+  const weeklyPlan = (await repo.listWeeklyPlans(DEMO_USER_ID)).at(-1);
+  const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  return buildStarter(profile, { now: new Date(), sessions });
 }

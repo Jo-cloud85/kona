@@ -89,20 +89,36 @@ describe('weekly plan conversation slice', () => {
     // time of day is a required detail too (drives pre-fuel advice).
     expect(turn.reply).toMatch(/Mon: gym \(effort & distance\/time & time of day not set\)/);
     expect(turn.reply).not.toMatch(/Mon: easy gym/);
-    // advice for every day, plus a nudge to fill the gaps via the option buttons
+    // advice for every day, but it only chases the 1–2 sessions that matter
+    // now (Friday's double day) and defers the rest — it does NOT demand
+    // details for all six up front.
     expect(turn.reply).toMatch(/Day by day:/);
-    expect(turn.reply).toMatch(/details \(effort, length, time of day\) for \d+ sessions/i);
+    expect(turn.reply).toMatch(/pin down the 2 sessions that matter most first — Fri cycling \(1st\) and Fri running \(2nd\)/i);
+    expect(turn.reply).toMatch(/other 4 we can sort a day or two out/i);
 
-    // structured per-session prompts are produced for the UI to render as buttons
+    // structured per-session prompts are still produced for every under-specified
+    // session (the UI renders the in-focus ones as buttons).
     const analysis = turn.tool_results.find((r) => r.tool === 'save_weekly_plan')!.data as {
       analysis: {
-        session_prompts: { label: string; ask_intensity: boolean; ask_size: boolean; ask_time: boolean }[];
+        session_prompts: {
+          label: string;
+          ask_intensity: boolean;
+          ask_size: boolean;
+          ask_time: boolean;
+          is_key: boolean;
+          in_focus: boolean;
+        }[];
       };
     };
     const promptLabels = analysis.analysis.session_prompts.map((p) => p.label);
     expect(promptLabels).toEqual(
       expect.arrayContaining(['Mon gym', 'Wed swimming', 'Fri cycling (1st)', 'Fri running (2nd)']),
     );
+    // Only Friday's double-session pair is in focus; the rest wait.
+    expect(analysis.analysis.session_prompts.filter((p) => p.in_focus).map((p) => p.label).sort()).toEqual([
+      'Fri cycling (1st)',
+      'Fri running (2nd)',
+    ]);
     expect(analysis.analysis.session_prompts.find((p) => p.label === 'Mon gym')).toMatchObject({
       ask_intensity: true,
       ask_size: true,

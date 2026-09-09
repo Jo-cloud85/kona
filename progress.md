@@ -3,9 +3,40 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M20 + M15.1 done.** Next: **M21** — defer plan-detail prompts + proactive chat context, then STOP for product review.
+**M14.1–M21 + M15.1 done.** → **STOP for the founder product review** before any further milestones.
 Founder direction: no visual redesign, don't fabricate insights, stop for a
 product review after M21. See the reset milestone plan below + `PRODUCT_VISION.md`.
+
+### M21 — stop demanding every detail up front + a chat that opens with context ✅
+_A companion doesn't hand you a form. It chases the 1–2 things that matter now
+and opens the conversation already knowing what's coming up._
+- **Focus prompts.** `SessionPrompt` gained `is_key` (on a long / hard / double
+  day) and `in_focus`. `buildSessionPrompts` ranks the under-specified sessions
+  — key days first, then soonest — and flags only the next `FOCUS_PROMPT_LIMIT`
+  (2) as `in_focus`. The engine still emits a prompt for **every** gap (nothing
+  is lost); the rest are just deferred.
+  - `kona-server.sendMessage` returns only the `in_focus` prompts, so the chat
+    renders 1–2 button groups, not six.
+  - The deterministic composer now says "Let's pin down the 2 sessions that
+    matter most first — Fri cycling (1st) and Fri running (2nd) … The other 4
+    we can sort a day or two out, when they matter."
+  - `COMPOSE_SYSTEM` tells the real model to ask only about the `in_focus`
+    sessions and say the rest can wait. Live-verified: a 6-session week →
+    "that Friday bike-then-run and the Sunday long run are the two that matter
+    most … the rest of the week can wait until you're closer."
+  - The per-day "needs" list on Home already surfaces a day's own gaps a day
+    out, so deferring costs nothing.
+- **Chat opens with context.** `buildStarter` takes an optional
+  `StarterContext { now, sessions }`. When a notable session is within 3 days
+  (long / hard / part of a double day wins; else the soonest), the opener leads
+  with it — "Coming up on Friday: your cycling. That's a session worth getting
+  right — tell me the details and we'll sort the fuelling." Falls back to the
+  plain intro when nothing is close or there's no plan. `getStarter` loads the
+  current week's sessions and passes them in.
+- Tests: +1 `week.test.ts` (focus / defer), +3 `starter.test.ts` (key opener,
+  light opener, generic fallback), `week-plan.test.ts` assertions updated to the
+  new "pin down the 2 that matter" wording. **153 total**; `tsc` / `eslint` /
+  `next build` clean. Live-verified end to end against the real model.
 
 ### M20 — goal/race context, surfaced naturally ✅
 _The goal is context for the assistant, not a periodised training plan. It should
@@ -223,7 +254,9 @@ integrations are out of this cycle. **Stop for a product review after M21.**
 - **M18** ✅ Home is a daily briefing — YOUR DAY (prose; numbers only when the session earns them) / ONE THING TO THINK ABOUT (next key session + a real "this worked" pattern line, never fabricated) / KONA REMEMBERS (recurring facts). Day strip + check-in kept; no visual redesign.
 - **M19** ✅ Feedback loop made **visible** — a typed `activity_events` log + a "How Kona's been learning" timeline on Memory (you logged X → Kona remembered → spotted a pattern → advice adapts). The event log is the seam a future XP layer would consume.
 - **M20** ✅ Goal context surfaces naturally — a slim "N weeks to your <goal>" line on Home; `goalContext()` computes weeks/days-until from a parsed or stated `event_date`; the chat model gets `weeks_until` and a nudge to weave timing in without acting like a periodised plan; `save_profile_fact` can set/update the goal + date from chat.
-- **M21** Stop prompting for every session up front — only the next 1–2 key ones. Chat should also *initiate* useful context ("Tomorrow's your first 2-hour ride of this block — want to sort fuelling first?").
+- **M21** ✅ Stop prompting for every session up front — the engine flags only the next 1–2 key sessions `in_focus` (key days first, then soonest), the composer + real model chase just those and say the rest can wait, and the chat opener leads with the nearest notable upcoming session instead of a generic greeting.
+
+**→ M14.1–M21 complete. STOP HERE for the founder product review before starting anything new.**
 
 ## Completed work
 
@@ -526,4 +559,17 @@ _Prompted by user feedback: Kona was silently defaulting unstated intensity to "
 - Node 20.12 vs eslint-visitor-keys wanting 20.19+ — warning only.
 
 ## Next recommended task
-Replace `InMemoryRepository` with a real backend (Postgres/Supabase) behind the existing `Repository` interface so state survives restarts. Then food-estimation ranges for vague meals (§14, scenarios B14/B15) and cautious historical pattern surfacing (§12, B12).
+**Hold.** The 2026-reset milestone block M14.1–M21 is done. Per the founder's
+instruction, stop for a **product review** before starting anything new — no
+persistence backend, no new features, no gamification until that review.
+
+Candidates to raise at the review (not started): real persistence backend
+(Postgres/Supabase behind `Repository`); "Week X of Y" once a periodised-block
+model exists; the chat *proactively* posting into an existing thread (M21 only
+covers the opener of a fresh one); polish pass (transitions, type hierarchy,
+Kona personality) that the founder explicitly deferred.
+
+M21 follow-ups worth a mention: the real model's prose can name a third key
+session the button prompts don't (`FOCUS_PROMPT_LIMIT` = 2) — harmless but worth
+a decision; the contextual opener says "your cycling" with no descriptor when the
+session is still undetailed.

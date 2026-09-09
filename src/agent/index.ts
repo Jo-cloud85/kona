@@ -14,7 +14,7 @@ export {
   type AnthropicLike,
 } from './anthropic-llm';
 export { buildContext } from './context';
-export { buildStarter, type ChatStarter } from './starter';
+export { buildStarter, type ChatStarter, type StarterContext } from './starter';
 export {
   buildDashboard,
   type Dashboard,
