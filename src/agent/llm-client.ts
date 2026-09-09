@@ -8,6 +8,7 @@ import type {
   WeeklyPlan,
 } from '../domain/types';
 import type { RelevantHistory } from '../data/repository';
+import type { Insight } from './insights';
 
 /** Sessions in the current weekly plan the user hasn't fully specified. */
 export interface PendingPlanDetail {
@@ -35,6 +36,8 @@ export interface ContextPackage {
   pending_plan_details?: PendingPlanDetail;
   history: RelevantHistory;
   memories: PersistedMemory[];
+  /** Pre-computed observations about the athlete (deterministic pattern layer). */
+  insights: Insight[];
 }
 
 export interface ToolSchema {

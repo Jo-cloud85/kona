@@ -5,8 +5,36 @@
 companion* for the self-coached multi-sport recreational athlete — relationship +
 accumulated understanding, not a nutrition tracker. Audit approved in full;
 executing in milestones M14.1 → M21 (see the reset plan). **M14.1 done.**
-Next: M16 — deterministic pattern layer (`Insight[]`: FACT / PATTERN /
-HYPOTHESIS / RECOMMENDATION + `Certainty`) + broaden what gets remembered.
+Next: M17 — a "What Kona knows about you" view (replaces the chart Dashboard)
+rendering the M16 insights + recent history in plain language.
+
+### M16 — deterministic pattern layer ✅
+_The half of the loop that makes Kona "know" the athlete: turn accumulated
+history into a few honest, labelled observations — computed in code, not
+invented by the model._
+- `src/agent/insights.ts` — `deriveInsights({ actualSessions, recoveryLogs,
+  fuelLogs, memories })` → `Insight[]`. Each carries `kind`
+  (**fact / pattern / hypothesis / recommendation**), `text` (ready to show),
+  `certainty` (high / moderate / low), `evidence_count`, `topic`, `as_of`.
+  Four conservative detectors: a per-sport routine that keeps going to plan
+  (PATTERN + "keep it" RECOMMENDATION); a body part / symptom mentioned ≥2×
+  (FACT — explicitly non-diagnostic; + a gentle "get it assessed" RECOMMENDATION
+  when a mention was moderate+); ≥3 of the last ≤6 sessions off-plan (FACT, no
+  cause implied); a fuel item logged ≥3× (FACT — "a staple"). HYPOTHESIS is not
+  auto-detected (premature with little data, risks implying causation) — that
+  stays the model's job in chat, guided by `COMPOSE_SYSTEM`. Empty history → `[]`.
+- Wired into `ContextPackage.insights` via `buildContext` (runs over the FULL
+  history every turn); `contextForPrompt()` passes `{kind, text}` to the model,
+  and `COMPOSE_SYSTEM` says to lean on them and keep each tag's meaning.
+- `GET /api/insights` + `getInsights()` in `kona-server.ts` (for M17).
+- `INTERPRET_SYSTEM` memory guidance broadened: propose memories for standing
+  preferences, constraints, go-to setups and recurring body flags — not just
+  `next_race` / `typical_week`.
+- Tests: +6 (`tests/agent/insights.test.ts` — every detector + the not-enough-
+  data case). **123 total**; `tsc`, `eslint`, `next build` clean. Live-tested:
+  after logging a couple of tight-calf notes, `/api/insights` returns the FACT +
+  RECOMMENDATION, and the chat reply weaves in "your right calf has come up
+  twice now… if it keeps recurring, worth getting it looked at" — non-diagnostic.
 
 ### M15 — real model is the shipped path + full context wiring ✅
 _The Anthropic client existed but (a) the launch config forced the deterministic

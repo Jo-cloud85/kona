@@ -10,6 +10,7 @@ import {
   buildHome,
   buildStarter,
   checkinReflection,
+  deriveInsights,
   handleMessage,
   screenForEscalation,
   type AgentDeps,
@@ -18,6 +19,7 @@ import {
   type ChatStarter,
   type Dashboard,
   type HomeView,
+  type Insight,
   type LlmClient,
 } from '../src/agent/index';
 
@@ -133,6 +135,17 @@ export async function getDashboard(): Promise<Dashboard | null> {
 
 function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export async function getInsights(): Promise<Insight[]> {
+  const repo = getRepo();
+  const [actualSessions, recoveryLogs, fuelLogs, memories] = await Promise.all([
+    repo.listActualSessions(DEMO_USER_ID),
+    repo.listRecoveryLogs(DEMO_USER_ID),
+    repo.listFuelLogs(DEMO_USER_ID),
+    repo.listMemories(DEMO_USER_ID),
+  ]);
+  return deriveInsights({ actualSessions, recoveryLogs, fuelLogs, memories });
 }
 
 export async function getHome(selectedDate?: string): Promise<HomeView | null> {

@@ -1,5 +1,6 @@
 import type { MissingDetail, Sport } from '../domain/types';
 import type { Repository } from '../data/repository';
+import { deriveInsights } from './insights';
 import type { ContextPackage, PendingPlanDetail } from './llm-client';
 
 /**
@@ -13,12 +14,14 @@ export async function buildContext(
   userId: string,
   nowIso: string,
 ): Promise<ContextPackage> {
-  const [profile, planned, actuals, memories, weeks] = await Promise.all([
+  const [profile, planned, actuals, memories, weeks, recoveryLogs, fuelLogs] = await Promise.all([
     repo.getProfile(userId),
     repo.listPlannedSessions(userId),
     repo.listActualSessions(userId),
     repo.listMemories(userId),
     repo.listWeeklyPlans(userId),
+    repo.listRecoveryLogs(userId),
+    repo.listFuelLogs(userId),
   ]);
 
   const today = nowIso.slice(0, 10);
@@ -68,6 +71,9 @@ export async function buildContext(
   // get_relevant_history tool.
   const history = await repo.getRelevantHistory(userId, { limit: 6 });
 
+  // Pre-computed observations over the FULL history (deterministic pattern layer).
+  const insights = deriveInsights({ actualSessions: actuals, recoveryLogs, fuelLogs, memories });
+
   return {
     now_iso: nowIso,
     profile,
@@ -77,5 +83,6 @@ export async function buildContext(
     pending_plan_details,
     history,
     memories,
+    insights,
   };
 }

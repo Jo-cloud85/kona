@@ -78,6 +78,16 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AC5 | FACT vs PATTERN vs HYPOTHESIS | The reply keeps "you reported this twice" (fact), "you seem to tolerate X better" (pattern) and "the bigger breakfast may be a factor" (hypothesis) distinct; never states a hypothesis as certainty. | manual (live model) + `COMPOSE_SYSTEM` |
 | AC6 | Edit a message → regenerate | Editing a sent user message truncates the transcript at that point and re-runs the turn — the edited message + a fresh reply replace everything below; the sidebar title updates. Structured side effects of the replaced turn are NOT rolled back (documented). | ✅ `tests/agent/edit-message.test.ts`, `tests/data/repository.test.ts` + manual |
 
+## A-insight. Pattern layer (M16)
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AI1 | Deterministic, not invented | `deriveInsights()` computes observations from history in code; each is labelled **fact / pattern / hypothesis / recommendation** with a certainty and an evidence count. | ✅ `tests/agent/insights.test.ts` |
+| AI2 | Conservative | Nothing is emitted below the thresholds (a routine needs ≥3 same-sport completed sessions; a recurring symptom ≥2 mentions; an off-plan run ≥3 of ≤6; a staple fuel item ≥3 logs). Empty history → `[]`. | ✅ `tests/agent/insights.test.ts` |
+| AI3 | Non-diagnostic | A recurring body-part mention is a FACT ("noted calf 2 times… Kona doesn't diagnose"); a moderate+ mention adds a gentle "get it assessed" recommendation. No cause is ever asserted. | ✅ `tests/agent/insights.test.ts` + manual (live model) |
+| AI4 | Model leans on them | Insights are in the chat context (`kind` + `text`); the reply references them keeping the tag's meaning (a "pattern" is not upgraded to certainty). | manual (live model) + `COMPOSE_SYSTEM` |
+| AI5 | `GET /api/insights` | Returns the current `Insight[]` for the demo user (feeds the M17 "What Kona knows" view). | manual + `getInsights()` |
+
 ## A-week. Weekly multi-day planning (PRODUCT_VISION.md "Weekly planning")
 
 | # | Scenario | Expected behaviour | Coverage |
