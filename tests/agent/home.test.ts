@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildHome } from '../../src/agent/index';
-import type { PlannedSession, Profile, WeeklyPlan } from '../../src/domain/types';
+import type { ActualSession, PlannedSession, Profile, RecoveryLog, WeeklyPlan } from '../../src/domain/types';
 
 const profile: Profile = {
   user_id: 'user_demo',
@@ -36,6 +36,19 @@ function session(over: Partial<PlannedSession>): PlannedSession {
     ...over,
   };
 }
+function actual(over: Partial<ActualSession>): ActualSession {
+  return {
+    id: `a_${Math.random()}`,
+    user_id: 'user_demo',
+    kind: 'actual',
+    sport: 'cycling',
+    intensity: 'easy',
+    start_at: '2026-09-01T07:00:00',
+    status: 'completed',
+    created_at: '2026-09-01T08:00:00Z',
+    ...over,
+  };
+}
 
 describe('buildHome', () => {
   it('lays out Mon–Sun of the current week with today marked and defaults to today', () => {
@@ -55,72 +68,122 @@ describe('buildHome', () => {
     expect(h.greeting_name).toBe('Joan');
   });
 
-  it('surfaces the planned session with length + effort and during-session fuel', () => {
+  it('YOUR DAY: an easy session reads plainly, no numbers, nothing to prepare', () => {
+    const h = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [session({ start_at: '2026-09-09T13:00:00', distance_km: 6, time_of_day: 'afternoon' })],
+      now: NOW,
+    });
+    const yd = h.briefing.your_day;
+    expect(yd.headline.toLowerCase()).toContain('6 km');
+    expect(yd.headline.toLowerCase()).toContain('run');
+    expect(yd.line).toMatch(/nothing unusual|keep it easy/i);
+    expect(yd.fuelling).toBeNull();
+    expect(yd.needs).toEqual([]);
+  });
+
+  it('YOUR DAY: a long session shows the during-session references + post protein', () => {
     const h = buildHome({
       profile,
       weeklyPlan: plan(),
       sessions: [session({ start_at: '2026-09-09T06:00:00', distance_km: 18, is_long: true })],
       now: NOW,
     });
-    expect(h.selected.sessions).toHaveLength(1);
-    const s = h.selected.sessions[0]!;
-    expect(s.is_long).toBe(true);
-    expect(s.title.toLowerCase()).toContain('run');
-    expect(s.duration_label).toContain('18');
-    expect(s.intensity_known).toBe(true);
-
-    expect(h.selected.fuel.during_session).not.toBeNull();
-    expect(h.selected.fuel.is_normal_day).toBe(false);
-    // a session day carries the post-session protein reference (rules table)
-    expect(h.selected.fuel.post_session_protein_g).not.toBeNull();
-    expect(h.selected.fuel.post_session_protein_g!.max).toBeGreaterThan(h.selected.fuel.post_session_protein_g!.min);
-    expect(h.week.find((d) => d.date === '2026-09-09')?.has_session).toBe(true);
+    const yd = h.briefing.your_day;
+    expect(yd.headline.toLowerCase()).toContain('long');
+    expect(yd.fuelling).not.toBeNull();
+    expect(yd.fuelling!.carb_g_per_hour.max).toBeGreaterThan(0);
+    expect(yd.fuelling!.post_session_protein_g!.max).toBeGreaterThan(yd.fuelling!.post_session_protein_g!.min);
+    expect(yd.line).toMatch(/bigger one/i);
   });
 
-  it('treats a rest day as a normal day — no during-session block, no protein line', () => {
-    const h = buildHome({
-      profile,
-      weeklyPlan: plan(),
-      sessions: [],
-      now: NOW,
-      selectedDate: '2026-09-07',
-    });
-    expect(h.selected.is_rest).toBe(true);
-    expect(h.selected.sessions).toHaveLength(0);
-    expect(h.selected.fuel.during_session).toBeNull();
-    expect(h.selected.fuel.is_normal_day).toBe(true);
-    expect(h.selected.fuel.post_session_protein_g).toBeNull();
+  it('YOUR DAY: a rest day and an unplanned day read honestly', () => {
+    const rest = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW, selectedDate: '2026-09-07' });
+    expect(rest.briefing.your_day.headline).toBe('Rest day');
+    expect(rest.briefing.your_day.fuelling).toBeNull();
+
+    const noPlan = buildHome({ profile, sessions: [], now: NOW });
+    expect(noPlan.briefing.your_day.headline).toMatch(/no plan/i);
+    expect(noPlan.briefing.your_day.line).toMatch(/tell kona your week/i);
   });
 
-  it('flags effort / length not set when the session still needs detail', () => {
+  it('YOUR DAY: unset details are listed and the line nudges to chat', () => {
     const h = buildHome({
       profile,
       weeklyPlan: plan(),
       sessions: [
-        session({
-          start_at: '2026-09-10T18:00:00',
-          sport: 'gym',
-          needs_detail: ['intensity', 'duration_or_distance'],
-        }),
+        session({ start_at: '2026-09-10T18:00:00', sport: 'gym', needs_detail: ['intensity', 'duration_or_distance', 'time_of_day'] }),
       ],
       now: NOW,
       selectedDate: '2026-09-10',
     });
-    const s = h.selected.sessions[0]!;
-    expect(s.intensity_known).toBe(false);
-    expect(s.intensity).toBeNull();
-    expect(s.duration_label).toMatch(/not set/i);
-    // an unclassifiable session is still a "normal day" for fuelling
-    expect(h.selected.fuel.is_normal_day).toBe(true);
+    expect(h.briefing.your_day.needs.sort()).toEqual(['effort', 'length', 'time']);
+    expect(h.briefing.your_day.line).toMatch(/sort it in chat/i);
   });
 
-  it('works with no weekly plan — still returns the week', () => {
-    const h = buildHome({ profile, sessions: [], now: NOW });
-    expect(h.has_plan).toBe(false);
-    expect(h.week).toHaveLength(7);
-    expect(h.selected.in_plan).toBe(false);
-    expect(h.selected.fuel.is_normal_day).toBe(true);
-    expect(h.selected.fuel.during_session).toBeNull();
+  it('ONE THING TO THINK ABOUT: points at the next key day and folds in a real pattern', () => {
+    // Thu 2026-09-10 is a long ride; three prior easy rides establish a pattern.
+    const priorRides = ['2026-08-30', '2026-09-03', '2026-09-06'].map((d) =>
+      actual({ sport: 'cycling', start_at: `${d}T07:00:00`, distance_km: 40 }),
+    );
+    const h = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [session({ start_at: '2026-09-10T07:00:00', sport: 'cycling', distance_km: 90, is_long: true })],
+      now: NOW,
+      actualSessions: priorRides,
+    });
+    const nk = h.briefing.next_key;
+    expect(nk).not.toBeNull();
+    expect(nk!.when).toBe('Tomorrow');
+    expect(nk!.headline.toLowerCase()).toContain('long');
+    expect(nk!.line).toMatch(/big fuelling day/i);
+    expect(nk!.line).toMatch(/last 3 cycling sessions all went to plan/i); // the real pattern
+  });
+
+  it('ONE THING TO THINK ABOUT is null when nothing notable is coming up', () => {
+    const h = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [session({ start_at: '2026-09-11T07:00:00', distance_km: 5, intensity: 'easy' })],
+      now: NOW,
+    });
+    expect(h.briefing.next_key).toBeNull();
+  });
+
+  it('KONA REMEMBERS surfaces a recurring-symptom fact, and is empty with no history', () => {
+    const withHistory = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [],
+      now: NOW,
+      recoveryLogs: [
+        { id: 'r1', user_id: 'u', logged_at: '2026-08-20T20:00:00Z', free_text: 'left calf tight' } as RecoveryLog,
+        { id: 'r2', user_id: 'u', logged_at: '2026-09-05T20:00:00Z', free_text: 'calf sore again', overall_severity: 'moderate' } as RecoveryLog,
+      ],
+    });
+    expect(withHistory.briefing.remembers.some((t) => /calf/i.test(t))).toBe(true);
+
+    const empty = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
+    expect(empty.briefing.remembers).toEqual([]);
+  });
+
+  it('does not repeat the same pattern in ONE THING and KONA REMEMBERS', () => {
+    const priorRuns = ['2026-08-30', '2026-09-03', '2026-09-06'].map((d) =>
+      actual({ sport: 'running', start_at: `${d}T07:00:00`, distance_km: 8 }),
+    );
+    const h = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [session({ start_at: '2026-09-10T07:00:00', distance_km: 20, is_long: true })],
+      now: NOW,
+      actualSessions: priorRuns,
+    });
+    const inNext = h.briefing.next_key?.line ?? '';
+    const patternText = 'Your last 3 running sessions all went to plan';
+    expect(inNext).toContain(patternText);
+    expect(h.briefing.remembers.some((t) => t.includes(patternText))).toBe(false);
   });
 
   it('ignores a malformed selectedDate and falls back to today', () => {
@@ -128,29 +191,16 @@ describe('buildHome', () => {
     expect(h.selected_date).toBe('2026-09-09');
   });
 
-  it('puts the time of day in the session title and adds a morning pre-fuel note', () => {
+  it('the session title carries the time of day and the morning pre-fuel note folds into the line', () => {
     const h = buildHome({
       profile,
       weeklyPlan: plan(),
       sessions: [session({ start_at: '2026-09-09T07:00:00', distance_km: 6, time_of_day: 'morning' })],
       now: NOW,
     });
-    const s = h.selected.sessions[0]!;
-    expect(s.time_of_day).toBe('morning');
-    expect(s.title.toLowerCase()).toContain('morning');
-    expect(h.selected.fuel.pre_fuel_note).toMatch(/morning session/i);
-    expect(h.selected.fuel.pre_fuel_note).toMatch(/banana|dates|toast/i);
-  });
-
-  it('has no pre-fuel note for an afternoon session', () => {
-    const h = buildHome({
-      profile,
-      weeklyPlan: plan(),
-      sessions: [session({ start_at: '2026-09-09T13:00:00', distance_km: 6, time_of_day: 'afternoon' })],
-      now: NOW,
-    });
-    expect(h.selected.sessions[0]!.time_of_day).toBe('afternoon');
-    expect(h.selected.fuel.pre_fuel_note).toBeNull();
+    expect(h.selected.sessions[0]!.time_of_day).toBe('morning');
+    expect(h.selected.sessions[0]!.title.toLowerCase()).toContain('morning');
+    expect(h.briefing.your_day.line).toMatch(/banana|dates|toast/i);
   });
 
   it('flags an end-of-day check-in as due on a training day, cleared once done', () => {
@@ -163,7 +213,6 @@ describe('buildHome', () => {
     expect(buildHome(withSession).checkin).toEqual({ due: true, done: false });
     expect(buildHome({ ...withSession, checkinDoneToday: true }).checkin).toEqual({ due: false, done: true });
 
-    // a rest day (no session today) is never "due"
     const restToday = buildHome({
       profile,
       weeklyPlan: { ...plan(), rest_days: ['2026-09-09'] },

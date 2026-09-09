@@ -19,7 +19,7 @@ export {
   type HomeView,
   type HomeSession,
   type HomeWeekDay,
-  type HomeFuel,
+  type HomeBriefing,
 } from './home';
 export { buildCheckinLog, checkinReflection, type CheckinInput, type CheckinLog } from './checkin';
 export { deriveInsights, type Insight, type InsightKind, type InsightInput } from './insights';

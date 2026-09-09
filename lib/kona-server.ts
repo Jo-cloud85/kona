@@ -156,13 +156,28 @@ export async function getHome(selectedDate?: string): Promise<HomeView | null> {
   const repo = getRepo();
   const profile = await repo.getProfile(DEMO_USER_ID);
   if (!profile?.onboarded_at) return null;
-  const weeklyPlan = (await repo.listWeeklyPlans(DEMO_USER_ID)).at(-1);
+  const [weeklyPlans, actualSessions, recoveryLogs, fuelLogs, memories] = await Promise.all([
+    repo.listWeeklyPlans(DEMO_USER_ID),
+    repo.listActualSessions(DEMO_USER_ID),
+    repo.listRecoveryLogs(DEMO_USER_ID),
+    repo.listFuelLogs(DEMO_USER_ID),
+    repo.listMemories(DEMO_USER_ID),
+  ]);
+  const weeklyPlan = weeklyPlans.at(-1);
   const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
   const today = ymdLocal(new Date());
-  const checkinDoneToday = (await repo.listRecoveryLogs(DEMO_USER_ID)).some(
-    (l) => ymdLocal(new Date(l.logged_at)) === today,
-  );
-  return buildHome({ profile, weeklyPlan, sessions, selectedDate, checkinDoneToday });
+  const checkinDoneToday = recoveryLogs.some((l) => ymdLocal(new Date(l.logged_at)) === today);
+  return buildHome({
+    profile,
+    weeklyPlan,
+    sessions,
+    selectedDate,
+    checkinDoneToday,
+    actualSessions,
+    recoveryLogs,
+    fuelLogs,
+    memories,
+  });
 }
 
 export interface CheckinResult {

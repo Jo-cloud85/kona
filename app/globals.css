@@ -1624,3 +1624,48 @@ button.cta:disabled {
   color: var(--muted);
   font-size: 13px;
 }
+
+/* ---- Home: daily briefing (M18) ---------------------------------- */
+
+.brief-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brief-label {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.brief-headline {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.brief-line {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.brief-fuel {
+  margin-top: 8px;
+}
+
+.remembers-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.55;
+}

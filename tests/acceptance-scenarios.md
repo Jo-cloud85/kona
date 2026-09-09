@@ -42,17 +42,18 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AK3 | Non-diagnostic | A recurring body-part FACT shows its quoted evidence and a "(felt significant)" tag; the footer states Kona doesn't diagnose. | ✅ `tests/agent/insights.test.ts` + manual |
 | AK4 | Visual restraint | Reuses the existing dark card aesthetic — no charts, no redesign. | manual (browser, light + dark) |
 
-## A-home. Home tab (M12)
+## A-home. Home tab (M12 → **daily briefing** in M18)
 
 | # | Scenario | Expected behaviour | Coverage |
 |---|----------|--------------------|----------|
-| AH1 | Landing page | Opening the app lands on **Home** (first nav tab). A time-based greeting (`Good morning/afternoon/evening, <name>`) and today's date sit top-left; a Profile avatar sits top-right. | ✅ `tests/agent/home.test.ts` (greeting name, `today`) + manual |
-| AH2 | Week day-strip | The current calendar week is shown Mon–Sun with the date number; today is ringed, the selected day is filled, and a dot marks days that have a session. Tapping a day reloads "What's Planned" + fuelling for that date. | ✅ `tests/agent/home.test.ts` (week dates/labels, `is_today`, `has_session`) + manual |
-| AH3 | What's Planned | The selected day shows each planned session's title, **stated** effort (or "effort not set"), and **estimated** length (`"18 km"` / `"45 min"` / `"length not set"` — never a guessed number). Rest days and days outside the plan get a plain-language line. | ✅ `tests/agent/home.test.ts` (session view, needs-detail flags) + manual |
-| AH4 | Recommended fuelling | Shows only what the day warrants — no daily energy/macro breakdown. A classifiable session shows during-session carb / fluid / sodium references + a post-session protein line; a rest or easy/unclassifiable day says "nothing to prepare — normal meals and fluids". | ✅ `tests/agent/home.test.ts` (during-session present for a long run; `post_session_protein_g` null on a rest day; `is_normal_day` for rest / gym-needs-detail / no-plan) + manual |
-| AH5 | Change / add a workout | The card's CTA switches to the **Chat** tab with the composer pre-filled (`"On Wednesday I'm doing "` / `"Change my Sunday session to "`), so plan edits still go through the chat orchestrator. The prefill is applied once and then cleared. | manual (browser) |
-| AH6 | Profile overlay | The Home avatar opens a full-screen overlay with the existing profile form (edit mode, pre-filled). Saving updates the greeting name and the Home fuelling. Profile is not a nav tab. | manual (browser) + `tests/data/repository.test.ts` |
-| AH7 | No weekly plan | With no plan saved, Home still renders the week; "What's Planned" invites the user to tell Kona their week in chat. | ✅ `tests/agent/home.test.ts` |
+| AH1 | Landing page | Opening the app lands on **Home**. A time-based greeting + today's date top-left; a Profile avatar (with a check-in dot when due) top-right; the Mon–Sun day strip. | ✅ `tests/agent/home.test.ts` + manual |
+| AH2 | Week day-strip | Mon–Sun with date numbers; today ringed, selected day filled, a dot on days with a session. Tapping a day re-renders **YOUR DAY** for that date. | ✅ `tests/agent/home.test.ts` + manual |
+| AH3 | YOUR DAY | Plain-language: a headline (session title / "Rest day" / "No plan yet") and a line ("Nothing unusual today. Keep it easy and eat normally."). Numbers (carb/fluid/sodium/protein) appear **only** when the session earns them. Unset details are listed and the line nudges to chat. Never a guessed number. | ✅ `tests/agent/home.test.ts` + manual |
+| AH4 | ONE THING TO THINK ABOUT | The next key day (long / double / hard) after today, with the prep note and — when the history supports it — a real "this worked before" pattern line ("Your last 3 cycling sessions all went to plan… I'd keep your usual setup"). Hidden when nothing notable is coming up. Never fabricated. | ✅ `tests/agent/home.test.ts` + manual |
+| AH5 | KONA REMEMBERS | 0–2 lines pulled from the deterministic insight layer (recurring symptom / hydration facts, a pattern, a stated preference). Hidden when there's nothing real. The same pattern is not repeated across ONE THING and KONA REMEMBERS. | ✅ `tests/agent/home.test.ts` + manual |
+| AH6 | Change / add a workout | The YOUR DAY link switches to **Chat** with the composer pre-filled; plan edits go through the orchestrator. | manual |
+| AH7 | Profile overlay | The Home avatar opens a full-screen overlay with the settings form (pre-filled). Saving updates the greeting + briefing. Profile is not a nav tab. | manual + `tests/data/repository.test.ts` |
+| AH8 | No weekly plan | Home still renders the week + greeting; YOUR DAY invites the user to tell Kona their week in chat. | ✅ `tests/agent/home.test.ts` |
 
 ## A-tod. Time of day + focused updates + check-in (M13)
 

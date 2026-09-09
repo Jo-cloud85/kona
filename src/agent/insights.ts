@@ -244,6 +244,28 @@ function stapleFuel(input: InsightInput): Insight[] {
     }));
 }
 
+/** Early thirst / running low on fluid, mentioned more than once. FACT. */
+function hydrationFlag(input: InsightInput): Insight[] {
+  const re = /\b(thirst\w*|dehydrat\w*|ran out of (?:water|fluid)|out of (?:water|fluid)|parched|bonk\w*)\b/i;
+  const hits = input.recoveryLogs
+    .filter((r) => re.test(r.free_text))
+    .map((r) => ({ date: dateOf(r.logged_at), quote: r.free_text }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (hits.length < 2) return [];
+  const last = hits[hits.length - 1]!.date;
+  return [
+    {
+      kind: 'fact',
+      text: `You've flagged early thirst or running low on fluid ${hits.length} times — most recently ${human(last)}.`,
+      certainty: 'high',
+      evidence_count: hits.length,
+      topic: 'fuelling',
+      as_of: last,
+      evidence: hits.map((h) => `${human(h.date)} · "${snippet(h.quote)}"`),
+    },
+  ];
+}
+
 // --- entry point --------------------------------------------------------
 
 const KIND_RANK: Record<InsightKind, number> = { pattern: 0, fact: 1, recommendation: 2, hypothesis: 3 };
@@ -252,6 +274,7 @@ export function deriveInsights(input: InsightInput): Insight[] {
   const all = [
     ...workingSetup(input),
     ...recurringSymptom(input),
+    ...hydrationFlag(input),
     ...offPlanRun(input),
     ...stapleFuel(input),
   ];

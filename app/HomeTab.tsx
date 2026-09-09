@@ -37,23 +37,26 @@ interface HomeView {
   selected: {
     date: string;
     weekday: string;
-    day_of_month: number;
     is_today: boolean;
     in_plan: boolean;
     is_rest: boolean;
     sessions: HomeSession[];
-    fuel: {
-      during_session: {
+  };
+  briefing: {
+    your_day: {
+      headline: string;
+      line: string;
+      fuelling: {
         carb_g_per_hour: Range;
         fluid_ml_per_hour: Range;
         sodium_mg_per_litre: Range | null;
+        post_session_protein_g: Range | null;
       } | null;
-      post_session_protein_g: Range | null;
-      is_normal_day: boolean;
-      pre_fuel_note: string | null;
+      needs: string[];
     };
+    next_key: { when: string; headline: string; line: string } | null;
+    remembers: string[];
   };
-  methodology: { session: string | null };
 }
 
 const WEEKDAY_FULL: Record<string, string> = {
@@ -109,8 +112,6 @@ export default function HomeTab({
     void load();
   }, [load]);
 
-  // Auto-open the end-of-day check-in once, late evening, on a training day it
-  // hasn't been done. Dismissed-for-today is remembered per browser session.
   useEffect(() => {
     if (!data?.checkin.due || new Date().getHours() < 22) return;
     let dismissed = false;
@@ -159,9 +160,9 @@ export default function HomeTab({
   const name = data.greeting_name ?? greetingName ?? 'there';
   const initial = (name.trim()[0] ?? 'K').toUpperCase();
   const sel = data.selected;
-  const fuel = sel.fuel;
-  const planTitle = sel.is_today ? "What's planned today" : `What's planned · ${longDate(sel.date)}`;
-  const fuelTitle = sel.is_today ? 'Recommended fuelling today' : `Recommended fuelling · ${longDate(sel.date)}`;
+  const b = data.briefing;
+  const yd = b.your_day;
+  const dayLabel = sel.is_today ? 'Your day' : `${WEEKDAY_FULL[sel.weekday] ?? sel.weekday} · ${longDate(sel.date)}`;
   const chatPrefill = sel.sessions.length
     ? `Change my ${WEEKDAY_FULL[sel.weekday] ?? sel.weekday} session to `
     : `On ${WEEKDAY_FULL[sel.weekday] ?? sel.weekday} I'm doing `;
@@ -203,89 +204,74 @@ export default function HomeTab({
         </button>
       )}
 
-      <section className="home-card">
-        <h2>{planTitle}</h2>
-        {sel.sessions.length > 0 ? (
-          <>
-            {sel.sessions.map((s, i) => (
-              <div key={`${s.sport}-${i}`} className="plan-item">
-                <span className="plan-title">{s.title}</span>
-                <div className="plan-chips">
-                  <span className={`plan-chip${s.intensity_known ? ' accent' : ''}`}>
-                    {s.intensity_known ? s.intensity : 'effort not set'}
-                  </span>
-                  <span className="plan-chip">{s.duration_label}</span>
-                  {!s.time_known && <span className="plan-chip">time not set</span>}
-                  {s.is_long && <span className="plan-chip">long session</span>}
-                </div>
+      {/* YOUR DAY */}
+      <section className="home-card brief-card">
+        <p className="brief-label">{dayLabel}</p>
+        <p className="brief-headline">{yd.headline}</p>
+        <p className="brief-line">{yd.line}</p>
+
+        {yd.fuelling && (
+          <div className="fuel-grid brief-fuel">
+            <div className="fuel-stat">
+              <span className="fuel-stat-label">Carbs</span>
+              <span className="fuel-stat-value">
+                {rangeText(yd.fuelling.carb_g_per_hour)} <small>g / hr</small>
+              </span>
+            </div>
+            <div className="fuel-stat">
+              <span className="fuel-stat-label">Fluid</span>
+              <span className="fuel-stat-value">
+                {rangeText(yd.fuelling.fluid_ml_per_hour)} <small>ml / hr</small>
+              </span>
+            </div>
+            <div className="fuel-stat">
+              <span className="fuel-stat-label">Sodium</span>
+              <span className="fuel-stat-value">
+                {yd.fuelling.sodium_mg_per_litre ? `${rangeText(yd.fuelling.sodium_mg_per_litre)} ` : 'to taste '}
+                {yd.fuelling.sodium_mg_per_litre && <small>mg / L</small>}
+              </span>
+            </div>
+            {yd.fuelling.post_session_protein_g && (
+              <div className="fuel-stat">
+                <span className="fuel-stat-label">After</span>
+                <span className="fuel-stat-value">
+                  {rangeText(yd.fuelling.post_session_protein_g)} <small>g protein</small>
+                </span>
               </div>
-            ))}
-          </>
-        ) : sel.is_rest ? (
-          <p className="plan-empty">Rest day — recovery and normal meals. Nothing to prepare.</p>
-        ) : !data.has_plan ? (
-          <p className="plan-empty">No weekly plan yet. Tell Kona your week in chat and it shows up here.</p>
-        ) : sel.in_plan ? (
-          <p className="plan-empty">Nothing planned for this day.</p>
-        ) : (
-          <p className="plan-empty">This day isn&apos;t part of your current plan.</p>
+            )}
+          </div>
         )}
-        <button className="home-cta" onClick={() => onOpenChat(chatPrefill)}>
+
+        <button className="home-link" onClick={() => onOpenChat(chatPrefill)}>
           {sel.sessions.length ? 'Change or add a workout in chat' : 'Add a workout in chat'} →
         </button>
       </section>
 
-      <section className="home-card">
-        <h2>{fuelTitle}</h2>
-
-        {fuel.during_session ? (
-          <>
-            <p className="home-card-sub">During-session references · methodology v{data.methodology.session}</p>
-            <div className="fuel-grid">
-              <div className="fuel-stat">
-                <span className="fuel-stat-label">Carbs</span>
-                <span className="fuel-stat-value">
-                  {rangeText(fuel.during_session.carb_g_per_hour)} <small>g / hour</small>
-                </span>
-              </div>
-              <div className="fuel-stat">
-                <span className="fuel-stat-label">Fluid</span>
-                <span className="fuel-stat-value">
-                  {rangeText(fuel.during_session.fluid_ml_per_hour)} <small>ml / hour</small>
-                </span>
-              </div>
-              <div className="fuel-stat">
-                <span className="fuel-stat-label">Sodium</span>
-                <span className="fuel-stat-value">
-                  {fuel.during_session.sodium_mg_per_litre
-                    ? `${rangeText(fuel.during_session.sodium_mg_per_litre)} `
-                    : 'to taste '}
-                  {fuel.during_session.sodium_mg_per_litre && <small>mg / litre</small>}
-                </span>
-              </div>
-            </div>
-          </>
-        ) : (
-          <p className="fuel-normal">
-            {sel.sessions.length > 0
-              ? 'Nothing special for this one — your usual meals and fluids cover it.'
-              : 'Nothing to prepare — normal meals and fluids.'}
+      {/* ONE THING TO THINK ABOUT */}
+      {b.next_key && (
+        <section className="home-card brief-card">
+          <p className="brief-label">One thing to think about</p>
+          <p className="brief-headline">
+            {b.next_key.when} — {b.next_key.headline}
           </p>
-        )}
+          <p className="brief-line">{b.next_key.line}</p>
+        </section>
+      )}
 
-        {fuel.pre_fuel_note && <p className="fuel-note">{fuel.pre_fuel_note}</p>}
-
-        {fuel.post_session_protein_g && (
-          <p className="fuel-note">
-            After: put some carbohydrate and about {rangeText(fuel.post_session_protein_g)} g protein in the meal
-            afterwards.
-          </p>
-        )}
-      </section>
+      {/* KONA REMEMBERS */}
+      {b.remembers.length > 0 && (
+        <section className="home-card brief-card">
+          <p className="brief-label">Kona remembers</p>
+          <ul className="remembers-list">
+            {b.remembers.map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <p className="home-foot">
-        Session references come from general sports-nutrition guidance, not exact targets. Kona is a wellness
-        tool, not a dietitian.
+        Kona doesn&apos;t diagnose. Session references are general starting points, not exact targets.
       </p>
 
       {checkinOpen && (
@@ -309,8 +295,7 @@ export default function HomeTab({
           <div className="app">
             <div className="landing">
               <p className="blurb">
-                Change your weight, activity level, dietary restrictions — anything. It updates the daily targets
-                and the advice.
+                Update your weight, usual bottle, sports or goal — anything. It sharpens Kona&apos;s advice.
               </p>
             </div>
             {profileInitial ? (

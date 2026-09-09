@@ -3,9 +3,35 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M17 + M15.1 done.** Next: **M18** — Home as a daily briefing.
+**M14.1–M18 + M15.1 done.** Next: **M19** — make the feedback loop visible.
 Founder direction: no visual redesign, don't fabricate insights, stop for a
 product review after M21. See the reset milestone plan below + `PRODUCT_VISION.md`.
+
+### M18 — Home is a daily briefing ✅
+_"I've looked at your day, your history and your goal — here's what you should
+know." Same dark cards, no redesign._
+- `HomeView.selected.fuel` / `methodology` replaced by `HomeView.briefing`:
+  - **YOUR DAY** — `{ headline, line, fuelling|null, needs[] }`. Plain-language
+    line ("Nothing unusual today. Keep it easy and eat normally."); the
+    during-/around-session numbers appear only when the session is big enough to
+    earn them; `needs` lists unset details and the line nudges to chat.
+  - **ONE THING TO THINK ABOUT** — `{ when, headline, line } | null`. The next
+    key day (long / double / hard) after today; the line is the prep note plus a
+    *real* "this worked before" pattern from `deriveInsights` ("Your last 3
+    cycling sessions all went to plan… I'd keep your usual setup"), never
+    fabricated. Null when nothing notable is coming up → section hidden.
+  - **KONA REMEMBERS** — 0–2 lines: recurring-symptom / hydration FACTs, then a
+    pattern not already shown, then a stated preference. Empty → section hidden.
+- New `hydrationFlag` insight detector (early thirst / low on fluid ≥2× → FACT).
+- `buildHome` now takes `actualSessions / recoveryLogs / fuelLogs / memories`
+  and runs `deriveInsights`; `getHome()` fetches them.
+- `HomeTab.tsx` rewritten to render the three sections; day strip, check-in dot
+  + banner + dialog, and the profile overlay are unchanged.
+- Tests: `home.test.ts` reworked to the briefing shape (12 tests, +hydration
+  detector). **130 total**; `tsc` / `eslint` / `next build` clean. Verified in
+  the browser against the founder's example (easy day → prose only; long ride
+  tomorrow → "ONE THING" with the pattern line; two thirst mentions → "KONA
+  REMEMBERS").
 
 ### M17 — "What Kona knows about you" (replaces the chart Dashboard) ✅
 _Show evidence of learning, not raw DB fields. No visual redesign — reuses the
@@ -133,7 +159,7 @@ integrations are out of this cycle. **Stop for a product review after M21.**
 - **M15.1** ✅ Edit a sent chat message → regenerate the reply.
 - **M16** ✅ Deterministic pattern layer — `deriveInsights()` → `Insight[]` (fact / pattern / hypothesis / recommendation + certainty).
 - **M17** ✅ "What Kona knows about you" view replaces the chart Dashboard — insights with expandable "Why Kona thinks this" evidence, "what you’ve told Kona" (goal + memories), recent training on record; honest empty state.
-- **M18** Home = a genuine daily briefing answering: what am I doing today? does anything about today matter? what to prepare for next? anything relevant from history? Sections like YOUR DAY / ONE THING TO THINK ABOUT / KONA REMEMBERS. Not a stats dashboard.
+- **M18** ✅ Home is a daily briefing — YOUR DAY (prose; numbers only when the session earns them) / ONE THING TO THINK ABOUT (next key session + a real "this worked" pattern line, never fabricated) / KONA REMEMBERS (recurring facts). Day strip + check-in kept; no visual redesign.
 - **M19** Make the feedback loop **visible**: told → remembered → recurred → recommendation changed. Introduce a typed activity/event log (also future-proofs a possible XP layer — see `PRODUCT_VISION.md` "Future direction").
 - **M20** Goal context appears naturally through Home + relevant chat ("Week 6 of 12", "11 weeks until your triathlon") — context for the assistant, not a generic plan app.
 - **M21** Stop prompting for every session up front — only the next 1–2 key ones. Chat should also *initiate* useful context ("Tomorrow's your first 2-hour ride of this block — want to sort fuelling first?").
