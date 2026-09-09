@@ -24,6 +24,9 @@ export interface AgentTurn {
   tool_results: ToolResult[];
   safety: SafetyScreen;
   clarifying_question?: string;
+  /** Ids of the two messages this turn appended — used by the edit flow. */
+  user_message_id: string;
+  assistant_message_id: string;
 }
 
 /** Resolve the "$last" arg convention against ids saved earlier this turn. */
@@ -46,7 +49,11 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
   const { repo, llm } = deps;
   const nowIso = (input.now ?? new Date()).toISOString();
 
-  await repo.appendMessage({ conversation_id: input.conversationId, role: 'user', content: input.message });
+  const userMessage = await repo.appendMessage({
+    conversation_id: input.conversationId,
+    role: 'user',
+    content: input.message,
+  });
 
   // Hard safety layer BEFORE the LLM (CALCULATION_ENGINE_SPEC.md §18).
   const safety = screenForEscalation(input.message);
@@ -54,8 +61,20 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
 
   if (safety.escalate) {
     const reply = safetyMessage(safety.matched);
-    await repo.appendMessage({ conversation_id: input.conversationId, role: 'assistant', content: reply });
-    return { reply, intent: 'safety_escalation', tool_calls: [], tool_results: [], safety };
+    const assistantMessage = await repo.appendMessage({
+      conversation_id: input.conversationId,
+      role: 'assistant',
+      content: reply,
+    });
+    return {
+      reply,
+      intent: 'safety_escalation',
+      tool_calls: [],
+      tool_results: [],
+      safety,
+      user_message_id: userMessage.id,
+      assistant_message_id: assistantMessage.id,
+    };
   }
 
   const interpretation = await llm.interpret({ message: input.message, context, tools: TOOL_SCHEMAS });
@@ -64,7 +83,11 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
     const reply =
       interpretation.clarifying_question ??
       "Tell me a bit more and I'll help — a planned session, what you actually did, what you ate, or how recovery feels.";
-    await repo.appendMessage({ conversation_id: input.conversationId, role: 'assistant', content: reply });
+    const assistantMessage = await repo.appendMessage({
+      conversation_id: input.conversationId,
+      role: 'assistant',
+      content: reply,
+    });
     return {
       reply,
       intent: interpretation.intent,
@@ -72,6 +95,8 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
       tool_results: [],
       safety,
       clarifying_question: reply,
+      user_message_id: userMessage.id,
+      assistant_message_id: assistantMessage.id,
     };
   }
 
@@ -110,7 +135,19 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
     tool_results: results,
   });
 
-  await repo.appendMessage({ conversation_id: input.conversationId, role: 'assistant', content: reply });
+  const assistantMessage = await repo.appendMessage({
+    conversation_id: input.conversationId,
+    role: 'assistant',
+    content: reply,
+  });
 
-  return { reply, intent: interpretation.intent, tool_calls: executed, tool_results: results, safety };
+  return {
+    reply,
+    intent: interpretation.intent,
+    tool_calls: executed,
+    tool_results: results,
+    safety,
+    user_message_id: userMessage.id,
+    assistant_message_id: assistantMessage.id,
+  };
 }

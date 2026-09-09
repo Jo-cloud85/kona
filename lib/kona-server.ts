@@ -103,6 +103,21 @@ export async function listMessages(conversationId: string) {
   return getRepo().listMessages(conversationId);
 }
 
+/**
+ * Edit-and-regenerate: drop `messageId` and everything after it in the
+ * conversation, then re-run the turn with `newText`. NOTE: structured records
+ * (saved sessions, memories) created by the removed turn(s) are NOT rolled back
+ * — the transcript and Kona's replies are corrected, not the side effects.
+ */
+export async function editMessage(
+  conversationId: string,
+  messageId: string,
+  newText: string,
+): Promise<SentMessage> {
+  await getRepo().deleteMessagesFrom(conversationId, messageId);
+  return sendMessage(conversationId, newText);
+}
+
 export async function listConversations() {
   return getRepo().listConversations(DEMO_USER_ID);
 }

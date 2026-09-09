@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface ChatEntry {
+  /** Stored message id. Absent only briefly on an optimistic user bubble. */
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
   intent?: string;
@@ -57,6 +59,8 @@ export default function Chat({
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [llm, setLlm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -65,12 +69,13 @@ export default function Chat({
     setStarter(null);
     setPrompts([]);
     setPicks({});
+    setEditingId(null);
     fetch(`/api/chat?conversationId=${encodeURIComponent(conversationId)}`)
       .then((r) => r.json())
       .then((data: { llm?: string; messages?: ChatEntry[]; starter?: Starter | null }) => {
         if (data.llm) setLlm(data.llm);
         if (data.messages?.length) {
-          setEntries(data.messages.map((m) => ({ role: m.role, content: m.content })));
+          setEntries(data.messages.map((m) => ({ id: m.id, role: m.role, content: m.content })));
         } else if (data.starter) {
           setStarter(data.starter);
         }
@@ -83,33 +88,60 @@ export default function Chat({
   }, [entries, busy, prompts]);
 
   const send = useCallback(
-    async (text?: string) => {
+    async (text?: string, opts?: { editId?: string }) => {
       const message = (text ?? draft).trim();
       if (!message || busy) return;
-      setDraft('');
+      if (!opts?.editId) setDraft('');
       setStarter(null);
       setPrompts([]);
       setPicks({});
-      setEntries((prev) => [...prev, { role: 'user', content: message }]);
+      // On an edit, drop the edited message and everything after it, then re-add
+      // the (edited) user message.
+      setEntries((prev) => {
+        const base = opts?.editId
+          ? (() => {
+              const i = prev.findIndex((e) => e.id === opts.editId);
+              return i >= 0 ? prev.slice(0, i) : prev;
+            })()
+          : prev;
+        return [...base, { role: 'user', content: message }];
+      });
       setBusy(true);
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ message, conversationId }),
+          body: JSON.stringify({
+            message,
+            conversationId,
+            ...(opts?.editId ? { editMessageId: opts.editId } : {}),
+          }),
         });
         const data = await res.json();
-        setEntries((prev) => [
-          ...prev,
-          res.ok
-            ? { role: 'assistant', content: data.reply, intent: data.intent, safety: data.safety_escalated }
-            : {
-                role: 'assistant',
-                content: data.error ?? 'Something went wrong.',
-                intent: 'error',
-                detail: typeof data.detail === 'string' ? data.detail : undefined,
-              },
-        ]);
+        setEntries((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (res.ok && last && last.role === 'user' && !last.id && data.user_message_id) {
+            next[next.length - 1] = { ...last, id: data.user_message_id };
+          }
+          next.push(
+            res.ok
+              ? {
+                  id: data.assistant_message_id,
+                  role: 'assistant',
+                  content: data.reply,
+                  intent: data.intent,
+                  safety: data.safety_escalated,
+                }
+              : {
+                  role: 'assistant',
+                  content: data.error ?? 'Something went wrong.',
+                  intent: 'error',
+                  detail: typeof data.detail === 'string' ? data.detail : undefined,
+                },
+          );
+          return next;
+        });
         if (res.ok && Array.isArray(data.session_prompts) && data.session_prompts.length) {
           setPrompts(data.session_prompts as SessionPrompt[]);
         }
@@ -122,6 +154,19 @@ export default function Chat({
     },
     [draft, busy, conversationId, onActivity],
   );
+
+  const startEdit = (e: ChatEntry) => {
+    if (busy || !e.id) return;
+    setEditingId(e.id);
+    setEditDraft(e.content);
+  };
+  const cancelEdit = () => setEditingId(null);
+  const saveEdit = () => {
+    const id = editingId;
+    const text = editDraft.trim();
+    setEditingId(null);
+    if (id && text) void send(text, { editId: id });
+  };
 
   const usePrompt = useCallback((prefill: string) => {
     setDraft(prefill);
@@ -205,13 +250,46 @@ export default function Chat({
         )}
 
         {entries.map((e, i) => (
-          <div key={i} className={`row ${e.role}`}>
-            <div className="bubble">{e.content}</div>
-            {e.role === 'assistant' && e.detail && <div className="detail">{e.detail}</div>}
-            {e.role === 'assistant' && (e.intent || e.safety) && (
-              <div className={`meta${e.safety ? ' safety' : ''}`}>
-                {e.safety ? 'safety escalation' : e.intent}
+          <div key={e.id ?? `tmp-${i}`} className={`row ${e.role}`}>
+            {e.role === 'user' && editingId && editingId === e.id ? (
+              <div className="bubble bubble-edit">
+                <textarea
+                  value={editDraft}
+                  onChange={(ev) => setEditDraft(ev.target.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter' && !ev.shiftKey) {
+                      ev.preventDefault();
+                      saveEdit();
+                    }
+                    if (ev.key === 'Escape') cancelEdit();
+                  }}
+                  rows={2}
+                  autoFocus
+                />
+                <div className="edit-actions">
+                  <button className="edit-cancel" onClick={cancelEdit}>
+                    Cancel
+                  </button>
+                  <button className="edit-save" onClick={saveEdit} disabled={!editDraft.trim()}>
+                    Save &amp; resend
+                  </button>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="bubble">{e.content}</div>
+                {e.role === 'user' && e.id && !busy && !editingId && (
+                  <button className="msg-edit" onClick={() => startEdit(e)}>
+                    Edit
+                  </button>
+                )}
+                {e.role === 'assistant' && e.detail && <div className="detail">{e.detail}</div>}
+                {e.role === 'assistant' && (e.intent || e.safety) && (
+                  <div className={`meta${e.safety ? ' safety' : ''}`}>
+                    {e.safety ? 'safety escalation' : e.intent}
+                  </div>
+                )}
+              </>
             )}
           </div>
         ))}

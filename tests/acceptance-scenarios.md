@@ -76,6 +76,7 @@ Legend: ✅ automated & passing · ⏳ not yet in scope for this slice
 | AC3 | References the past | Planning a session similar to a prior one, the reply names what happened last time and — if it worked — says to keep it rather than change several things. | manual (live model) |
 | AC4 | Answers from context | "What do you know about my training?" / "how's my week looking?" get a real spoken answer (no tools), not "no tool calls needed here". | manual (live model) + `INTERPRET_SYSTEM` |
 | AC5 | FACT vs PATTERN vs HYPOTHESIS | The reply keeps "you reported this twice" (fact), "you seem to tolerate X better" (pattern) and "the bigger breakfast may be a factor" (hypothesis) distinct; never states a hypothesis as certainty. | manual (live model) + `COMPOSE_SYSTEM` |
+| AC6 | Edit a message → regenerate | Editing a sent user message truncates the transcript at that point and re-runs the turn — the edited message + a fresh reply replace everything below; the sidebar title updates. Structured side effects of the replaced turn are NOT rolled back (documented). | ✅ `tests/agent/edit-message.test.ts`, `tests/data/repository.test.ts` + manual |
 
 ## A-week. Weekly multi-day planning (PRODUCT_VISION.md "Weekly planning")
 

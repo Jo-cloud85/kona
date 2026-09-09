@@ -87,6 +87,27 @@ describe('InMemoryRepository', () => {
     expect(rows.find((r) => r.id === 'c-a')).toMatchObject({ title: 'Tomorrow I run 10km', message_count: 2 });
   });
 
+  it('deleteMessagesFrom removes a message and everything after it in that conversation only', async () => {
+    let t = Date.UTC(2026, 8, 6, 12, 0, 0);
+    const repo = await createSeededRepository({ now: () => new Date((t += 1000)) });
+    const m1 = await repo.appendMessage({ conversation_id: 'c1', role: 'user', content: 'first' });
+    await repo.appendMessage({ conversation_id: 'c1', role: 'assistant', content: 'reply 1' });
+    const m3 = await repo.appendMessage({ conversation_id: 'c1', role: 'user', content: 'second' });
+    await repo.appendMessage({ conversation_id: 'c1', role: 'assistant', content: 'reply 2' });
+    const other = await repo.appendMessage({ conversation_id: 'c2', role: 'user', content: 'untouched' });
+
+    const removed = await repo.deleteMessagesFrom('c1', m3.id);
+    expect(removed).toBe(2); // 'second' + 'reply 2'
+    expect((await repo.listMessages('c1')).map((m) => m.content)).toEqual(['first', 'reply 1']);
+    expect((await repo.listMessages('c2')).map((m) => m.id)).toEqual([other.id]);
+
+    // no-op for an unknown id
+    expect(await repo.deleteMessagesFrom('c1', 'msg_nope')).toBe(0);
+    // removing from the first message clears the conversation
+    expect(await repo.deleteMessagesFrom('c1', m1.id)).toBe(2);
+    expect(await repo.listMessages('c1')).toHaveLength(0);
+  });
+
   it('round-trips an onboarding profile', async () => {
     const repo = await createSeededRepository();
     const saved = await repo.upsertProfile({

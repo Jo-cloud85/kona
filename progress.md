@@ -83,6 +83,26 @@ read as "medical intake"; every field cut lifts first-conversation completion._
 
 ## Completed work
 
+### M15.1 — edit a sent chat message → regenerate the reply ✅
+_User ask: fix a mis-typed message and have Kona re-answer._
+- **Backend**: `AgentTurn` now returns `user_message_id` / `assistant_message_id`
+  (the orchestrator was discarding the appended `ChatMessage`s). New
+  `repo.deleteMessagesFrom(conversationId, messageId)` removes that message and
+  everything after it in the conversation. `editMessage()` in `kona-server.ts` =
+  truncate + re-run `sendMessage`. `/api/chat` POST accepts `editMessageId`
+  (validated) and returns both message ids; GET returns `id` per message.
+- **UI** (`Chat.tsx`): each stored user bubble gets an "Edit" affordance (shows
+  on hover). Editing swaps the bubble for a textarea + "Save & resend"; on save
+  the transcript is truncated at that message and the turn re-runs — the edited
+  message and a fresh reply replace everything below.
+- **Known limitation** (documented, not fixed): structured records a replaced
+  turn created (a saved `PlannedSession`, a memory) are **not** rolled back —
+  the transcript and replies are corrected, the side effects are not. Fine for
+  the in-memory iteration phase; a turn-scoped rollback is a later item.
+- Tests: +3 (`deleteMessagesFrom` scoping; turn returns message ids; truncate +
+  re-run replaces the transcript). 117 total; `tsc`, `eslint`, `next build`
+  clean. Verified in the browser against the live model.
+
 ### M14.1 — De-scope: remove the Daily tab + daily energy model ✅
 _2026 reset, step 1. The daily energy/macro breakdown made Kona feel like a
 calorie tracker and forced onboarding to collect height / activity level /

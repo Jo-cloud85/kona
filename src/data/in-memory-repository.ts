@@ -198,6 +198,17 @@ export class InMemoryRepository implements Repository {
     return this.messages.filter((m) => m.conversation_id === conversationId);
   }
 
+  async deleteMessagesFrom(conversationId: string, messageId: string): Promise<number> {
+    // insertion order == chronological order for the in-memory store
+    const convMsgs = this.messages.filter((m) => m.conversation_id === conversationId);
+    const idx = convMsgs.findIndex((m) => m.id === messageId);
+    if (idx === -1) return 0;
+    const doomed = new Set(convMsgs.slice(idx).map((m) => m.id));
+    const before = this.messages.length;
+    this.messages = this.messages.filter((m) => !doomed.has(m.id));
+    return before - this.messages.length;
+  }
+
   async listConversations(_userId?: string): Promise<ConversationSummary[]> {
     const byConv = new Map<string, ChatMessage[]>();
     for (const m of this.messages) {

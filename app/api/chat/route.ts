@@ -1,4 +1,4 @@
-import { getStarter, listMessages, llmName, sendMessage } from '../../../lib/kona-server';
+import { editMessage, getStarter, listMessages, llmName, sendMessage } from '../../../lib/kona-server';
 
 // The core uses node:crypto and an in-memory store — must run on the Node runtime.
 export const runtime = 'nodejs';
@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 
 const MAX_MESSAGE_LEN = 2000;
 const CONV_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const MSG_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export async function GET(req: Request): Promise<Response> {
   const conversationId = new URL(req.url).searchParams.get('conversationId') ?? '';
@@ -15,7 +16,7 @@ export async function GET(req: Request): Promise<Response> {
   const messages = await listMessages(conversationId);
   return Response.json({
     llm: llmName(),
-    messages: messages.map((m) => ({ role: m.role, content: m.content, at: m.created_at })),
+    messages: messages.map((m) => ({ id: m.id, role: m.role, content: m.content, at: m.created_at })),
     starter: messages.length === 0 ? await getStarter() : null,
   });
 }
@@ -28,7 +29,11 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'body must be JSON' }, { status: 400 });
   }
 
-  const { message, conversationId } = (body ?? {}) as { message?: unknown; conversationId?: unknown };
+  const { message, conversationId, editMessageId } = (body ?? {}) as {
+    message?: unknown;
+    conversationId?: unknown;
+    editMessageId?: unknown;
+  };
 
   if (typeof message !== 'string' || message.trim().length === 0) {
     return Response.json({ error: 'message is required' }, { status: 400 });
@@ -40,15 +45,26 @@ export async function POST(req: Request): Promise<Response> {
   if (!CONV_ID_RE.test(convId)) {
     return Response.json({ error: 'invalid conversationId' }, { status: 400 });
   }
+  let editId: string | undefined;
+  if (editMessageId !== undefined && editMessageId !== null) {
+    if (typeof editMessageId !== 'string' || !MSG_ID_RE.test(editMessageId)) {
+      return Response.json({ error: 'invalid editMessageId' }, { status: 400 });
+    }
+    editId = editMessageId;
+  }
 
   try {
-    const { turn, session_prompts } = await sendMessage(convId, message.trim());
+    const { turn, session_prompts } = editId
+      ? await editMessage(convId, editId, message.trim())
+      : await sendMessage(convId, message.trim());
     return Response.json({
       reply: turn.reply,
       intent: turn.intent,
       safety_escalated: turn.safety.escalate,
       clarifying_question: turn.clarifying_question ?? null,
       session_prompts,
+      user_message_id: turn.user_message_id,
+      assistant_message_id: turn.assistant_message_id,
     });
   } catch (err) {
     console.error('kona chat error', err);
