@@ -8,6 +8,7 @@ export type {
   RelevantHistory,
 } from './repository';
 export { InMemoryRepository, type InMemoryRepositoryOptions } from './in-memory-repository';
+export { SupabaseRepository } from './supabase-repository';
 export { createSeededRepository, demoProfile, DEMO_USER_ID } from './seed';
 export {
   CATALOG,

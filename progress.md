@@ -3,9 +3,52 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M22 + M15.1 done.** → **STOP for the founder product review** before any further milestones (persistence included).
+**M14.1–M23 + M15.1 done.** → **STOP for the founder product review.**
 Founder direction: no visual redesign, don't fabricate insights, stop for a
-product review after M21. See the reset milestone plan below + `PRODUCT_VISION.md`.
+product review after each milestone. See the reset milestone plan below +
+`PRODUCT_VISION.md`.
+
+### M23 — production persistence + real user identity ✅
+_Make "Kona remembers me" real: Supabase Postgres + magic-link auth + per-user
+RLS, behind the existing repository boundary. No visual redesign._
+- **Schema**: `supabase/migrations/0001_init.sql` — `profiles`, `weekly_plans`,
+  `planned_sessions`, `sessions`, `fuel_logs`, `recovery_logs`, `messages`,
+  `personal_memories`, `recommendations` (reserved), `activity_events`, plus a
+  `conversation_summaries` VIEW (a conversation is derived from its messages —
+  no physical table, per "don't persist derived state"). Insights are never
+  stored; `deriveInsights()` recomputes from source rows.
+- **RLS** on every table: `auth.uid() = user_id` for full CRUD;
+  `activity_events` gets select+insert only → append-only at the DB level. The
+  app uses a **user-scoped anon client**, never the service-role key.
+- **`SupabaseRepository`** (`src/data/supabase-repository.ts`) implements the
+  unchanged `Repository` interface. `InMemoryRepository` stays for tests + the
+  dev fallback. Only interface change: message methods are user-scoped
+  (`ChatMessage.user_id`, `listMessages(userId, …)`, `deleteMessagesFrom(userId, …)`).
+- **Identity threading**: `lib/server-context.ts` resolves the per-request
+  `{ repo, userId, llm }`. `lib/kona-server.ts` use-cases now take that context
+  — no module-level `DEMO_USER_ID`. Every API route starts with
+  `requireContext()` → 401 (no session) / 500 (misconfigured in prod).
+- **Auth**: Supabase magic link. `middleware.ts` (session refresh + route
+  gating), `/login`, `/auth/callback`, `/api/auth/signout`, a "Sign out" link in
+  the profile overlay. Onboarding still runs after sign-in.
+- **Config**: `.env.example` + `DEPLOYMENT.md`. No Supabase env → dev-only
+  in-memory single-user fallback (loud warning), **refused when
+  NODE_ENV=production**.
+- **Tests**: +`tests/data/repository-contract.ts` (shared CRUD + cross-user
+  isolation + append-only + memory-upsert, run against in-memory),
+  +`tests/server/server-context.test.ts` (dev / prod-refuse / 401 / authed),
+  +`tests/server/routes-auth.test.ts` (every route 401s unauthenticated),
+  +`tests/data/supabase-repository.live.test.ts` (real RLS + persistence-across-
+  fresh-client + immutable activity_events — `skipIf` no `KONA_TEST_SUPABASE_*`).
+  All existing tests kept. **185 tests: 182 pass, 3 skipped (live);**
+  `tsc` / `eslint` / `next build` clean. Verified locally in dev-fallback: the
+  full journey (onboard → chat turn → profile fact saved → messages persisted &
+  scoped → conversation summary) works end to end.
+- **Not solved (documented)**: editing a chat turn does not roll back structured
+  records it created — `ARCHITECTURE.md` §6b, `DEPLOYMENT.md`.
+- **Founder step to go live**: create a Supabase project, run `0001_init.sql`,
+  set `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` (+ deploy env). Full journey on a
+  real project is the founder-review verification.
 
 ### M22 — Product Truth Audit ✅
 _Strengthen the line between what the athlete **reported**, what Kona has seen
@@ -599,20 +642,35 @@ _Prompted by user feedback: Kona was silently defaulting unstated intensity to "
 - All v0.1.0 numbers are spec placeholders — **require expert review before public launch**.
 - Deterministic interpreter handles the canonical phrasings and close variants; it is not a general NL parser. The real `AnthropicLlmClient` covers open-ended phrasing; the deterministic one stays the default for tests and no-key runs.
 - `AnthropicLlmClient` has no automated test against the live API (non-deterministic, needs a key). `compose()` trusts its system prompt to keep numbers sourced from tool results — no post-hoc numeric guard yet.
-- No food-estimation ranges (§14 B14/B15), no historical pattern surfacing (B12), no weekly multi-day planning, no web UI/auth/DB backend — all out of slice scope.
+- No food-estimation ranges (§14 B14/B15), no historical pattern surfacing (B12).
 - `higher_option_g_per_hour` (60–90 g/h) configured but not yet surfaced as a note for very-long sessions.
-- Node 20.12 vs eslint-visitor-keys wanting 20.19+ — warning only.
+- Node 20.12 vs eslint-visitor-keys / `@supabase/*` wanting 20.19+ — warning only.
+- `npm audit`: 3 moderate + 1 high + 1 critical, **all** in the dev-only
+  `vitest`/`vite`/`esbuild` toolchain (not Supabase, not shipped). Fix is a
+  breaking `vitest` major bump — deferred.
+- **M23 — editing a chat turn** does not roll back structured records it created
+  (`ARCHITECTURE.md` §6b). Needs a `message_id`/`turn_id` stamp on every mutable
+  table + cascade. Deferred with a documented design.
+- **M23 — live Supabase verification** (real account, come back tomorrow) needs a
+  Supabase project; done as the founder-review step per `DEPLOYMENT.md`. Local
+  verification covered the dev-fallback journey + mocked auth + the
+  env-guarded live suite.
 
 ## Next recommended task
-**Hold.** The 2026-reset milestone block M14.1–M21 is done. Per the founder's
-instruction, stop for a **product review** before starting anything new — no
-persistence backend, no new features, no gamification until that review.
+**Hold.** M14.1–M23 are done. Per the founder's instruction, **stop for review**
+after M23 — do not start another milestone.
 
-Candidates to raise at the review (not started): real persistence backend
-(Postgres/Supabase behind `Repository`); "Week X of Y" once a periodised-block
-model exists; the chat *proactively* posting into an existing thread (M21 only
-covers the opener of a fresh one); polish pass (transitions, type hierarchy,
-Kona personality) that the founder explicitly deferred.
+To bring persistence live (founder step): create a Supabase project, run
+`supabase/migrations/0001_init.sql`, set `NEXT_PUBLIC_SUPABASE_URL` /
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` locally and in the deploy env, then walk the
+journey in `DEPLOYMENT.md` (sign up → onboard → plan → chat → log → close →
+return → still remembered; second account sees nothing of the first).
+
+Candidates to raise at the review (not started): edit-turn structured-record
+rollback (design in §6b); "Week X of Y" once a periodised-block model exists; the
+chat *proactively* posting into an existing thread; polish pass (transitions,
+type hierarchy, Kona personality) that the founder explicitly deferred;
+`vitest` major bump to clear the dev-toolchain audit findings.
 
 M21 follow-ups worth a mention: the real model's prose can name a third key
 session the button prompts don't (`FOCUS_PROMPT_LIMIT` = 2) — harmless but worth

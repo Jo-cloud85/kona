@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import CheckinDialog from './CheckinDialog';
 import ProfileForm, { type ProfileValues } from './ProfileForm';
+import SignOutButton from './SignOutButton';
 
 interface Range {
   min: number;
@@ -316,6 +317,9 @@ export default function HomeTab({
                 Loading…
               </p>
             )}
+            <div className="profile-signout">
+              <SignOutButton />
+            </div>
           </div>
         </div>
       )}

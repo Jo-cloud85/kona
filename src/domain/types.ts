@@ -282,6 +282,9 @@ export type NewActivityEvent = Omit<ActivityEvent, 'id' | 'at'> & { at?: string 
 
 export interface ChatMessage {
   id: string;
+  /** Owner. Every message belongs to exactly one user; conversation ids are
+   *  only unique within a user (M23). */
+  user_id: string;
   conversation_id: string;
   role: 'user' | 'assistant';
   content: string;

@@ -78,9 +78,9 @@ describe('InMemoryRepository', () => {
   it('summarises conversations, newest activity first, titled from the first user message', async () => {
     let t = Date.UTC(2026, 8, 6, 12, 0, 0);
     const repo = await createSeededRepository({ now: () => new Date((t += 1000)) });
-    await repo.appendMessage({ conversation_id: 'c-a', role: 'user', content: 'Tomorrow I run 10km' });
-    await repo.appendMessage({ conversation_id: 'c-a', role: 'assistant', content: 'Saved.' });
-    await repo.appendMessage({ conversation_id: 'c-b', role: 'user', content: 'My next race is Berlin' });
+    await repo.appendMessage({ user_id: DEMO_USER_ID, conversation_id: 'c-a', role: 'user', content: 'Tomorrow I run 10km' });
+    await repo.appendMessage({ user_id: DEMO_USER_ID, conversation_id: 'c-a', role: 'assistant', content: 'Saved.' });
+    await repo.appendMessage({ user_id: DEMO_USER_ID, conversation_id: 'c-b', role: 'user', content: 'My next race is Berlin' });
 
     const rows = await repo.listConversations('user_demo');
     expect(rows.map((r) => r.id)).toEqual(['c-b', 'c-a']); // c-b touched last
@@ -103,22 +103,22 @@ describe('InMemoryRepository', () => {
   it('deleteMessagesFrom removes a message and everything after it in that conversation only', async () => {
     let t = Date.UTC(2026, 8, 6, 12, 0, 0);
     const repo = await createSeededRepository({ now: () => new Date((t += 1000)) });
-    const m1 = await repo.appendMessage({ conversation_id: 'c1', role: 'user', content: 'first' });
-    await repo.appendMessage({ conversation_id: 'c1', role: 'assistant', content: 'reply 1' });
-    const m3 = await repo.appendMessage({ conversation_id: 'c1', role: 'user', content: 'second' });
-    await repo.appendMessage({ conversation_id: 'c1', role: 'assistant', content: 'reply 2' });
-    const other = await repo.appendMessage({ conversation_id: 'c2', role: 'user', content: 'untouched' });
+    const m1 = await repo.appendMessage({ user_id: DEMO_USER_ID, conversation_id: 'c1', role: 'user', content: 'first' });
+    await repo.appendMessage({ user_id: DEMO_USER_ID, conversation_id: 'c1', role: 'assistant', content: 'reply 1' });
+    const m3 = await repo.appendMessage({ user_id: DEMO_USER_ID, conversation_id: 'c1', role: 'user', content: 'second' });
+    await repo.appendMessage({ user_id: DEMO_USER_ID, conversation_id: 'c1', role: 'assistant', content: 'reply 2' });
+    const other = await repo.appendMessage({ user_id: DEMO_USER_ID, conversation_id: 'c2', role: 'user', content: 'untouched' });
 
-    const removed = await repo.deleteMessagesFrom('c1', m3.id);
+    const removed = await repo.deleteMessagesFrom(DEMO_USER_ID, 'c1', m3.id);
     expect(removed).toBe(2); // 'second' + 'reply 2'
-    expect((await repo.listMessages('c1')).map((m) => m.content)).toEqual(['first', 'reply 1']);
-    expect((await repo.listMessages('c2')).map((m) => m.id)).toEqual([other.id]);
+    expect((await repo.listMessages(DEMO_USER_ID, 'c1')).map((m) => m.content)).toEqual(['first', 'reply 1']);
+    expect((await repo.listMessages(DEMO_USER_ID, 'c2')).map((m) => m.id)).toEqual([other.id]);
 
     // no-op for an unknown id
-    expect(await repo.deleteMessagesFrom('c1', 'msg_nope')).toBe(0);
+    expect(await repo.deleteMessagesFrom(DEMO_USER_ID, 'c1', 'msg_nope')).toBe(0);
     // removing from the first message clears the conversation
-    expect(await repo.deleteMessagesFrom('c1', m1.id)).toBe(2);
-    expect(await repo.listMessages('c1')).toHaveLength(0);
+    expect(await repo.deleteMessagesFrom(DEMO_USER_ID, 'c1', m1.id)).toBe(2);
+    expect(await repo.listMessages(DEMO_USER_ID, 'c1')).toHaveLength(0);
   });
 
   it('round-trips an onboarding profile', async () => {

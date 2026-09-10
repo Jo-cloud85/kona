@@ -1,4 +1,5 @@
 import { editMessage, getStarter, listMessages, llmName, sendMessage } from '../../../lib/kona-server';
+import { requireContext } from '../../../lib/route-helpers';
 
 // The core uses node:crypto and an in-memory store — must run on the Node runtime.
 export const runtime = 'nodejs';
@@ -9,19 +10,25 @@ const CONV_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const MSG_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export async function GET(req: Request): Promise<Response> {
+  const c = await requireContext();
+  if ('response' in c) return c.response;
+
   const conversationId = new URL(req.url).searchParams.get('conversationId') ?? '';
   if (!CONV_ID_RE.test(conversationId)) {
     return Response.json({ error: 'invalid conversationId' }, { status: 400 });
   }
-  const messages = await listMessages(conversationId);
+  const messages = await listMessages(c.ctx, conversationId);
   return Response.json({
     llm: llmName(),
     messages: messages.map((m) => ({ id: m.id, role: m.role, content: m.content, at: m.created_at })),
-    starter: messages.length === 0 ? await getStarter() : null,
+    starter: messages.length === 0 ? await getStarter(c.ctx) : null,
   });
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const c = await requireContext();
+  if ('response' in c) return c.response;
+
   let body: unknown;
   try {
     body = await req.json();
@@ -55,8 +62,8 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const { turn, session_prompts } = editId
-      ? await editMessage(convId, editId, message.trim())
-      : await sendMessage(convId, message.trim());
+      ? await editMessage(c.ctx, convId, editId, message.trim())
+      : await sendMessage(c.ctx, convId, message.trim());
     return Response.json({
       reply: turn.reply,
       intent: turn.intent,

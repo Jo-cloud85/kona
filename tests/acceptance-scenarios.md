@@ -140,6 +140,22 @@ Every `Insight` carries a `basis`: `reported` (they said it) · `repeated` (freq
 | AW9 | Long-run day-before advice | Long-session prep covers carb meals + steady hydration the day before (not right before), post-session protein (~20–40 g), and a conditional warm-weather sodium note that stays non-diagnostic about cramps. | ✅ `tests/engine/week.test.ts` |
 | AW10 | Only chase the 1–2 that matter (M21) | A saved week with several under-specified sessions does **not** demand details for all of them. The engine flags the next 1–2 `in_focus` — key days (long / hard / double) first, then soonest — and still emits a prompt for every gap. The reply asks only about the in-focus ones ("pin down the 2 sessions that matter most first … the other 4 we can sort a day or two out"); the chat renders buttons only for those. The real model does the same via `COMPOSE_SYSTEM`. Per-day gaps still surface on Home a day out. | ✅ `tests/engine/week.test.ts`, `tests/agent/week-plan.test.ts` + manual (live model) |
 
+## A-persist. Production persistence + user identity (M23)
+
+Supabase Postgres + magic-link auth + per-user RLS, behind the unchanged `Repository` boundary. `InMemoryRepository` stays for tests + the no-Supabase dev fallback (refused in production).
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AP1 | Same repository contract, both impls | CRUD round-trips for profile / planned+actual sessions / weekly plan / fuel / recovery / memory / messages / activity; planned and actual stay separate; `proposeMemory` upserts on `(user, key)`; conversation list is derived from messages. | ✅ `tests/data/repository-contract.ts` (in-memory) + `tests/data/supabase-repository.live.test.ts` (real, env-gated) |
+| AP2 | Cross-user isolation | User B cannot read user A's profile, plans, sessions, fuel/recovery logs, memories, activity events, or conversations — reads come back empty, not another user's rows. A write claiming another user's `user_id` is rejected. | ✅ `repository-contract.ts` isolation cases; `supabase-repository.live.test.ts` (real RLS: empty reads + insert rejected) |
+| AP3 | Auth boundary | No signed-in user → every API route returns 401 (and `middleware.ts` redirects page loads to `/login`). Supabase misconfigured in production → 500, never a silent single-user mode. | ✅ `tests/server/routes-auth.test.ts`, `tests/server/server-context.test.ts` |
+| AP4 | Dev fallback | No Supabase env + non-production → in-memory, one fixed local user, loud console warning; app fully usable. | ✅ `tests/server/server-context.test.ts` + manual (browser: onboard → chat turn → persisted & scoped) |
+| AP5 | Persistence across "restart" | Data written by one client is still there from a brand-new client with the same identity (fresh process). | ✅ `supabase-repository.live.test.ts` (env-gated); manual journey in `DEPLOYMENT.md` |
+| AP6 | Activity events immutable | `activity_events` has select+insert RLS policies only — UPDATE/DELETE affect 0 rows; the stream is append-only at the DB. | ✅ `supabase-repository.live.test.ts`; `repository-contract.ts` (no mutate methods on the interface) |
+| AP7 | Provenance preserved | `certainty` (`reported`/`repeated`/`outcome`/`adaptation` distinctions from M22) and memory `certainty` survive the round-trip unchanged; insights are recomputed, never stored. | ✅ `repository-contract.ts` (memory + activity `meta`), schema comments in `0001_init.sql` |
+| AP8 | Conversation continuity | Reopening a prior conversation returns its messages, scoped to the user; editing a message truncates only that user's conversation. **Known limitation**: structured records from an edited-away turn are not rolled back (`ARCHITECTURE.md` §6b). | ✅ `repository-contract.ts` (messages + `deleteMessagesFrom` scoping) + manual |
+| AP9 | Sign in / stay / sign out | Magic link → `/auth/callback` exchanges the code → session cookie; middleware refreshes it each request; "Sign out" in the profile overlay clears it and returns to `/login`. | manual (needs a Supabase project — founder-review step) |
+
 ## B. Calculation engine (CALCULATION_ENGINE_SPEC.md §21)
 
 | # | Scenario | Coverage |

@@ -93,6 +93,7 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
   const nowIso = (input.now ?? new Date()).toISOString();
 
   const userMessage = await repo.appendMessage({
+    user_id: input.userId,
     conversation_id: input.conversationId,
     role: 'user',
     content: input.message,
@@ -105,6 +106,7 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
   if (safety.escalate) {
     const reply = safetyMessage(safety.matched);
     const assistantMessage = await repo.appendMessage({
+      user_id: input.userId,
       conversation_id: input.conversationId,
       role: 'assistant',
       content: reply,
@@ -127,6 +129,7 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
       interpretation.clarifying_question ??
       "Tell me a bit more and I'll help — a planned session, what you actually did, what you ate, or how recovery feels.";
     const assistantMessage = await repo.appendMessage({
+      user_id: input.userId,
       conversation_id: input.conversationId,
       role: 'assistant',
       content: reply,
@@ -179,6 +182,7 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
   });
 
   const assistantMessage = await repo.appendMessage({
+    user_id: input.userId,
     conversation_id: input.conversationId,
     role: 'assistant',
     content: reply,

@@ -21,7 +21,7 @@ describe('edit-and-regenerate', () => {
     const turn = await say('My legs feel tired but okay');
     expect(turn.user_message_id).toMatch(/^msg_/);
     expect(turn.assistant_message_id).toMatch(/^msg_/);
-    const msgs = await repo.listMessages('c');
+    const msgs = await repo.listMessages(DEMO_USER_ID, 'c');
     expect(msgs.map((m) => m.id)).toEqual([turn.user_message_id, turn.assistant_message_id]);
   });
 
@@ -30,11 +30,11 @@ describe('edit-and-regenerate', () => {
     await say('legs mostly');
 
     // edit t1: drop it + everything after, then re-run with the corrected text
-    const removed = await repo.deleteMessagesFrom('c', t1.user_message_id);
+    const removed = await repo.deleteMessagesFrom(DEMO_USER_ID, 'c', t1.user_message_id);
     expect(removed).toBe(4); // t1 user+assistant, t2 user+assistant
 
     const edited = await say('Actually my legs feel great today');
-    const msgs = await repo.listMessages('c');
+    const msgs = await repo.listMessages(DEMO_USER_ID, 'c');
     expect(msgs.map((m) => m.content)).toEqual(['Actually my legs feel great today', edited.reply]);
     expect(msgs).toHaveLength(2);
     expect(edited.reply).not.toEqual(t1.reply);

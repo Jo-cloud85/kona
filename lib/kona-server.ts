@@ -1,10 +1,7 @@
 import 'server-only';
-import { InMemoryRepository, DEMO_USER_ID } from '../src/data/index';
 import type { Profile } from '../src/domain/types';
 import type { ProfileFormData } from '../src/domain/profile-input';
 import {
-  AnthropicLlmClient,
-  DeterministicLlmClient,
   buildCheckinLog,
   buildHome,
   buildKnows,
@@ -21,67 +18,31 @@ import {
   type HomeView,
   type Insight,
   type KnowsView,
-  type LlmClient,
 } from '../src/agent/index';
+import type { KonaContext } from './server-context';
+
+export { llmName } from './server-context';
 
 /**
- * Process-wide Kona instance for the web app.
- *
- * The repository is the in-memory implementation from the core (M2). State lives
- * only in this Node process and resets on server restart — fine for now; a
- * persistence backend is a separate, later decision. Unlike the CLI, the web
- * app does NOT seed a demo profile: the user completes onboarding first.
+ * Web-app use-cases. Each takes the resolved {@link KonaContext} (repo + userId +
+ * llm) so every read/write is scoped to the authenticated user. No module-level
+ * user identity — that lives in the request context now (M23).
  */
 
-let repo: InMemoryRepository | undefined;
-let llm: LlmClient | undefined;
-
-function getRepo(): InMemoryRepository {
-  if (!repo) repo = new InMemoryRepository();
-  return repo;
+function deps(ctx: KonaContext): AgentDeps {
+  return { repo: ctx.repo, llm: ctx.llm };
 }
 
-/**
- * The real Anthropic model is the shipped conversational path. The deterministic
- * stub is only a fallback — no API key on the box (local dev / CI / offline), or
- * `KONA_LLM=deterministic` set explicitly. It cannot reason over history or feel
- * like a companion; it exists so tests and no-key runs still work.
- */
-function useAnthropic(): boolean {
-  const forced = process.env.KONA_LLM;
-  if (forced === 'deterministic') return false;
-  if (forced === 'anthropic') return true;
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+export async function getProfile(ctx: KonaContext): Promise<Profile | undefined> {
+  return ctx.repo.getProfile(ctx.userId);
 }
 
-function getLlm(): LlmClient {
-  if (!llm) {
-    llm = useAnthropic() ? new AnthropicLlmClient() : new DeterministicLlmClient();
-    console.log(`[kona] conversation client: ${llmName()}`);
-  }
-  return llm;
-}
-
-export function llmName(): string {
-  return useAnthropic()
-    ? `anthropic (${process.env.KONA_LLM_MODEL ?? 'claude-opus-5'})`
-    : 'deterministic';
-}
-
-function deps(): AgentDeps {
-  return { repo: getRepo(), llm: getLlm() };
-}
-
-export async function getProfile(): Promise<Profile | undefined> {
-  return getRepo().getProfile(DEMO_USER_ID);
-}
-
-export async function saveProfile(data: ProfileFormData): Promise<Profile> {
-  const existing = await getRepo().getProfile(DEMO_USER_ID);
-  return getRepo().upsertProfile({
+export async function saveProfile(ctx: KonaContext, data: ProfileFormData): Promise<Profile> {
+  const existing = await ctx.repo.getProfile(ctx.userId);
+  return ctx.repo.upsertProfile({
     ...existing,
     ...data,
-    user_id: DEMO_USER_ID,
+    user_id: ctx.userId,
     onboarded_at: existing?.onboarded_at ?? new Date().toISOString(),
   });
 }
@@ -92,8 +53,8 @@ export interface SentMessage {
   session_prompts: unknown[];
 }
 
-export async function sendMessage(conversationId: string, message: string): Promise<SentMessage> {
-  const turn = await handleMessage(deps(), { userId: DEMO_USER_ID, conversationId, message });
+export async function sendMessage(ctx: KonaContext, conversationId: string, message: string): Promise<SentMessage> {
+  const turn = await handleMessage(deps(ctx), { userId: ctx.userId, conversationId, message });
   let session_prompts: unknown[] = [];
   for (const r of turn.tool_results) {
     const analysis = (r.data as { analysis?: { session_prompts?: { in_focus?: boolean }[] } } | undefined)?.analysis;
@@ -107,71 +68,74 @@ export async function sendMessage(conversationId: string, message: string): Prom
   return { turn, session_prompts };
 }
 
-export async function listMessages(conversationId: string) {
-  return getRepo().listMessages(conversationId);
+export async function listMessages(ctx: KonaContext, conversationId: string) {
+  return ctx.repo.listMessages(ctx.userId, conversationId);
 }
 
 /**
  * Edit-and-regenerate: drop `messageId` and everything after it in the
- * conversation, then re-run the turn with `newText`. NOTE: structured records
- * (saved sessions, memories) created by the removed turn(s) are NOT rolled back
- * — the transcript and Kona's replies are corrected, not the side effects.
+ * conversation, then re-run the turn with `newText`.
+ *
+ * KNOWN LIMITATION (documented, not solved in M23): structured records (saved
+ * sessions, fuel logs, memories, activity events) created by the removed turn(s)
+ * are NOT rolled back — only the transcript and Kona's replies are corrected.
+ * With persistence this means an edited-away session stays on record. The clean
+ * fix is to tag each structured write with the message id that produced it and
+ * cascade on edit; that is deferred. See ARCHITECTURE.md §6b.
  */
 export async function editMessage(
+  ctx: KonaContext,
   conversationId: string,
   messageId: string,
   newText: string,
 ): Promise<SentMessage> {
-  await getRepo().deleteMessagesFrom(conversationId, messageId);
-  return sendMessage(conversationId, newText);
+  await ctx.repo.deleteMessagesFrom(ctx.userId, conversationId, messageId);
+  return sendMessage(ctx, conversationId, newText);
 }
 
-export async function listConversations() {
-  return getRepo().listConversations(DEMO_USER_ID);
+export async function listConversations(ctx: KonaContext) {
+  return ctx.repo.listConversations(ctx.userId);
 }
 
 function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export async function getInsights(): Promise<Insight[]> {
-  const repo = getRepo();
+export async function getInsights(ctx: KonaContext): Promise<Insight[]> {
   const [actualSessions, recoveryLogs, fuelLogs, memories] = await Promise.all([
-    repo.listActualSessions(DEMO_USER_ID),
-    repo.listRecoveryLogs(DEMO_USER_ID),
-    repo.listFuelLogs(DEMO_USER_ID),
-    repo.listMemories(DEMO_USER_ID),
+    ctx.repo.listActualSessions(ctx.userId),
+    ctx.repo.listRecoveryLogs(ctx.userId),
+    ctx.repo.listFuelLogs(ctx.userId),
+    ctx.repo.listMemories(ctx.userId),
   ]);
   return deriveInsights({ actualSessions, recoveryLogs, fuelLogs, memories });
 }
 
-export async function getKnows(): Promise<KnowsView | null> {
-  const repo = getRepo();
-  const profile = await repo.getProfile(DEMO_USER_ID);
+export async function getKnows(ctx: KonaContext): Promise<KnowsView | null> {
+  const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const [memories, actualSessions, recoveryLogs, fuelLogs, events] = await Promise.all([
-    repo.listMemories(DEMO_USER_ID),
-    repo.listActualSessions(DEMO_USER_ID),
-    repo.listRecoveryLogs(DEMO_USER_ID),
-    repo.listFuelLogs(DEMO_USER_ID),
-    repo.listActivityEvents(DEMO_USER_ID, 40),
+    ctx.repo.listMemories(ctx.userId),
+    ctx.repo.listActualSessions(ctx.userId),
+    ctx.repo.listRecoveryLogs(ctx.userId),
+    ctx.repo.listFuelLogs(ctx.userId),
+    ctx.repo.listActivityEvents(ctx.userId, 40),
   ]);
   return buildKnows({ profile, memories, actualSessions, recoveryLogs, fuelLogs, events });
 }
 
-export async function getHome(selectedDate?: string): Promise<HomeView | null> {
-  const repo = getRepo();
-  const profile = await repo.getProfile(DEMO_USER_ID);
+export async function getHome(ctx: KonaContext, selectedDate?: string): Promise<HomeView | null> {
+  const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const [weeklyPlans, actualSessions, recoveryLogs, fuelLogs, memories] = await Promise.all([
-    repo.listWeeklyPlans(DEMO_USER_ID),
-    repo.listActualSessions(DEMO_USER_ID),
-    repo.listRecoveryLogs(DEMO_USER_ID),
-    repo.listFuelLogs(DEMO_USER_ID),
-    repo.listMemories(DEMO_USER_ID),
+    ctx.repo.listWeeklyPlans(ctx.userId),
+    ctx.repo.listActualSessions(ctx.userId),
+    ctx.repo.listRecoveryLogs(ctx.userId),
+    ctx.repo.listFuelLogs(ctx.userId),
+    ctx.repo.listMemories(ctx.userId),
   ]);
   const weeklyPlan = weeklyPlans.at(-1);
-  const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  const sessions = weeklyPlan ? await ctx.repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
   const today = ymdLocal(new Date());
   const checkinDoneToday = recoveryLogs.some((l) => ymdLocal(new Date(l.logged_at)) === today);
   return buildHome({
@@ -193,31 +157,32 @@ export interface CheckinResult {
   reflection: string;
 }
 
-export async function submitCheckin(input: CheckinInput): Promise<CheckinResult | null> {
-  const repo = getRepo();
-  const profile = await repo.getProfile(DEMO_USER_ID);
+export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Promise<CheckinResult | null> {
+  const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
 
   const log = buildCheckinLog(input);
   const screen = screenForEscalation(log.free_text);
-  await repo.saveRecoveryLog({
-    user_id: DEMO_USER_ID,
+  await ctx.repo.saveRecoveryLog({
+    user_id: ctx.userId,
     free_text: log.free_text,
     overall_severity: log.overall_severity,
     reported_symptoms: log.reported_symptoms,
   });
-  await repo.appendActivityEvent({ user_id: DEMO_USER_ID, type: 'checkin_done', summary: 'You did an end-of-day check-in' });
-  await recordTurnActivity(repo, DEMO_USER_ID, []); // insight-detection pass only
+  await ctx.repo.appendActivityEvent({
+    user_id: ctx.userId,
+    type: 'checkin_done',
+    summary: 'You did an end-of-day check-in',
+  });
+  await recordTurnActivity(ctx.repo, ctx.userId, []); // insight-detection pass only
   return { ok: true, escalated: screen.escalate, reflection: checkinReflection(input, screen) };
 }
 
-/** The one-time opening message + conversation starters (only meaningful before
- *  the conversation has any messages). Null until the user has onboarded. */
-export async function getStarter(): Promise<ChatStarter | null> {
-  const repo = getRepo();
-  const profile = await repo.getProfile(DEMO_USER_ID);
+/** The opening message + conversation starters. Null until the user has onboarded. */
+export async function getStarter(ctx: KonaContext): Promise<ChatStarter | null> {
+  const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
-  const weeklyPlan = (await repo.listWeeklyPlans(DEMO_USER_ID)).at(-1);
-  const sessions = weeklyPlan ? await repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  const weeklyPlan = (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
+  const sessions = weeklyPlan ? await ctx.repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
   return buildStarter(profile, { now: new Date(), sessions });
 }

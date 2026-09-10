@@ -100,10 +100,12 @@ export interface Repository {
   listRecoveryLogs(userId: string): Promise<RecoveryLog[]>;
 
   appendMessage(msg: Omit<ChatMessage, 'id' | 'created_at'>): Promise<ChatMessage>;
-  listMessages(conversationId: string): Promise<ChatMessage[]>;
-  /** Remove `messageId` and every message after it in the conversation (for the
-   *  edit-and-regenerate flow). Returns how many were removed. */
-  deleteMessagesFrom(conversationId: string, messageId: string): Promise<number>;
+  /** Messages for one of the user's own conversations. Scoped by user so a
+   *  conversation id from another user can never be read. */
+  listMessages(userId: string, conversationId: string): Promise<ChatMessage[]>;
+  /** Remove `messageId` and every message after it in the user's conversation
+   *  (for the edit-and-regenerate flow). Returns how many were removed. */
+  deleteMessagesFrom(userId: string, conversationId: string, messageId: string): Promise<number>;
   /** One summary row per conversation that has messages, newest activity first. */
   listConversations(userId: string): Promise<ConversationSummary[]>;
 

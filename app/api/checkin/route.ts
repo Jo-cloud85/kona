@@ -1,4 +1,5 @@
 import { submitCheckin } from '../../../lib/kona-server';
+import { requireContext } from '../../../lib/route-helpers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -6,6 +7,9 @@ export const dynamic = 'force-dynamic';
 const FEELS = ['Feeling great!', 'Breezed it', 'Solid grind', 'Survived', 'Dying...', "Didn't happen"];
 
 export async function POST(req: Request): Promise<Response> {
+  const c = await requireContext();
+  if ('response' in c) return c.response;
+
   let body: unknown;
   try {
     body = await req.json();
@@ -24,7 +28,7 @@ export async function POST(req: Request): Promise<Response> {
   const elaborate =
     typeof b.elaborate === 'string' && b.elaborate.trim() ? b.elaborate.trim().slice(0, 500) : undefined;
 
-  const result = await submitCheckin({
+  const result = await submitCheckin(c.ctx, {
     workout_feel,
     went_as_planned: b.went_as_planned,
     pains: b.pains,

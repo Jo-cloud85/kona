@@ -92,20 +92,37 @@ change anything on" **with no recommendation**. Condition-dependent outcomes are
 only claimed when good vs bad split cleanly on one variable. Full rules:
 `CALCULATION_ENGINE_SPEC.md` §6.5.
 
-### 6. Database
-Suggested tables:
-- profiles
-- weekly_plans
-- planned_sessions
-- sessions
-- fuel_logs
-- recovery_logs
-- conversations
-- messages
-- personal_memories
-- recommendations
-- subscriptions
-- activity_events
+### 6. Database & persistence (M23)
+Production storage is **Supabase Postgres**, one migration:
+`supabase/migrations/0001_init.sql`. Tables: `profiles`, `weekly_plans`,
+`planned_sessions`, `sessions`, `fuel_logs`, `recovery_logs`, `messages`,
+`personal_memories`, `recommendations`, `activity_events`. Plus a view
+`conversation_summaries` (a conversation has no row of its own — it is derived
+from its messages, so a physical `conversations` table would be duplicated
+derived state). `subscriptions` is not built (no paywall in scope). Insights are
+never stored — `deriveInsights()` recomputes them from source records on every
+read.
+
+**Boundary.** `Repository` (`src/data/repository.ts`) is unchanged in shape
+except that message methods are now user-scoped (`listMessages(userId, …)`,
+`deleteMessagesFrom(userId, …)`, `ChatMessage.user_id`). Two implementations:
+`InMemoryRepository` (tests, dev fallback) and `SupabaseRepository` (production).
+The flow stays **UI → API route → `lib/kona-server` use-case → repository → DB**;
+UI never touches Supabase for data. `lib/server-context.ts` resolves the
+per-request `{ repo, userId, llm }`.
+
+**Isolation.** Every user-owned row has `user_id uuid` referencing
+`auth.users`. RLS policies (`auth.uid() = user_id`) on every table are the
+enforcement — the app uses a **user-scoped anon client**, never the service-role
+key. `activity_events` has select+insert policies only, so it is append-only at
+the database level. Cross-user isolation is proven by
+`tests/data/supabase-repository.live.test.ts`.
+
+**Auth.** Supabase magic link. `middleware.ts` refreshes the session cookie and
+gates routes (page → redirect `/login`; API → 401). `/login`, `/auth/callback`,
+`/api/auth/signout`. Onboarding runs after sign-in, unchanged. With no Supabase
+env the app runs a dev-only in-memory single-user fallback, refused in
+production. See `DEPLOYMENT.md`.
 
 ### 6a. Activity log (M19)
 `activity_events` is a typed, append-only stream of meaningful events
@@ -124,6 +141,19 @@ and (b) *this* turn actually produced a piece of advice (a fuelling calc or a
 week plan). A newly-formed recommendation is recorded as `insight_formed`
 ("Kona's take — …") so a later turn can tell it was already known; it does not
 by itself claim any recommendation changed. Once per insight.
+
+### 6b. Editing a chat turn — rollback limitation (M23, documented not solved)
+`editMessage` (edit-and-regenerate) truncates the transcript at the edited
+message and re-runs the turn. It does **not** roll back structured records
+(sessions, fuel logs, memories, activity events) the removed turn(s) created —
+only the transcript and replies are corrected. With in-memory storage this reset
+on restart; with persistence an edited-away session now stays on record.
+
+The clean fix: stamp each structured write with the `message_id` / `turn_id`
+that produced it, and cascade on edit — while preserving writes a later,
+un-edited turn depends on. Deferred: it needs a column on every mutable table
+and dependency handling that is larger than M23's scope. Tracked in
+`progress.md`.
 
 ## Important design rule
 Never pass the entire user history to the LLM on every message.

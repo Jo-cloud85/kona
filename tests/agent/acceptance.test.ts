@@ -116,7 +116,7 @@ describe('four-message vertical slice (START_WITH_CLAUDE.md)', () => {
 
   it('conversation is persisted (user + assistant messages)', async () => {
     await say("Tomorrow I'm doing an 18km run at 6am.");
-    const msgs = await repo.listMessages(CONV);
+    const msgs = await repo.listMessages(DEMO_USER_ID, CONV);
     expect(msgs.map((m) => m.role)).toEqual(['user', 'assistant']);
   });
 });

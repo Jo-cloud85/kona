@@ -1724,3 +1724,28 @@ button.cta:disabled {
   font-weight: 600;
   color: var(--accent);
 }
+
+/* ---- Auth: sign-out in the profile overlay (M23) ---------------- */
+.profile-signout {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0 32px;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: 6px 10px;
+}
+.link-btn:hover {
+  color: var(--text);
+}
+.link-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

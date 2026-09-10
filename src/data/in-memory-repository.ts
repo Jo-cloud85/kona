@@ -197,13 +197,15 @@ export class InMemoryRepository implements Repository {
     return stored;
   }
 
-  async listMessages(conversationId: string): Promise<ChatMessage[]> {
-    return this.messages.filter((m) => m.conversation_id === conversationId);
+  async listMessages(userId: string, conversationId: string): Promise<ChatMessage[]> {
+    return this.messages.filter((m) => m.user_id === userId && m.conversation_id === conversationId);
   }
 
-  async deleteMessagesFrom(conversationId: string, messageId: string): Promise<number> {
+  async deleteMessagesFrom(userId: string, conversationId: string, messageId: string): Promise<number> {
     // insertion order == chronological order for the in-memory store
-    const convMsgs = this.messages.filter((m) => m.conversation_id === conversationId);
+    const convMsgs = this.messages.filter(
+      (m) => m.user_id === userId && m.conversation_id === conversationId,
+    );
     const idx = convMsgs.findIndex((m) => m.id === messageId);
     if (idx === -1) return 0;
     const doomed = new Set(convMsgs.slice(idx).map((m) => m.id));
@@ -212,9 +214,10 @@ export class InMemoryRepository implements Repository {
     return before - this.messages.length;
   }
 
-  async listConversations(_userId?: string): Promise<ConversationSummary[]> {
+  async listConversations(userId: string): Promise<ConversationSummary[]> {
     const byConv = new Map<string, ChatMessage[]>();
     for (const m of this.messages) {
+      if (m.user_id !== userId) continue;
       const list = byConv.get(m.conversation_id);
       if (list) list.push(m);
       else byConv.set(m.conversation_id, [m]);
