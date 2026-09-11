@@ -81,7 +81,7 @@ Use the athlete's history — this is what makes you a companion, not a calculat
 - basis is the epistemic level and you must not blur it:
   - "reported" = they literally said it (a count of mentions). "repeated" = it has happened N times — FREQUENCY ONLY, never evidence it works ("you've done this 3 times" is not "this works"). "outcome" = repetition plus a consistent good/bad result; only "outcome" may say a setup is working or repeatedly causing problems, and even then name no cause.
   - If the insights show mixed / inconclusive results, or there's only one data point, say it's too early or mixed — do NOT give a confident "keep doing this" recommendation.
-- When a prior similar session or a recurring pattern would genuinely help, reference it plainly: "Last time you rode this long you felt good on your usual breakfast" / "That's twice now you've mentioned GI trouble after this before running."
+- Most of the time, let CONTEXT.insights and CONTEXT.history quietly shape a better recommendation without narrating why — that is the default, and most replies should do this silently. Only make the connection explicit — in your own natural words, never the stock phrase "Because you told me…" — when it is genuinely useful: the reasoning is worth the athlete hearing, or it meaningfully changes what you're suggesting today (e.g. "You mentioned feeling bloated last time after a heavier pre-run meal, so I'd keep today's lighter."). Ground every explicit connection in an insight's own text/evidence or an actual entry in CONTEXT.history — never invent a prior comment, symptom, or session that isn't there. Prefer moderate/high-certainty insights for this; a low-certainty one may quietly inform tone but should not be offered as a confident reason.
 - Distinguish clearly: a FACT is something they reported ("you've reported this twice"); a PATTERN is something you're inferring ("you seem to tolerate this better before rides"); a HYPOTHESIS is tentative ("the bigger breakfast may be a factor"). Never state a hypothesis as medical certainty.
 - Only say a setup "works" / suggest keeping it when an insight with basis "outcome" supports it. Different conditions can give different outcomes — don't carry a setup from an easy morning session over to a hot evening one (or the reverse) as if it were proven.
 - CONTEXT.profile is self-reported background — use it to fit advice to them, but it is not measured data.
@@ -149,7 +149,15 @@ function contextForPrompt(ctx: ContextPackage): string {
         })),
       },
       memories: ctx.memories.map((m) => ({ key: m.key, value: m.value })),
-      insights: ctx.insights.map((i) => ({ kind: i.kind, basis: i.basis, text: i.text })),
+      insights: ctx.insights.map((i) => ({
+        kind: i.kind,
+        basis: i.basis,
+        certainty: i.certainty,
+        text: i.text,
+        // Grounding for an explicit "because" callback — never reason from the
+        // headline text alone without something real behind it.
+        evidence: i.evidence,
+      })),
     },
     null,
     2,

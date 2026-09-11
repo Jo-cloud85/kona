@@ -10,7 +10,15 @@ interface Insight {
   topic: string;
   as_of?: string;
   evidence: string[];
+  /** watching = not enough evidence yet to lean on; acting_on = confident
+   *  enough to factor into today's advice. */
+  tier: 'watching' | 'acting_on';
 }
+
+const TIER_COPY: Record<Insight['tier'], string> = {
+  watching: 'Still watching — not enough yet to lean on.',
+  acting_on: "Confident enough to factor into today's advice.",
+};
 interface KnowsView {
   has_anything: boolean;
   insights: Insight[];
@@ -76,6 +84,7 @@ export default function KnowsView() {
             <div key={n} className="home-card insight-card">
               <span className={`insight-kind k-${i.kind}`}>{KIND_LABEL[i.kind]}</span>
               <p className="insight-text">{i.text}</p>
+              <p className="insight-tier">{TIER_COPY[i.tier]}</p>
               {i.evidence.length > 0 && (
                 <details className="kf-evidence">
                   <summary>Why Kona thinks this ({i.evidence_count})</summary>

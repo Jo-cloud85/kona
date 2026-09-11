@@ -170,6 +170,19 @@ Every structured record a chat turn creates carries `origin_message_id` = that t
 | AR6 | Reconciliation is idempotent and user-scoped | Reconciling the same message ids twice is a no-op the second time; passing another user's message ids under a different user's identity touches nothing. | ✅ `repository-contract.ts` |
 | AR7 | Documented, deliberate limitations | A memory the edited turn *updated* (not first created) reverts to unset, not its earlier value (no revision history). Chat-set profile facts and `update_planned_sessions` field edits are not reverted — both are single-row/no-per-fact-provenance cases out of scope for M23.1. | `ARCHITECTURE.md` §6b, `DEPLOYMENT.md` |
 
+## A-because. Memory that visibly changes advice (M23.2)
+
+The smallest testable slice of product memos 01/02: no new personal-rule system, no gamification — just making the existing M22 insight/evidence substrate reach the reply, sparingly and honestly.
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AB1 | Insights shape advice silently by default | Most replies must NOT narrate "because you told me…" — the connection should simply inform the recommendation without being spelled out, per `COMPOSE_SYSTEM`. | manual (live model) + `COMPOSE_SYSTEM` |
+| AB2 | The connection surfaces when genuinely useful | When a recurring, evidence-backed insight is directly relevant to a live recommendation, the reply names it naturally (not the literal stock phrase "Because you told me…") and gives a different/refined recommendation as a result. | ✅ `tests/agent/anthropic-llm.test.ts` (evidence/certainty reach the prompt) + manual (live model) |
+| AB3 | Grounded, never invented | An explicit callback must point at something real — an insight's own text/evidence, or an actual `CONTEXT.history` entry — never a fabricated prior comment or session. `contextForPrompt` now sends each insight's `certainty` and `evidence`, not just `kind`/`basis`/`text`. | ✅ `tests/agent/anthropic-llm.test.ts` |
+| AB4 | `recommendation_adapted` detection unchanged | The M22 activity-log semantics (once per insight, only on a later turn that produces real advice) are untouched — M23.2 only changes what reaches the *reply*, not what's logged. `context.insights` is always computed before the current turn's writes (`buildContext` runs before tool execution), so "never same-turn" holds structurally. | ✅ existing `activity.test.ts` / `edit-reconcile.test.ts` unchanged and still green |
+| AB5 | Memory tab: watching vs acting on | Each insight is tagged `watching` (`certainty: 'low'`) or `acting_on` (moderate/high), rendered as one small line per card. "What you've told Kona" stays its own, already-separate strand — no fourth section needed. | ✅ `tests/agent/knows.test.ts` |
+| AB6 | Silence holds on unrelated turns | An unrelated question in the same conversation as a standing insight gets a clean, on-topic reply with no forced mention of the insight. | manual (live model) |
+
 ## B. Calculation engine (CALCULATION_ENGINE_SPEC.md §21)
 
 | # | Scenario | Coverage |

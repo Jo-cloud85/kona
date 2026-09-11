@@ -103,6 +103,37 @@ describe('buildKnows', () => {
     expect(withOutcome.insights.some((i) => i.kind === 'pattern' && i.basis === 'outcome')).toBe(true);
   });
 
+  it('tags each insight with a learning tier — watching vs acting on (M23.2)', () => {
+    // a single noted session -> low certainty ("too early") -> still watching
+    const oneSession = buildKnows({
+      profile,
+      memories: [],
+      actualSessions: [actual({ sport: 'swimming', start_at: '2026-09-05T07:00:00' })],
+      recoveryLogs: [
+        { id: 'rw', user_id: 'u', logged_at: '2026-09-05T20:00:00Z', free_text: 'felt strong in the water' } as RecoveryLog,
+      ],
+      fuelLogs: [],
+    });
+    const unproven = oneSession.insights.find((i) => /once so far/i.test(i.text));
+    expect(unproven?.certainty).toBe('low');
+    expect(unproven?.tier).toBe('watching');
+
+    // a recurring, high-certainty fact -> confident enough to act on
+    const withPattern = buildKnows({
+      profile,
+      memories: [],
+      actualSessions: [],
+      recoveryLogs: [
+        { id: 'r1', user_id: 'u', logged_at: '2026-08-20T20:00:00Z', free_text: 'left calf tight' } as RecoveryLog,
+        { id: 'r2', user_id: 'u', logged_at: '2026-09-05T20:00:00Z', free_text: 'calf sore again' } as RecoveryLog,
+      ],
+      fuelLogs: [],
+    });
+    const calf = withPattern.insights.find((i) => /calf/i.test(i.text));
+    expect(calf?.certainty).toBe('high');
+    expect(calf?.tier).toBe('acting_on');
+  });
+
   it('renders the activity timeline (newest first), hiding plan noise, tagging Kona-side steps', () => {
     const k = buildKnows({
       profile: { ...profile, goal: undefined },

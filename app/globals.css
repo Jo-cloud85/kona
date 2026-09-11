@@ -1553,6 +1553,12 @@ button.cta:disabled {
   line-height: 1.55;
 }
 
+.insight-tier {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .kf-evidence {
   margin-top: 2px;
   font-size: 12px;

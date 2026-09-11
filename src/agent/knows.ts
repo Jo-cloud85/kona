@@ -25,6 +25,22 @@ function snippet(text: string, max = 56): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
+/**
+ * Where an insight sits in the learning loop, for the athlete's own benefit
+ * (M23.2 — "told / watching / acting on"). Derived from the existing
+ * `certainty` field, not a new dimension: nothing below "moderate" is confident
+ * enough to say Kona is leaning on it yet.
+ */
+export type InsightLearningTier = 'watching' | 'acting_on';
+
+function learningTier(i: Insight): InsightLearningTier {
+  return i.certainty === 'low' ? 'watching' : 'acting_on';
+}
+
+export interface KnowsInsight extends Insight {
+  tier: InsightLearningTier;
+}
+
 export interface KnowsToldLine {
   label: string;
   value: string;
@@ -50,7 +66,7 @@ export interface KnowsTimelineEntry {
 
 export interface KnowsView {
   has_anything: boolean;
-  insights: Insight[];
+  insights: KnowsInsight[];
   told: KnowsToldLine[];
   recent: KnowsRecentSession[];
   timeline: KnowsTimelineEntry[];
@@ -103,12 +119,12 @@ export function buildKnows(input: {
   fuelLogs: Parameters<typeof deriveInsights>[0]['fuelLogs'];
   events?: ActivityEvent[];
 }): KnowsView {
-  const insights = deriveInsights({
+  const insights: KnowsInsight[] = deriveInsights({
     actualSessions: input.actualSessions,
     recoveryLogs: input.recoveryLogs,
     fuelLogs: input.fuelLogs,
     memories: input.memories,
-  });
+  }).map((i) => ({ ...i, tier: learningTier(i) }));
 
   const told: KnowsToldLine[] = [];
   if (input.profile?.goal?.text) told.push({ label: 'Training for', value: input.profile.goal.text });

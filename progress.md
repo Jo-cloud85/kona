@@ -3,10 +3,51 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M23.1 + M15.1 done.** → **STOP for the founder product review** (before alpha).
+**M14.1–M23.2 + M15.1 done.** → **STOP for the founder product review** (before alpha).
 Founder direction: no visual redesign, don't fabricate insights, stop for a
 product review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
+
+### M23.2 — say the "because": memory that visibly changes advice ✅
+_Product memos 01/02 (Kona's Emotional Hook, The Judgment Loop) proposed that the
+hook isn't "Kona remembers me" but "Kona's advice is better because of what it
+remembers." This is the smallest testable slice of that — no new personal-rule
+system, no gamification._
+- **`COMPOSE_SYSTEM`** (`src/agent/anthropic-llm.ts`) gained one instruction:
+  most replies let `CONTEXT.insights` / `CONTEXT.history` shape the
+  recommendation silently (the default); only make the "because" explicit — in
+  natural words, never the stock phrase "Because you told me…" — when it's
+  genuinely useful, grounded in real evidence, and preferring moderate/high
+  certainty. `contextForPrompt` now also sends each insight's `certainty` and
+  `evidence` array (previously only `kind`/`basis`/`text`) so an explicit
+  callback can point at something real instead of the headline alone.
+- No change to `recommendation_adapted` / `insight_formed` detection
+  (`src/agent/activity.ts`) — that machinery is correct as built and untouched;
+  this milestone only makes what `context.insights` already carries (always
+  computed from *before* this turn — verified in `buildContext`/`orchestrator.ts`,
+  so "never same-turn" holds structurally, no new code needed for it) reach the
+  reply itself instead of sitting silently in the activity log.
+- **Memory tab** (`src/agent/knows.ts`, `app/KnowsView.tsx`): each insight now
+  carries a `tier` — `watching` (`certainty: 'low'`) vs `acting_on` (moderate/high)
+  — derived from the existing certainty field, not a new dimension. Rendered as
+  one small muted line per insight card ("Still watching — not enough yet to
+  lean on." / "Confident enough to factor into today's advice."), reusing the
+  existing card/typography pattern. "What you've told Kona" was already a
+  separate strand — the three-way told/watching/acting-on distinction the memo
+  asked for didn't need a fourth section.
+- Tests: +1 `anthropic-llm.test.ts` (evidence/certainty reach the compose
+  prompt), +1 `knows.test.ts` (tier assignment, both directions). **198 tests:
+  194 pass, 4 skipped (live);** `tsc` / `eslint` / `next build` clean.
+  Live-verified against the real model (`npm run chat -- --llm=anthropic`):
+  two GI-after-heavy-breakfast mentions, then a third turn planning a similar
+  run with a heavy breakfast planned → the reply named the two prior mentions
+  and suggested going lighter, unprompted, non-diagnostically. A same-session
+  unrelated question (weekend ride hydration) got a clean reply with **no**
+  forced insight mention — confirming silence-by-default holds.
+- **Not built** (deliberately): a personal-rule object/table, an LLM-propose-
+  and-approve pipeline, contradiction/retirement UI, new deterministic
+  detectors, numeric confidence scores, avatar/XP/points/cosmetics/streaks/
+  social. See product memos 01/02 for the fuller reasoning.
 
 ### M23.1 — turn attribution + edit reconciliation ✅
 _Close the M23 §6b gap before alpha: structured records created by a chat turn
@@ -380,8 +421,9 @@ integrations are out of this cycle. **Stop for a product review after M21.**
 - **M22** ✅ Product Truth Audit — `Insight.basis` (reported / repeated / outcome / adaptation); frequency no longer implies effectiveness (`workingSetup` removed → `sportReads`: frequency fact, then one honest outcome read — working / condition-dependent / repeated-trouble / mixed-inconclusive); `unprovenSetup` for a single data point; `recommendation_adapted` fires only once a *later* turn's advice actually used an earlier recommendation. No UI change, no persistence.
 - **M23** ✅ Production persistence + real user identity — Supabase Postgres behind the unchanged `Repository` interface (`SupabaseRepository` alongside `InMemoryRepository`), RLS isolating every user's rows, Supabase magic-link auth (`middleware.ts`, `/login`, `/auth/callback`, sign-out), `lib/server-context.ts` resolving `{repo, userId, llm}` per request instead of a module-level demo user. No Supabase env → dev-only in-memory single-user fallback, refused in production. No visual redesign.
 - **M23.1** ✅ Turn attribution + edit reconciliation — every structured record a chat turn creates carries `origin_message_id`; editing a turn now reconciles (deletes) the records it made and nulls dangling links on records that survive, instead of silently leaving orphaned data. Documented, acceptable-for-alpha limitations for memory updates / profile facts / plan field-edits (§6b). No UI, no new features.
+- **M23.2** ✅ Say the "because" — `COMPOSE_SYSTEM` now lets insights/history shape advice silently by default, and makes the connection explicit (grounded in real evidence, natural wording) only when genuinely useful; Memory tab labels each insight watching vs acting-on. No new data model, no gamification.
 
-**→ M14.1–M23.1 complete. STOP HERE for the founder product review before starting anything new.**
+**→ M14.1–M23.2 complete. STOP HERE for the founder product review before starting anything new.**
 
 ## Completed work
 
@@ -698,24 +740,29 @@ _Prompted by user feedback: Kona was silently defaulting unstated intensity to "
   Supabase project; done as the founder-review step per `DEPLOYMENT.md`. Local
   verification covered the dev-fallback journey + mocked auth + the
   env-guarded live suite.
+- **M23.2 is a hypothesis, not a proven result.** The product memos (01/02) argue
+  visible "because" moments are the emotional hook worth testing; alpha testing
+  is what actually validates or kills that. If alpha athletes don't notice or
+  remark on these moments, that's a real signal — see the memos' "what would
+  change this call" sections before building anything further on top.
 
 ## Next recommended task
-**Hold.** M14.1–M23.1 are done. Per the founder's instruction, **stop for
-review** — do not start another milestone.
-
-To bring persistence live (founder step): create a Supabase project, run
-`supabase/migrations/0001_init.sql` then `0002_origin_message_id.sql`, set
-`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` locally and in the
-deploy env, then walk the journey in `DEPLOYMENT.md` (sign up → onboard → plan →
-chat → log → close → return → still remembered; second account sees nothing of
-the first).
+**Hold for alpha.** M14.1–M23.2 are done. The founder is deploying to Vercel
+(Supabase already set up) to run a 10–20 person alpha — see `DEPLOYMENT.md`.
+Once live: walk the M23 journey once for sanity (sign up → onboard → plan →
+chat → log → close → return → still remembered), then specifically watch for
+M23.2's "because" moments landing naturally per the manual test notes given
+when M23.2 was implemented. Do not start another milestone before that
+feedback is in.
 
 Candidates to raise at the review (not started): "Week X of Y" once a
 periodised-block model exists; the chat *proactively* posting into an existing
 thread; polish pass (transitions, type hierarchy, Kona personality) that the
 founder explicitly deferred; `vitest` major bump to clear the dev-toolchain
 audit findings; memory revision history if the M23.1 "reverts to unset" limit
-turns out to matter in practice.
+turns out to matter in practice; the fuller personal-rule lifecycle from
+product memo 02 (tentative → confirmed → contradicted → retired), only if
+M23.2's minimal version proves the hook is real.
 
 M21 follow-ups worth a mention: the real model's prose can name a third key
 session the button prompts don't (`FOCUS_PROMPT_LIMIT` = 2) — harmless but worth

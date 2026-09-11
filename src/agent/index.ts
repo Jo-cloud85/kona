@@ -33,6 +33,8 @@ export { deriveInsights, type Insight, type InsightKind, type InsightBasis, type
 export {
   buildKnows,
   type KnowsView,
+  type KnowsInsight,
+  type InsightLearningTier,
   type KnowsToldLine,
   type KnowsRecentSession,
   type KnowsTimelineEntry,

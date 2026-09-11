@@ -135,6 +135,30 @@ describe('AnthropicLlmClient (fake transport, no network)', () => {
     }
   });
 
+  it('gives compose the insight evidence + certainty needed to ground a "because" callback (M23.2)', async () => {
+    const create = vi
+      .fn<AnthropicLike['messages']['create']>()
+      .mockResolvedValueOnce(
+        msg([{ type: 'tool_use', id: 'a', name: 'save_recovery', input: { free_text: 'felt fine today' } }]),
+      )
+      .mockResolvedValueOnce(msg([{ type: 'text', text: 'Noted.' }]));
+
+    const fake: AnthropicLike = { messages: { create } };
+    const repo = await createSeededRepository();
+    // two GI mentions -> a recurring-symptom FACT with quoted evidence
+    await repo.saveRecoveryLog({ user_id: DEMO_USER_ID, free_text: 'stomach was off after that heavier breakfast' });
+    await repo.saveRecoveryLog({ user_id: DEMO_USER_ID, free_text: 'GI trouble again this morning' });
+
+    const deps: AgentDeps = { repo, llm: new AnthropicLlmClient({ client: fake }) };
+    await handleMessage(deps, { userId: DEMO_USER_ID, conversationId: 'c4', message: 'Felt fine today' });
+
+    const composeText = String(create.mock.calls[1]![0].messages[0]!.content);
+    // the insight's own evidence line reaches the prompt — grounding, not just the headline text
+    expect(composeText).toMatch(/heavier breakfast/);
+    expect(composeText).toMatch(/"certainty": "high"/);
+    expect(composeText).toMatch(/"basis": "reported"/);
+  });
+
   it('a text-only interpret response short-circuits to a clarifying question (no compose call)', async () => {
     const create = vi
       .fn<AnthropicLike['messages']['create']>()
