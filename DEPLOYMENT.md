@@ -29,7 +29,8 @@ user-scoped anon client + RLS is the boundary.
    testing you can also enable "Enable email OTP".
 4. **Authentication → URL Configuration**: set Site URL to your app origin and add
    `<origin>/auth/callback` to Redirect URLs (add `http://localhost:3000/auth/callback`
-   for local dev).
+   for local dev). **You'll come back and add the Vercel production URL here too
+   — see "Deploy (Vercel)" below; it can only be added after the first deploy.**
 5. **Settings → API**: copy the Project URL and the `anon` public key.
 
 ## Environment variables
@@ -38,18 +39,45 @@ user-scoped anon client + RLS is the boundary.
 ANTHROPIC_API_KEY=…              # existing — the conversation model
 NEXT_PUBLIC_SUPABASE_URL=…       # Supabase Project URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=…  # Supabase anon public key
+KONA_LLM_MODEL=…                 # optional but recommended — see note below
 ```
 
 Set these in `.env.local` for local dev, and in the Vercel project settings for
-preview/production. That is the whole configuration.
+Production (and Preview, if you want preview deploys to behave the same way).
+That is the whole configuration.
+
+`KONA_LLM_MODEL` defaults to `claude-opus-5` when unset (`src/agent/anthropic-llm.ts`).
+If local dev is pinned to a different model (e.g. `claude-sonnet-5` in
+`.env.local`), set the same value in Vercel deliberately — otherwise production
+silently runs a different, pricier model than what you've been testing against.
+
+Never set `KONA_TEST_SUPABASE_URL` / `_ANON_KEY` / `_SERVICE_ROLE` in Vercel —
+they're local/CI-test-only, point at a disposable second project, and the
+service-role key in particular must never reach a deployed environment.
 
 ## Deploy (Vercel)
 
-1. Import the repo. Framework preset: Next.js. No build overrides.
-2. Add the three env vars above (Production + Preview).
+Order matters here because the production URL doesn't exist until after the
+first deploy, and Supabase needs that exact URL to allow the auth redirect.
+
+1. Import the repo into Vercel. Framework preset: Next.js — auto-detected, no
+   build overrides needed.
+2. Add the env vars above to the Vercel project (Production; also Preview if
+   you want preview deployments to work the same way). Do this before the
+   first deploy if possible, so the initial build already has them.
 3. Deploy. `middleware.ts` refreshes the auth session on every request and
    redirects unauthenticated page loads to `/login`; unauthenticated API calls
-   get 401.
+   get 401 — so a deploy with the Supabase vars missing/wrong fails loudly
+   (500s), never silently.
+4. Once deployed, note the assigned Production domain (Vercel → Project →
+   Settings → Domains — looks like `<project>.vercel.app`, or your custom
+   domain if you add one).
+5. Back in Supabase → Authentication → URL Configuration: set **Site URL** to
+   that domain, and add `https://<that-domain>/auth/callback` to **Redirect
+   URLs**. Keep the existing `http://localhost:3000/auth/callback` entry too —
+   the list is additive, so local dev keeps working unchanged.
+6. Sign in at the Vercel URL to confirm the magic-link round trip works in
+   production before treating it as ready for founder testing.
 
 ## Running the live persistence tests
 
