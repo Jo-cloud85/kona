@@ -28,6 +28,39 @@ User message
 → LLM converts structured results into natural language
 → response returned to user
 
+## Client architecture — mobile as the eventual primary client
+
+**Not building a native app now.** No Expo/React Native work starts until
+founder testing has validated the current product loop on the web app. This
+section is a standing constraint on how everything *between now and then* gets
+built, so that a future mobile client is an additive UI, not a rearchitecture.
+
+- **All product logic stays client-independent.** Domain types (`src/domain`),
+  the agent/orchestrator/tools/insights (`src/agent`), the calculation engine
+  (`src/engine`), and the repository layer (`src/data`) import nothing from
+  `react` or `next/*`. `lib/kona-server.ts` is the use-case layer — it takes a
+  resolved `KonaContext` and returns plain data, no JSX. Verified periodically:
+  `grep -rl "from 'react'\|next/" src/` should return nothing.
+- **React components render; they do not decide.** A component receives typed
+  JSON from an API route and displays it — it must not parse dates, run
+  calculations, classify sessions, or make any judgment call the agent/engine
+  should own. If a component starts accumulating that kind of logic, it belongs
+  in `src/` or `lib/kona-server.ts` behind the same route instead.
+- **The API routes (`app/api/*/route.ts`) are the seam a mobile client would
+  reuse.** They're already thin: resolve auth context → call a `kona-server`
+  use-case → return JSON. Keep them that way — no HTML, no server-rendered
+  markup, nothing an Expo app couldn't call identically over the same JSON
+  contract.
+- **UI changes stay mobile-first and responsive.** The current layout (single
+  column, bottom nav, cards) already reads as a mobile app on desktop — keep
+  building that way: no desktop-only interaction patterns (hover-only affordances,
+  fixed-width layouts, multi-pane desktop chrome) that would need rework for a
+  narrow, touch-first screen.
+
+This is a constraint on *how* web-app work gets built, not a task — do not
+start scaffolding a mobile client, an API versioning scheme, or a shared design
+system ahead of need.
+
 ## Core components
 
 ### 1. Conversation layer
