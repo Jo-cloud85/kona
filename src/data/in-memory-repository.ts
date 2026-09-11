@@ -15,6 +15,7 @@ import type {
 } from '../domain/types';
 import { newId } from './ids';
 import type {
+  EditReconciliation,
   NewActualSession,
   NewFuelLog,
   NewPlannedSession,
@@ -105,6 +106,7 @@ export class InMemoryRepository implements Repository {
       week_start: input.week_start,
       source_text: input.source_text,
       rest_days: input.rest_days ?? [],
+      origin_message_id: input.origin_message_id,
       created_at: this.iso(),
     };
     this.weeklyPlans.push(plan);
@@ -201,17 +203,94 @@ export class InMemoryRepository implements Repository {
     return this.messages.filter((m) => m.user_id === userId && m.conversation_id === conversationId);
   }
 
-  async deleteMessagesFrom(userId: string, conversationId: string, messageId: string): Promise<number> {
+  async listMessageIdsFrom(userId: string, conversationId: string, messageId: string): Promise<string[]> {
     // insertion order == chronological order for the in-memory store
     const convMsgs = this.messages.filter(
       (m) => m.user_id === userId && m.conversation_id === conversationId,
     );
     const idx = convMsgs.findIndex((m) => m.id === messageId);
-    if (idx === -1) return 0;
-    const doomed = new Set(convMsgs.slice(idx).map((m) => m.id));
+    if (idx === -1) return [];
+    return convMsgs.slice(idx).map((m) => m.id);
+  }
+
+  async deleteMessagesFrom(userId: string, conversationId: string, messageId: string): Promise<number> {
+    const doomed = new Set(await this.listMessageIdsFrom(userId, conversationId, messageId));
+    if (doomed.size === 0) return 0;
     const before = this.messages.length;
     this.messages = this.messages.filter((m) => !doomed.has(m.id));
     return before - this.messages.length;
+  }
+
+  async deleteRecordsForMessages(userId: string, messageIds: string[]): Promise<EditReconciliation> {
+    const origin = new Set(messageIds);
+    const mine = (o: { user_id: string; origin_message_id?: string }) =>
+      o.user_id === userId && o.origin_message_id !== undefined && origin.has(o.origin_message_id);
+
+    // 1. Which records go. Remember the ids so surviving links can be repaired.
+    const goingPlanned = new Set([...this.planned.values()].filter(mine).map((s) => s.id));
+    const goingActual = new Set([...this.actual.values()].filter(mine).map((s) => s.id));
+    const goingWeeks = new Set(this.weeklyPlans.filter(mine).map((w) => w.id));
+    // A weekly plan removed here takes its own linked planned sessions with it
+    // (they were created in the same turn / belong to that plan).
+    for (const s of this.planned.values()) {
+      if (s.weekly_plan_id && goingWeeks.has(s.weekly_plan_id)) goingPlanned.add(s.id);
+    }
+
+    const out: EditReconciliation = {
+      planned_sessions: 0,
+      sessions: 0,
+      weekly_plans: 0,
+      fuel_logs: 0,
+      recovery_logs: 0,
+      memories: 0,
+      activity_events: 0,
+      nulled_links: 0,
+    };
+
+    // 2. Delete the records.
+    for (const id of goingPlanned) if (this.planned.delete(id)) out.planned_sessions++;
+    for (const id of goingActual) if (this.actual.delete(id)) out.sessions++;
+    const weeksBefore = this.weeklyPlans.length;
+    this.weeklyPlans = this.weeklyPlans.filter((w) => !goingWeeks.has(w.id));
+    out.weekly_plans = weeksBefore - this.weeklyPlans.length;
+
+    const fuelBefore = this.fuelLogs.length;
+    this.fuelLogs = this.fuelLogs.filter((l) => !mine(l));
+    out.fuel_logs = fuelBefore - this.fuelLogs.length;
+
+    const recBefore = this.recoveryLogs.length;
+    this.recoveryLogs = this.recoveryLogs.filter((l) => !mine(l));
+    out.recovery_logs = recBefore - this.recoveryLogs.length;
+
+    const memBefore = this.memories.length;
+    this.memories = this.memories.filter((m) => !mine(m));
+    out.memories = memBefore - this.memories.length;
+
+    const evtBefore = this.activity.length;
+    this.activity = this.activity.filter((e) => !mine(e));
+    out.activity_events = evtBefore - this.activity.length;
+
+    // 3. Repair dangling links on SURVIVING rows (keep the row, cut the link).
+    for (const s of this.actual.values()) {
+      if (s.planned_session_id && goingPlanned.has(s.planned_session_id)) {
+        s.planned_session_id = undefined;
+        out.nulled_links++;
+      }
+    }
+    for (const l of this.fuelLogs) {
+      if (l.session_id && goingActual.has(l.session_id)) {
+        l.session_id = undefined;
+        out.nulled_links++;
+      }
+    }
+    for (const l of this.recoveryLogs) {
+      if (l.session_id && goingActual.has(l.session_id)) {
+        l.session_id = undefined;
+        out.nulled_links++;
+      }
+    }
+
+    return out;
   }
 
   async listConversations(userId: string): Promise<ConversationSummary[]> {
@@ -258,6 +337,7 @@ export class InMemoryRepository implements Repository {
     if (existing) {
       existing.value = candidate.value;
       existing.certainty = candidate.certainty;
+      existing.origin_message_id = candidate.origin_message_id;
       existing.persisted_at = this.iso();
       return existing;
     }

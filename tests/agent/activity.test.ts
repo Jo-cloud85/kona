@@ -46,6 +46,20 @@ describe('deriveTurnEvents', () => {
     expect(events.map((e) => e.type)).toEqual(['session_logged', 'fuel_logged']);
     expect(events[0]!.summary).toMatch(/logged 60 km cycling/i);
     expect(events[1]!.summary).toMatch(/porridge, 2 SIS gels/);
+    // no originMessageId given -> events carry none
+    expect(events.every((e) => e.origin_message_id === undefined)).toBe(true);
+  });
+
+  it('stamps events with originMessageId when the turn provides one (M23.1)', () => {
+    const events = deriveTurnEvents({
+      userId: 'u',
+      toolResults: [{ tool: 'save_actual_session', ok: true, data: { sport: 'running', status: 'completed' } }],
+      knownInsightTexts: new Set(),
+      insightsAfter: [],
+      originMessageId: 'msg_turn_42',
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]!.origin_message_id).toBe('msg_turn_42');
   });
 
   it('spots a NEW pattern/fact but does NOT claim any recommendation was adapted', () => {

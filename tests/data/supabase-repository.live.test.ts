@@ -119,4 +119,38 @@ describe.skipIf(!enabled)('SupabaseRepository (live project)', () => {
     const still = await raw.from('activity_events').select('summary').eq('id', id).single();
     expect(still.data?.summary).toBe('immutable?');
   }, 30_000);
+
+  it('M23.1: origin_message_id stamps records and reconciliation removes an edited turn', async () => {
+    const [a] = users;
+    const w = repoFor(a!.token);
+
+    const mSession = await w.appendMessage({ user_id: a!.id, conversation_id: 'rec1', role: 'user', content: 'ran 18k' });
+    const mFuel = await w.appendMessage({ user_id: a!.id, conversation_id: 'rec1', role: 'user', content: 'had 3 gels' });
+
+    const s = await w.saveActualSession({
+      user_id: a!.id, sport: 'running', intensity: 'easy', start_at: '2026-06-10T06:00:00',
+      status: 'completed', origin_message_id: mSession.id,
+    });
+    const f = await w.saveFuelLog({
+      user_id: a!.id, session_id: s.id,
+      items: [{ description: 'gel', certainty: 'user_reported' }], origin_message_id: mFuel.id,
+    });
+
+    expect((await w.getActualSession(s.id))?.origin_message_id).toBe(mSession.id);
+
+    // reconcile ONLY the session turn: session goes, fuel is kept but its link nulled
+    const summary = await w.deleteRecordsForMessages(a!.id, [mSession.id]);
+    expect(summary.sessions).toBe(1);
+    expect(summary.fuel_logs).toBe(0);
+    expect(summary.nulled_links).toBe(1);
+
+    expect(await w.getActualSession(s.id)).toBeUndefined();
+    const keptFuel = (await w.listFuelLogs(a!.id)).find((x) => x.id === f.id);
+    expect(keptFuel?.session_id).toBeUndefined();
+
+    // FK ON DELETE CASCADE safety-net: deleting the message alone would also
+    // have removed the session — verify by deleting mFuel's message and its log.
+    await w.deleteRecordsForMessages(a!.id, [mFuel.id]);
+    expect(await w.listFuelLogs(a!.id)).toHaveLength(0);
+  }, 30_000);
 });

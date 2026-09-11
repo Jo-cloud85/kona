@@ -186,4 +186,103 @@ export function repositoryContract(
     const bHist = await repo.getRelevantHistory(userB, {});
     expect(bHist.recent_actual_sessions).toHaveLength(1);
   });
+
+  // --- M23.1: turn attribution + edit reconciliation --------------------
+
+  it('origin_message_id round-trips on every turn-created record', async () => {
+    const repo = await makeRepo();
+    const m = await repo.appendMessage({ user_id: userA, conversation_id: 'edit1', role: 'user', content: 'log stuff' });
+
+    const p = await repo.savePlannedSession({ ...base, user_id: userA, start_at: '2026-06-01T06:00:00', origin_message_id: m.id });
+    const s = await repo.saveActualSession({ ...base, user_id: userA, start_at: '2026-06-01T06:00:00', status: 'completed', origin_message_id: m.id });
+    const w = await repo.saveWeeklyPlan({ user_id: userA, week_start: '2026-06-01', origin_message_id: m.id });
+    const f = await repo.saveFuelLog({ user_id: userA, items: [{ description: 'gel', certainty: 'user_reported' }], origin_message_id: m.id });
+    const r = await repo.saveRecoveryLog({ user_id: userA, free_text: 'ok', origin_message_id: m.id });
+    await repo.proposeMemory({ user_id: userA, key: 'k', value: 'v', certainty: 'user_reported', source: 'conversation', proposed_at: '2026-01-01T00:00:00Z', origin_message_id: m.id });
+    await repo.appendActivityEvent({ user_id: userA, type: 'session_logged', summary: 'logged', origin_message_id: m.id });
+
+    expect((await repo.getPlannedSession(p.id))?.origin_message_id).toBe(m.id);
+    expect((await repo.getActualSession(s.id))?.origin_message_id).toBe(m.id);
+    expect((await repo.listWeeklyPlans(userA)).find((x) => x.id === w.id)?.origin_message_id).toBe(m.id);
+    expect((await repo.listFuelLogs(userA)).find((x) => x.id === f.id)?.origin_message_id).toBe(m.id);
+    expect((await repo.listRecoveryLogs(userA)).find((x) => x.id === r.id)?.origin_message_id).toBe(m.id);
+    expect((await repo.listMemories(userA))[0]?.origin_message_id).toBe(m.id);
+    expect((await repo.listActivityEvents(userA))[0]?.origin_message_id).toBe(m.id);
+  });
+
+  it('listMessageIdsFrom returns a message + all later, scoped to the user', async () => {
+    const repo = await makeRepo();
+    const m1 = await repo.appendMessage({ user_id: userA, conversation_id: 'e', role: 'user', content: '1' });
+    const m2 = await repo.appendMessage({ user_id: userA, conversation_id: 'e', role: 'assistant', content: '2' });
+    const m3 = await repo.appendMessage({ user_id: userA, conversation_id: 'e', role: 'user', content: '3' });
+    await repo.appendMessage({ user_id: userB, conversation_id: 'e', role: 'user', content: 'B' });
+
+    expect(await repo.listMessageIdsFrom(userA, 'e', m2.id)).toEqual([m2.id, m3.id]);
+    expect(await repo.listMessageIdsFrom(userA, 'e', m1.id)).toEqual([m1.id, m2.id, m3.id]);
+    expect(await repo.listMessageIdsFrom(userA, 'e', 'nope')).toEqual([]);
+    // a different user's message id is invisible here
+    expect(await repo.listMessageIdsFrom(userB, 'e', m1.id)).toEqual([]);
+  });
+
+  it('deleteRecordsForMessages removes turn records and repairs a surviving link', async () => {
+    const repo = await makeRepo();
+    const mSession = await repo.appendMessage({ user_id: userA, conversation_id: 'e', role: 'user', content: 'ran 18k' });
+    const mFuel = await repo.appendMessage({ user_id: userA, conversation_id: 'e', role: 'user', content: 'had 3 gels' });
+
+    const s = await repo.saveActualSession({ ...base, user_id: userA, start_at: '2026-07-01T06:00:00', status: 'completed', origin_message_id: mSession.id });
+    const f = await repo.saveFuelLog({
+      user_id: userA,
+      session_id: s.id,
+      items: [{ description: 'gel', certainty: 'user_reported' }],
+      origin_message_id: mFuel.id,
+    });
+
+    // edit the SESSION turn: only its message is reconciled
+    const summary = await repo.deleteRecordsForMessages(userA, [mSession.id]);
+    expect(summary.sessions).toBe(1);
+    expect(summary.fuel_logs).toBe(0); // the fuel log is from a different turn — kept
+    expect(summary.nulled_links).toBe(1); // …but its link to the deleted session is cut
+
+    expect(await repo.getActualSession(s.id)).toBeUndefined();
+    const keptFuel = (await repo.listFuelLogs(userA)).find((x) => x.id === f.id);
+    expect(keptFuel).toBeDefined();
+    expect(keptFuel?.session_id).toBeUndefined();
+
+    // idempotent
+    const again = await repo.deleteRecordsForMessages(userA, [mSession.id]);
+    expect(again).toMatchObject({ sessions: 0, fuel_logs: 0, nulled_links: 0 });
+  });
+
+  it('deleting a weekly-plan turn takes its planned sessions with it', async () => {
+    const repo = await makeRepo();
+    const m = await repo.appendMessage({ user_id: userA, conversation_id: 'e', role: 'user', content: 'my week' });
+    const w = await repo.saveWeeklyPlan({ user_id: userA, week_start: '2026-08-03', origin_message_id: m.id });
+    await repo.savePlannedSession({ ...base, user_id: userA, start_at: '2026-08-04T06:00:00', weekly_plan_id: w.id, origin_message_id: m.id });
+    await repo.savePlannedSession({ ...base, user_id: userA, start_at: '2026-08-05T06:00:00', weekly_plan_id: w.id, origin_message_id: m.id });
+
+    const summary = await repo.deleteRecordsForMessages(userA, [m.id]);
+    expect(summary.weekly_plans).toBe(1);
+    expect(summary.planned_sessions).toBe(2);
+    expect(await repo.listWeeklyPlans(userA)).toHaveLength(0);
+    expect(await repo.listPlannedSessions(userA)).toHaveLength(0);
+  });
+
+  it('deleteRecordsForMessages never touches another user or unrelated turns', async () => {
+    const repo = await makeRepo();
+    const mA = await repo.appendMessage({ user_id: userA, conversation_id: 'e', role: 'user', content: 'A turn 1' });
+    const mA2 = await repo.appendMessage({ user_id: userA, conversation_id: 'e', role: 'user', content: 'A turn 2' });
+    const mB = await repo.appendMessage({ user_id: userB, conversation_id: 'e', role: 'user', content: 'B turn' });
+
+    await repo.saveActualSession({ ...base, user_id: userA, start_at: '2026-09-01T06:00:00', status: 'completed', origin_message_id: mA.id });
+    await repo.saveActualSession({ ...base, user_id: userA, start_at: '2026-09-02T06:00:00', status: 'completed', origin_message_id: mA2.id });
+    await repo.saveActualSession({ ...base, user_id: userB, start_at: '2026-09-03T06:00:00', status: 'completed', origin_message_id: mB.id });
+
+    // reconcile only A's first turn
+    await repo.deleteRecordsForMessages(userA, [mA.id]);
+    expect(await repo.listActualSessions(userA)).toHaveLength(1); // A's second turn kept
+    expect(await repo.listActualSessions(userB)).toHaveLength(1); // B untouched
+    // passing B's message id under A's identity is a no-op
+    expect((await repo.deleteRecordsForMessages(userA, [mB.id])).sessions).toBe(0);
+    expect(await repo.listActualSessions(userB)).toHaveLength(1);
+  });
 }

@@ -29,9 +29,19 @@ describe('edit-and-regenerate', () => {
     const t1 = await say('I feel a bit sore');
     await say('legs mostly');
 
-    // edit t1: drop it + everything after, then re-run with the corrected text
+    // the recovery record turn 1 created is attributed to turn 1
+    const recBefore = await repo.listRecoveryLogs(DEMO_USER_ID);
+    expect(recBefore.length).toBeGreaterThan(0);
+    expect(recBefore[0]!.origin_message_id).toBe(t1.user_message_id);
+
+    // edit t1: reconcile its records, drop it + everything after, re-run
+    const removedIds = await repo.listMessageIdsFrom(DEMO_USER_ID, 'c', t1.user_message_id);
+    expect(removedIds).toHaveLength(4); // t1 user+assistant, t2 user+assistant
+    const summary = await repo.deleteRecordsForMessages(DEMO_USER_ID, removedIds);
+    expect(summary.recovery_logs).toBe(recBefore.length);
     const removed = await repo.deleteMessagesFrom(DEMO_USER_ID, 'c', t1.user_message_id);
-    expect(removed).toBe(4); // t1 user+assistant, t2 user+assistant
+    expect(removed).toBe(4);
+    expect(await repo.listRecoveryLogs(DEMO_USER_ID)).toHaveLength(0);
 
     const edited = await say('Actually my legs feel great today');
     const msgs = await repo.listMessages(DEMO_USER_ID, 'c');

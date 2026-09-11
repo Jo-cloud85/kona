@@ -61,7 +61,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const { turn, session_prompts } = editId
+    const { turn, session_prompts, reconciled } = editId
       ? await editMessage(c.ctx, convId, editId, message.trim())
       : await sendMessage(c.ctx, convId, message.trim());
     return Response.json({
@@ -72,6 +72,7 @@ export async function POST(req: Request): Promise<Response> {
       session_prompts,
       user_message_id: turn.user_message_id,
       assistant_message_id: turn.assistant_message_id,
+      ...(reconciled ? { reconciled } : {}),
     });
   } catch (err) {
     console.error('kona chat error', err);

@@ -18,6 +18,8 @@ import type {
 export interface NewPlannedSession extends SessionInputCore {
   user_id: string;
   weekly_plan_id?: string;
+  /** The chat message (turn) creating this record (M23.1). */
+  origin_message_id?: string;
 }
 
 export interface NewWeeklyPlan {
@@ -25,6 +27,7 @@ export interface NewWeeklyPlan {
   week_start: string;
   source_text?: string;
   rest_days?: string[];
+  origin_message_id?: string;
 }
 
 export interface NewActualSession extends SessionInputCore {
@@ -32,12 +35,14 @@ export interface NewActualSession extends SessionInputCore {
   planned_session_id?: string;
   status: ActualSession['status'];
   reason?: string;
+  origin_message_id?: string;
 }
 
 export interface NewFuelLog {
   user_id: string;
   session_id?: string;
   items: FuelLog['items'];
+  origin_message_id?: string;
 }
 
 export interface NewRecoveryLog {
@@ -47,6 +52,24 @@ export interface NewRecoveryLog {
   overall_severity?: RecoveryLog['overall_severity'];
   reported_symptoms?: string[];
   sleep_quality?: RecoveryLog['sleep_quality'];
+  origin_message_id?: string;
+}
+
+/**
+ * What `deleteRecordsForMessages` removed / repaired while reconciling an edited
+ * chat turn (M23.1). All counts are of the caller's own rows.
+ */
+export interface EditReconciliation {
+  planned_sessions: number;
+  sessions: number;
+  weekly_plans: number;
+  fuel_logs: number;
+  recovery_logs: number;
+  memories: number;
+  activity_events: number;
+  /** Foreign-key references on surviving rows that pointed at a deleted record
+   *  and were set to null (a later record kept, its link to a gone record cut). */
+  nulled_links: number;
 }
 
 export interface RelevantHistory {
@@ -103,9 +126,23 @@ export interface Repository {
   /** Messages for one of the user's own conversations. Scoped by user so a
    *  conversation id from another user can never be read. */
   listMessages(userId: string, conversationId: string): Promise<ChatMessage[]>;
+  /** The ids of `messageId` and every message after it in the user's
+   *  conversation, chronological. Empty if `messageId` is not the user's.
+   *  Used to reconcile structured records before the edit-and-regenerate
+   *  delete (M23.1). */
+  listMessageIdsFrom(userId: string, conversationId: string, messageId: string): Promise<string[]>;
   /** Remove `messageId` and every message after it in the user's conversation
    *  (for the edit-and-regenerate flow). Returns how many were removed. */
   deleteMessagesFrom(userId: string, conversationId: string, messageId: string): Promise<number>;
+  /**
+   * Reconcile structured records for an edited turn (M23.1): delete every
+   * planned/actual session, weekly plan, fuel log, recovery log, memory and
+   * activity event whose `origin_message_id` is in `messageIds`, then null any
+   * foreign-key reference on a SURVIVING row that pointed at one of the deleted
+   * records (a later, kept record loses only its dangling link, not itself).
+   * Idempotent. Never touches another user's rows or the `profiles` row.
+   */
+  deleteRecordsForMessages(userId: string, messageIds: string[]): Promise<EditReconciliation>;
   /** One summary row per conversation that has messages, newest activity first. */
   listConversations(userId: string): Promise<ConversationSummary[]>;
 

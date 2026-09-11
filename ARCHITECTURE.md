@@ -142,18 +142,39 @@ week plan). A newly-formed recommendation is recorded as `insight_formed`
 ("Kona's take — …") so a later turn can tell it was already known; it does not
 by itself claim any recommendation changed. Once per insight.
 
-### 6b. Editing a chat turn — rollback limitation (M23, documented not solved)
-`editMessage` (edit-and-regenerate) truncates the transcript at the edited
-message and re-runs the turn. It does **not** roll back structured records
-(sessions, fuel logs, memories, activity events) the removed turn(s) created —
-only the transcript and replies are corrected. With in-memory storage this reset
-on restart; with persistence an edited-away session now stays on record.
+### 6b. Editing a chat turn — turn attribution + reconciliation (M23.1)
+Every structured record a chat turn writes carries `origin_message_id` = the
+turn's **user message id** (`planned_sessions`, `sessions`, `weekly_plans`,
+`fuel_logs`, `recovery_logs`, `personal_memories`, `activity_events` — migration
+`0002`). The orchestrator passes the id into the tool context; each writing tool
+stamps it; `deriveTurnEvents` stamps the activity events. Records made outside a
+chat turn (end-of-day check-ins) have a null origin.
 
-The clean fix: stamp each structured write with the `message_id` / `turn_id`
-that produced it, and cascade on edit — while preserving writes a later,
-un-edited turn depends on. Deferred: it needs a column on every mutable table
-and dependency handling that is larger than M23's scope. Tracked in
-`progress.md`.
+`editMessage` (edit-and-regenerate) now, in order:
+1. `listMessageIdsFrom` — the edited message + everything after it,
+2. `deleteRecordsForMessages` — delete every session / weekly plan / fuel log /
+   recovery log / memory / activity event stamped with those ids; a deleted
+   weekly plan takes its own planned sessions with it; then **null any
+   foreign-key reference on a *surviving* row** that pointed at a now-deleted
+   record (a later, un-edited record is kept — only its dangling link is cut),
+3. `deleteMessagesFrom` — drop the messages,
+4. re-run with the new text; the regenerated turn's records get the **new**
+   message id as their origin.
+
+The FK on `origin_message_id` is `ON DELETE CASCADE`, so a structured record can
+never outlive its originating message even if a message is removed by a path
+other than `editMessage`. The result of step 2 is returned to the caller (and
+surfaced as `reconciled` on the chat API response — metadata, no UI).
+
+**Deliberate limitations** (documented — an alpha is fine with these):
+- A memory the edited turn *updated* rather than first created reverts to
+  **unset**, not to its earlier value. There is no memory revision history.
+- Profile facts set via chat (body weight, bottle, goal) are one row per user
+  with no per-fact provenance, so they are **not** reverted by an edit.
+- `update_planned_sessions` (a plan *field* change) is not reverted — only
+  records a turn *created* are.
+- The transcript model is linear, so "preserve a later dependent record" only
+  ever fires as the FK-null safety net; there is no branching edit.
 
 ## Important design rule
 Never pass the entire user history to the LLM on every message.

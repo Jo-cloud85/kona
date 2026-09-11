@@ -36,11 +36,19 @@ export function deriveTurnEvents(input: {
   adviceProducedThisTurn?: boolean;
   /** Recommendation-insight texts Kona has already reported as `recommendation_adapted`. */
   alreadyAdaptedFrom?: Set<string>;
+  /** The chat message (turn) these events belong to (M23.1). */
+  originMessageId?: string;
 }): NewActivityEvent[] {
-  const { userId, toolResults: r } = input;
+  const { userId, toolResults: r, originMessageId } = input;
   const out: NewActivityEvent[] = [];
   const ev = (type: NewActivityEvent['type'], summary: string, meta?: Record<string, unknown>): void => {
-    out.push({ user_id: userId, type, summary, ...(meta ? { meta } : {}) });
+    out.push({
+      user_id: userId,
+      type,
+      summary,
+      ...(meta ? { meta } : {}),
+      ...(originMessageId ? { origin_message_id: originMessageId } : {}),
+    });
   };
 
   const week = find(r, 'save_weekly_plan');

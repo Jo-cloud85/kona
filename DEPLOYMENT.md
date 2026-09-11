@@ -21,8 +21,10 @@ user-scoped anon client + RLS is the boundary.
 ## One-time Supabase setup
 
 1. Create a project at supabase.com.
-2. **SQL Editor → New query →** paste `supabase/migrations/0001_init.sql` → Run.
-   (Or, with the Supabase CLI: `supabase db push`.)
+2. **SQL Editor → New query →** run each migration in order:
+   `supabase/migrations/0001_init.sql`, then `supabase/migrations/0002_origin_message_id.sql`.
+   (Or, with the Supabase CLI: `supabase db push`.) `0002` is additive and safe
+   to run on an existing project.
 3. **Authentication → Providers → Email**: enable, "Confirm email" on. For local
    testing you can also enable "Enable email OTP".
 4. **Authentication → URL Configuration**: set Site URL to your app origin and add
@@ -66,16 +68,12 @@ These are the only tests that exercise real RLS and cross-process persistence.
    cannot write rows it doesn't own, and asserts `activity_events` are immutable.
    The users are deleted in `afterAll`.
 
-## Known limitation — editing a chat turn (documented, not solved in M23)
+## Editing a chat turn — reconciliation (M23.1)
 
-`editMessage` truncates the transcript at the edited message and regenerates the
-reply. It does **not** roll back structured records (sessions, fuel logs,
-memories, activity events) the removed turn(s) created. With in-memory storage
-this was invisible on restart; with persistence an edited-away session stays on
-record.
-
-The clean fix is to stamp each structured write with the `message_id` (or a
-`turn_id`) that produced it and cascade-delete on edit. That is deferred; it
-needs a column on every mutable table and careful handling of writes that a
-later, un-edited turn depends on. Tracked in `progress.md` and `ARCHITECTURE.md`
-§6b.
+`editMessage` now reconciles the structured records a removed turn created:
+every session / weekly plan / fuel log / recovery log / memory / activity event
+stamped with `origin_message_id` in the removed range is deleted, and any
+dangling foreign key on a surviving row is nulled. See `ARCHITECTURE.md` §6b for
+the full flow and the deliberate limitations (a memory that was *updated* by the
+edited turn reverts to unset not to its prior value; chat-set profile facts are
+not reverted; plan field-updates are not reverted).

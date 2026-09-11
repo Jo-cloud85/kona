@@ -6,6 +6,7 @@ export type {
   NewRecoveryLog,
   NewWeeklyPlan,
   RelevantHistory,
+  EditReconciliation,
 } from './repository';
 export { InMemoryRepository, type InMemoryRepositoryOptions } from './in-memory-repository';
 export { SupabaseRepository } from './supabase-repository';

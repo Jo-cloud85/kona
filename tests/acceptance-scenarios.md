@@ -153,8 +153,22 @@ Supabase Postgres + magic-link auth + per-user RLS, behind the unchanged `Reposi
 | AP5 | Persistence across "restart" | Data written by one client is still there from a brand-new client with the same identity (fresh process). | ✅ `supabase-repository.live.test.ts` (env-gated); manual journey in `DEPLOYMENT.md` |
 | AP6 | Activity events immutable | `activity_events` has select+insert RLS policies only — UPDATE/DELETE affect 0 rows; the stream is append-only at the DB. | ✅ `supabase-repository.live.test.ts`; `repository-contract.ts` (no mutate methods on the interface) |
 | AP7 | Provenance preserved | `certainty` (`reported`/`repeated`/`outcome`/`adaptation` distinctions from M22) and memory `certainty` survive the round-trip unchanged; insights are recomputed, never stored. | ✅ `repository-contract.ts` (memory + activity `meta`), schema comments in `0001_init.sql` |
-| AP8 | Conversation continuity | Reopening a prior conversation returns its messages, scoped to the user; editing a message truncates only that user's conversation. **Known limitation**: structured records from an edited-away turn are not rolled back (`ARCHITECTURE.md` §6b). | ✅ `repository-contract.ts` (messages + `deleteMessagesFrom` scoping) + manual |
+| AP8 | Conversation continuity | Reopening a prior conversation returns its messages, scoped to the user; editing a message truncates only that user's conversation. Structured records from an edited-away turn ARE reconciled — see A-reconcile (M23.1). | ✅ `repository-contract.ts` (messages + `deleteMessagesFrom` scoping) + manual |
 | AP9 | Sign in / stay / sign out | Magic link → `/auth/callback` exchanges the code → session cookie; middleware refreshes it each request; "Sign out" in the profile overlay clears it and returns to `/login`. | manual (needs a Supabase project — founder-review step) |
+
+## A-reconcile. Turn attribution + edit reconciliation (M23.1)
+
+Every structured record a chat turn creates carries `origin_message_id` = that turn's user message id. Editing a turn reconciles (deletes) the records it made; records from other turns are preserved, with dangling links to a deleted record nulled rather than the surviving record being deleted too.
+
+| # | Scenario | Expected behaviour | Coverage |
+|---|----------|--------------------|----------|
+| AR1 | Every write is attributed | `save_planned_session`, `save_weekly_plan` (+ its child sessions), `save_actual_session`, `log_fuel_intake`, `save_recovery`, `propose_memory_update`, and the turn's `activity_events` all carry `origin_message_id` = the turn's user message id. Records made outside a chat turn (end-of-day check-ins) get a null origin. | ✅ `tests/data/repository-contract.ts`, `tests/agent/edit-reconcile.test.ts`, `tests/agent/activity.test.ts` |
+| AR2 | Editing a turn reconciles its own records | Editing a turn that created a session + fuel log deletes both (and the turn's activity events) and — after regeneration — the new records carry the NEW message id as origin. `editMessage` returns a `reconciled` summary of what was removed/repaired. | ✅ `tests/agent/edit-reconcile.test.ts`, `repository-contract.ts` |
+| AR3 | Earlier turns are preserved | Editing turn 2 does not touch turn 1's records (e.g. an earlier planned session survives unchanged, same origin). | ✅ `tests/agent/edit-reconcile.test.ts` |
+| AR4 | Dangling links are repaired, not cascaded onto survivors | A fuel log from a kept turn that references a session from a reconciled turn keeps the fuel log and nulls its `session_id` rather than deleting the fuel log. | ✅ `repository-contract.ts`, `supabase-repository.live.test.ts` (env-gated, real FK behaviour) |
+| AR5 | A deleted weekly plan takes its own children | Reconciling a `save_weekly_plan` turn also removes the planned sessions created under that plan in the same turn. | ✅ `repository-contract.ts` |
+| AR6 | Reconciliation is idempotent and user-scoped | Reconciling the same message ids twice is a no-op the second time; passing another user's message ids under a different user's identity touches nothing. | ✅ `repository-contract.ts` |
+| AR7 | Documented, deliberate limitations | A memory the edited turn *updated* (not first created) reverts to unset, not its earlier value (no revision history). Chat-set profile facts and `update_planned_sessions` field edits are not reverted — both are single-row/no-per-fact-provenance cases out of scope for M23.1. | `ARCHITECTURE.md` §6b, `DEPLOYMENT.md` |
 
 ## B. Calculation engine (CALCULATION_ENGINE_SPEC.md §21)
 

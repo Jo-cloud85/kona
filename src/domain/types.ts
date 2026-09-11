@@ -138,6 +138,9 @@ export interface PlannedSession extends SessionInputCore {
   kind: 'planned';
   /** Set when this session belongs to a saved weekly plan. */
   weekly_plan_id?: string;
+  /** The chat message (turn) that created this record. Null for records made
+   *  outside a chat turn. Used to reconcile records when a turn is edited (M23.1). */
+  origin_message_id?: string;
   created_at: string;
 }
 
@@ -150,6 +153,8 @@ export interface ActualSession extends SessionInputCore {
   status: ActualStatus;
   /** Free-text reason for a modified/skipped/stopped_early session. Stored separately. */
   reason?: string;
+  /** The chat message (turn) that created this record — see PlannedSession. */
+  origin_message_id?: string;
   created_at: string;
 }
 
@@ -173,6 +178,8 @@ export interface WeeklyPlan {
   source_text?: string;
   /** ISO dates (YYYY-MM-DD) the user explicitly called rest/off days. */
   rest_days: string[];
+  /** The chat message (turn) that created this plan (M23.1). */
+  origin_message_id?: string;
   created_at: string;
 }
 
@@ -203,6 +210,8 @@ export interface FuelLog {
   user_id: string;
   /** The actual session this intake is associated with, if any. */
   session_id?: string;
+  /** The chat message (turn) that created this record (M23.1). */
+  origin_message_id?: string;
   logged_at: string;
   items: FuelItem[];
 }
@@ -217,6 +226,9 @@ export interface RecoveryLog {
   id: string;
   user_id: string;
   session_id?: string;
+  /** The chat message (turn) that created this record (M23.1). Null for
+   *  end-of-day check-ins, which are not editable chat turns. */
+  origin_message_id?: string;
   logged_at: string;
   /** What the user actually said. The primary record — kept human. */
   free_text: string;
@@ -237,6 +249,8 @@ export interface MemoryCandidate {
   value: string;
   certainty: Certainty;
   source: 'conversation';
+  /** The chat message (turn) that last set this memory (M23.1). */
+  origin_message_id?: string;
   proposed_at: string;
 }
 
@@ -272,6 +286,9 @@ export interface ActivityEvent {
   summary: string;
   /** Optional structured payload for later use (drill-down, XP rules). */
   meta?: Record<string, unknown>;
+  /** The chat message (turn) that produced this event (M23.1). Null for
+   *  check-in events, which are not editable chat turns. */
+  origin_message_id?: string;
 }
 
 export type NewActivityEvent = Omit<ActivityEvent, 'id' | 'at'> & { at?: string };

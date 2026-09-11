@@ -1,5 +1,6 @@
 import 'server-only';
 import type { Profile } from '../src/domain/types';
+import type { EditReconciliation } from '../src/data/index';
 import type { ProfileFormData } from '../src/domain/profile-input';
 import {
   buildCheckinLog,
@@ -51,6 +52,8 @@ export interface SentMessage {
   turn: AgentTurn;
   /** Structured per-session prompts from a weekly-plan / clarify turn, if any. */
   session_prompts: unknown[];
+  /** For an edit: what reconciling the replaced turn(s) removed/repaired (M23.1). */
+  reconciled?: EditReconciliation;
 }
 
 export async function sendMessage(ctx: KonaContext, conversationId: string, message: string): Promise<SentMessage> {
@@ -73,15 +76,24 @@ export async function listMessages(ctx: KonaContext, conversationId: string) {
 }
 
 /**
- * Edit-and-regenerate: drop `messageId` and everything after it in the
- * conversation, then re-run the turn with `newText`.
+ * Edit-and-regenerate (M23.1). In order:
+ *  1. find the ids of the edited message + everything after it,
+ *  2. reconcile the structured records those turns created — delete the
+ *     sessions / fuel / recovery / weekly plans / memories / activity events
+ *     stamped with those message ids, and null any dangling foreign key on a
+ *     surviving record (a later record is kept, only its link to a now-gone
+ *     record is cut),
+ *  3. delete the messages,
+ *  4. re-run the turn with `newText`; the regenerated turn's records get the
+ *     NEW message id as their origin.
  *
- * KNOWN LIMITATION (documented, not solved in M23): structured records (saved
- * sessions, fuel logs, memories, activity events) created by the removed turn(s)
- * are NOT rolled back — only the transcript and Kona's replies are corrected.
- * With persistence this means an edited-away session stays on record. The clean
- * fix is to tag each structured write with the message id that produced it and
- * cascade on edit; that is deferred. See ARCHITECTURE.md §6b.
+ * DELIBERATE LIMITATIONS (documented — ARCHITECTURE.md §6b):
+ *  - A memory the edited turn *updated* (rather than first created) reverts to
+ *    unset, not to its earlier value — there is no memory revision history.
+ *  - Profile facts set via chat (body weight, bottle, goal) are one row per
+ *    user with no per-fact provenance, so they are not reverted by an edit.
+ *  - A plan *field update* (`update_planned_sessions`) is not reverted; only
+ *    records the turn *created* are.
  */
 export async function editMessage(
   ctx: KonaContext,
@@ -89,8 +101,11 @@ export async function editMessage(
   messageId: string,
   newText: string,
 ): Promise<SentMessage> {
+  const removedIds = await ctx.repo.listMessageIdsFrom(ctx.userId, conversationId, messageId);
+  const reconciled = await ctx.repo.deleteRecordsForMessages(ctx.userId, removedIds);
   await ctx.repo.deleteMessagesFrom(ctx.userId, conversationId, messageId);
-  return sendMessage(ctx, conversationId, newText);
+  const sent = await sendMessage(ctx, conversationId, newText);
+  return { ...sent, reconciled };
 }
 
 export async function listConversations(ctx: KonaContext) {

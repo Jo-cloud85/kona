@@ -9,7 +9,12 @@ import { runTool, TOOL_SCHEMAS } from './tools';
 /** Record activity events for a completed turn — action events + any insight
  *  that just crossed its evidence threshold. Best-effort; never throws.
  *  Pass toolResults `[]` to only run the insight-detection pass (e.g. a check-in). */
-export async function recordTurnActivity(repo: Repository, userId: string, toolResults: ToolResult[]): Promise<void> {
+export async function recordTurnActivity(
+  repo: Repository,
+  userId: string,
+  toolResults: ToolResult[],
+  originMessageId?: string,
+): Promise<void> {
   try {
     const [actualSessions, recoveryLogs, fuelLogs, memories, priorEvents] = await Promise.all([
       repo.listActualSessions(userId),
@@ -40,6 +45,7 @@ export async function recordTurnActivity(repo: Repository, userId: string, toolR
       insightsAfter,
       adviceProducedThisTurn,
       alreadyAdaptedFrom,
+      originMessageId,
     });
     for (const e of events) await repo.appendActivityEvent(e);
   } catch {
@@ -156,7 +162,11 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
   for (const call of interpretation.tool_calls) {
     const args = resolveArgs(call.args, memo);
     executed.push({ tool: call.tool, args });
-    const result = await runTool(call.tool, args, { repo, userId: input.userId });
+    const result = await runTool(call.tool, args, {
+      repo,
+      userId: input.userId,
+      originMessageId: userMessage.id,
+    });
     results.push(result);
     if (result.ok && result.data && typeof result.data === 'object') {
       const id = (result.data as { id?: string }).id;
@@ -188,7 +198,7 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
     content: reply,
   });
 
-  await recordTurnActivity(repo, input.userId, results);
+  await recordTurnActivity(repo, input.userId, results, userMessage.id);
 
   return {
     reply,

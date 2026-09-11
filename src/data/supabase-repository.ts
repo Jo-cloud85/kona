@@ -16,6 +16,7 @@ import type {
   WeeklyPlan,
 } from '../domain/types';
 import type {
+  EditReconciliation,
   NewActualSession,
   NewFuelLog,
   NewPlannedSession,
@@ -79,6 +80,7 @@ function rowToPlanned(r: Row): PlannedSession {
     user_id: r.user_id as string,
     kind: 'planned' as const,
     weekly_plan_id: (r.weekly_plan_id as string | null) ?? undefined,
+    origin_message_id: (r.origin_message_id as string | null) ?? undefined,
     sport: r.sport as Sport,
     start_at: r.start_at as string,
     time_of_day: r.time_of_day as PlannedSession['time_of_day'],
@@ -113,6 +115,7 @@ function rowToWeeklyPlan(r: Row): WeeklyPlan {
     week_start: r.week_start as string,
     source_text: (r.source_text as string | null) ?? undefined,
     rest_days: (r.rest_days as string[] | null) ?? [],
+    origin_message_id: (r.origin_message_id as string | null) ?? undefined,
     created_at: iso(r.created_at),
   }) as WeeklyPlan;
 }
@@ -122,6 +125,7 @@ function rowToFuelLog(r: Row): FuelLog {
     id: r.id as string,
     user_id: r.user_id as string,
     session_id: (r.session_id as string | null) ?? undefined,
+    origin_message_id: (r.origin_message_id as string | null) ?? undefined,
     logged_at: iso(r.logged_at),
     items: (r.items as FuelLog['items']) ?? [],
   }) as FuelLog;
@@ -132,6 +136,7 @@ function rowToRecoveryLog(r: Row): RecoveryLog {
     id: r.id as string,
     user_id: r.user_id as string,
     session_id: (r.session_id as string | null) ?? undefined,
+    origin_message_id: (r.origin_message_id as string | null) ?? undefined,
     logged_at: iso(r.logged_at),
     free_text: (r.free_text as string | null) ?? '',
     overall_severity: (r.overall_severity as RecoveryLog['overall_severity']) ?? undefined,
@@ -160,6 +165,7 @@ function rowToMemory(r: Row): PersistedMemory {
     certainty: r.certainty as PersistedMemory['certainty'],
     source: r.source as PersistedMemory['source'],
     status: 'active',
+    origin_message_id: (r.origin_message_id as string | null) ?? undefined,
     proposed_at: iso(r.proposed_at),
     persisted_at: iso(r.persisted_at),
   };
@@ -173,6 +179,7 @@ function rowToActivityEvent(r: Row): ActivityEvent {
     at: iso(r.at),
     summary: r.summary as string,
     meta: (r.meta as Record<string, unknown> | null) ?? undefined,
+    origin_message_id: (r.origin_message_id as string | null) ?? undefined,
   }) as ActivityEvent;
 }
 
@@ -229,6 +236,7 @@ export class SupabaseRepository implements Repository {
       ...sessionCoreToRow(input),
       user_id: input.user_id,
       weekly_plan_id: input.weekly_plan_id ?? null,
+      origin_message_id: input.origin_message_id ?? null,
       created_at: new Date().toISOString(),
     };
     const { data, error } = await this.sb.from('planned_sessions').insert(row).select().single();
@@ -284,6 +292,7 @@ export class SupabaseRepository implements Repository {
       week_start: input.week_start,
       source_text: input.source_text ?? null,
       rest_days: input.rest_days ?? [],
+      origin_message_id: input.origin_message_id ?? null,
       created_at: new Date().toISOString(),
     };
     const { data, error } = await this.sb.from('weekly_plans').insert(row).select().single();
@@ -346,6 +355,7 @@ export class SupabaseRepository implements Repository {
       planned_session_id: input.planned_session_id ?? null,
       status: input.status,
       reason: input.reason ?? null,
+      origin_message_id: input.origin_message_id ?? null,
       created_at: new Date().toISOString(),
     };
     const { data, error } = await this.sb.from('sessions').insert(row).select().single();
@@ -375,6 +385,7 @@ export class SupabaseRepository implements Repository {
       user_id: input.user_id,
       session_id: input.session_id ?? null,
       items: input.items ?? [],
+      origin_message_id: input.origin_message_id ?? null,
       logged_at: new Date().toISOString(),
     };
     const { data, error } = await this.sb.from('fuel_logs').insert(row).select().single();
@@ -399,6 +410,7 @@ export class SupabaseRepository implements Repository {
       overall_severity: input.overall_severity ?? null,
       reported_symptoms: input.reported_symptoms ?? null,
       sleep_quality: input.sleep_quality ?? null,
+      origin_message_id: input.origin_message_id ?? null,
       logged_at: new Date().toISOString(),
     };
     const { data, error } = await this.sb.from('recovery_logs').insert(row).select().single();
@@ -441,7 +453,7 @@ export class SupabaseRepository implements Repository {
     return (data as Row[]).map(rowToMessage);
   }
 
-  async deleteMessagesFrom(userId: string, conversationId: string, messageId: string): Promise<number> {
+  async listMessageIdsFrom(userId: string, conversationId: string, messageId: string): Promise<string[]> {
     const target = await this.sb
       .from('messages')
       .select('created_at')
@@ -449,16 +461,123 @@ export class SupabaseRepository implements Repository {
       .eq('conversation_id', conversationId)
       .eq('id', messageId)
       .maybeSingle();
-    if (target.error) fail('deleteMessagesFrom(find)', target.error);
-    if (!target.data) return 0;
+    if (target.error) fail('listMessageIdsFrom(find)', target.error);
+    if (!target.data) return [];
+    const { data, error } = await this.sb
+      .from('messages')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('conversation_id', conversationId)
+      .gte('created_at', target.data.created_at as string)
+      .order('created_at', { ascending: true });
+    if (error) fail('listMessageIdsFrom(list)', error);
+    return (data as Row[]).map((r) => r.id as string);
+  }
+
+  async deleteMessagesFrom(userId: string, conversationId: string, messageId: string): Promise<number> {
+    const ids = await this.listMessageIdsFrom(userId, conversationId, messageId);
+    if (ids.length === 0) return 0;
     const { data, error } = await this.sb
       .from('messages')
       .delete()
       .eq('user_id', userId)
-      .eq('conversation_id', conversationId)
-      .gte('created_at', target.data.created_at as string)
+      .in('id', ids)
       .select('id');
     if (error) fail('deleteMessagesFrom(delete)', error);
+    return (data as Row[]).length;
+  }
+
+  async deleteRecordsForMessages(userId: string, messageIds: string[]): Promise<EditReconciliation> {
+    const out: EditReconciliation = {
+      planned_sessions: 0,
+      sessions: 0,
+      weekly_plans: 0,
+      fuel_logs: 0,
+      recovery_logs: 0,
+      memories: 0,
+      activity_events: 0,
+      nulled_links: 0,
+    };
+    if (messageIds.length === 0) return out;
+
+    // Which sessions / weekly plans are going — remember ids to repair links.
+    const [plannedGone, actualGone, weeksGone] = await Promise.all([
+      this.idsWithOrigin('planned_sessions', userId, messageIds),
+      this.idsWithOrigin('sessions', userId, messageIds),
+      this.idsWithOrigin('weekly_plans', userId, messageIds),
+    ]);
+
+    // A weekly plan removed here takes its own planned sessions with it. They
+    // normally share the origin already; this also covers any that don't.
+    let childPlanned: string[] = [];
+    if (weeksGone.length) {
+      const { data, error } = await this.sb
+        .from('planned_sessions')
+        .select('id')
+        .eq('user_id', userId)
+        .in('weekly_plan_id', weeksGone);
+      if (error) fail('deleteRecordsForMessages(weekly children)', error);
+      childPlanned = (data as Row[]).map((r) => r.id as string);
+    }
+    const plannedToDelete = [...new Set([...plannedGone, ...childPlanned])];
+
+    // 1. Delete records.
+    out.planned_sessions = plannedToDelete.length
+      ? await this.deleteByIds('planned_sessions', userId, plannedToDelete)
+      : 0;
+    out.sessions = actualGone.length ? await this.deleteByIds('sessions', userId, actualGone) : 0;
+    out.weekly_plans = weeksGone.length ? await this.deleteByIds('weekly_plans', userId, weeksGone) : 0;
+    out.fuel_logs = await this.deleteByOrigin('fuel_logs', userId, messageIds);
+    out.recovery_logs = await this.deleteByOrigin('recovery_logs', userId, messageIds);
+    out.memories = await this.deleteByOrigin('personal_memories', userId, messageIds);
+    out.activity_events = await this.deleteByOrigin('activity_events', userId, messageIds);
+
+    // 2. Repair dangling links on SURVIVING rows.
+    const plannedSet = new Set(plannedToDelete);
+    const actualSet = new Set(actualGone);
+    out.nulled_links += await this.nullDangling('sessions', 'planned_session_id', userId, [...plannedSet]);
+    out.nulled_links += await this.nullDangling('fuel_logs', 'session_id', userId, [...actualSet]);
+    out.nulled_links += await this.nullDangling('recovery_logs', 'session_id', userId, [...actualSet]);
+
+    return out;
+  }
+
+  private async idsWithOrigin(table: string, userId: string, messageIds: string[]): Promise<string[]> {
+    const { data, error } = await this.sb
+      .from(table)
+      .select('id')
+      .eq('user_id', userId)
+      .in('origin_message_id', messageIds);
+    if (error) fail(`deleteRecordsForMessages(scan ${table})`, error);
+    return (data as Row[]).map((r) => r.id as string);
+  }
+
+  private async deleteByIds(table: string, userId: string, ids: string[]): Promise<number> {
+    const { data, error } = await this.sb.from(table).delete().eq('user_id', userId).in('id', ids).select('id');
+    if (error) fail(`deleteRecordsForMessages(delete ${table})`, error);
+    return (data as Row[]).length;
+  }
+
+  private async deleteByOrigin(table: string, userId: string, messageIds: string[]): Promise<number> {
+    const { data, error } = await this.sb
+      .from(table)
+      .delete()
+      .eq('user_id', userId)
+      .in('origin_message_id', messageIds)
+      .select('id');
+    if (error) fail(`deleteRecordsForMessages(delete ${table})`, error);
+    return (data as Row[]).length;
+  }
+
+  private async nullDangling(table: string, column: string, userId: string, deletedIds: string[]): Promise<number> {
+    if (deletedIds.length === 0) return 0;
+    const { data, error } = await this.sb
+      .from(table)
+      .update({ [column]: null })
+      .eq('user_id', userId)
+      .in(column, deletedIds)
+      .select('id');
+    if (error) fail(`deleteRecordsForMessages(null ${table}.${column})`, error);
     return (data as Row[]).length;
   }
 
@@ -485,6 +604,7 @@ export class SupabaseRepository implements Repository {
       type: input.type,
       summary: input.summary,
       meta: input.meta ?? null,
+      origin_message_id: input.origin_message_id ?? null,
       at: input.at ?? new Date().toISOString(),
     };
     const { data, error } = await this.sb.from('activity_events').insert(row).select().single();
@@ -510,6 +630,7 @@ export class SupabaseRepository implements Repository {
       certainty: candidate.certainty,
       source: candidate.source,
       status: 'active',
+      origin_message_id: candidate.origin_message_id ?? null,
       proposed_at: candidate.proposed_at ?? now,
       persisted_at: now,
     };

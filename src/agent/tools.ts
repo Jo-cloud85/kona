@@ -81,6 +81,9 @@ function computeNeedsDetail(opts: {
 export interface ToolContext {
   repo: Repository;
   userId: string;
+  /** The chat message (turn) these tool calls belong to. Stamped onto every
+   *  structured record they create so an edited turn can be reconciled (M23.1). */
+  originMessageId?: string;
 }
 
 export interface ToolDefinition {
@@ -173,6 +176,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         intensity: intensity(args, 'intensity') ?? 'easy',
         environment: (args.environment as CalculateInput['session']['environment']) ?? undefined,
         notes: str(args, 'notes', false),
+        origin_message_id: ctx.originMessageId,
       });
     },
   },
@@ -214,6 +218,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         week_start: weekStart,
         source_text: str(args, 'source_text', false),
         rest_days: restDays,
+        origin_message_id: ctx.originMessageId,
       });
 
       const analysisSessions: WeekSessionInput[] = [];
@@ -254,6 +259,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
               weekly_plan_id: weeklyPlan.id,
               is_long: isLong || undefined,
               needs_detail: needs_detail.length ? needs_detail : undefined,
+              origin_message_id: ctx.originMessageId,
             }),
           );
           analysisSessions.push({
@@ -426,6 +432,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         planned_session_id: plannedId,
         status,
         reason: str(args, 'reason', false),
+        origin_message_id: ctx.originMessageId,
       });
     },
   },
@@ -518,6 +525,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         user_id: ctx.userId,
         session_id: str(args, 'session_id', false),
         items,
+        origin_message_id: ctx.originMessageId,
       });
     },
   },
@@ -528,6 +536,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
       return ctx.repo.saveRecoveryLog({
         user_id: ctx.userId,
         session_id: str(args, 'session_id', false),
+        origin_message_id: ctx.originMessageId,
         free_text: str(args, 'free_text')!,
         overall_severity: str(args, 'overall_severity', false) as
           | 'none'
@@ -562,6 +571,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         value: str(args, 'value')!,
         certainty: (str(args, 'certainty', false) as 'user_reported' | 'known') ?? 'user_reported',
         source: 'conversation',
+        origin_message_id: ctx.originMessageId,
         proposed_at: new Date().toISOString(),
       });
     },

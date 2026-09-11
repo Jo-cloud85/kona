@@ -3,10 +3,44 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M23 + M15.1 done.** → **STOP for the founder product review.**
+**M14.1–M23.1 + M15.1 done.** → **STOP for the founder product review** (before alpha).
 Founder direction: no visual redesign, don't fabricate insights, stop for a
 product review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
+
+### M23.1 — turn attribution + edit reconciliation ✅
+_Close the M23 §6b gap before alpha: structured records created by a chat turn
+are attributable to that turn and reconciled when the turn is edited/regenerated;
+earlier turns' records are preserved. No UI, no new features._
+- **`origin_message_id`** on `planned_sessions` / `sessions` / `weekly_plans` /
+  `fuel_logs` / `recovery_logs` / `personal_memories` / `activity_events` (domain
+  types + `New*` inputs + both repos + migration `0002_origin_message_id.sql`,
+  FK `ON DELETE CASCADE`). The orchestrator passes the turn's **user message id**
+  into the tool context; each writing tool stamps it; `deriveTurnEvents` stamps
+  the activity events. Records made outside a chat turn (check-ins) → null origin.
+- **`Repository`** gains `listMessageIdsFrom(userId, conv, messageId)` and
+  `deleteRecordsForMessages(userId, messageIds) → EditReconciliation` (counts +
+  `nulled_links`). Implemented for in-memory and Supabase.
+- **`editMessage`** now: list removed message ids → `deleteRecordsForMessages`
+  (delete by origin; a deleted weekly plan takes its planned sessions; null any
+  dangling FK on a *surviving* row) → delete messages → regenerate (new records
+  get the new origin). Result surfaced as `reconciled` on the chat API response
+  (metadata, no UI).
+- **Deliberate limitations** (documented, fine for alpha — `ARCHITECTURE.md` §6b):
+  a memory *updated* by the edited turn reverts to unset (no revision history);
+  chat-set profile facts are one row per user with no per-fact provenance so are
+  not reverted; `update_planned_sessions` field changes are not reverted; the
+  transcript is linear so "preserve a later dependent record" only fires as the
+  FK-null safety net.
+- **Tests**: +`tests/agent/edit-reconcile.test.ts` (attribution, cascade of the
+  edited turn, earlier turns preserved, memory delete+recreate, idempotent),
+  +5 contract cases (`repository-contract.ts`: round-trip, `listMessageIdsFrom`
+  scoping, delete-by-origin + null-dangling, weekly-plan child cascade, never
+  touches another user), +2 activity, +edit-message assertions, +1 live-Supabase
+  case (env-gated). **196 tests: 192 pass, 4 skipped (live);** `tsc` / `eslint`
+  / `next build` clean. Verified in dev-fallback: editing a plan turn returned
+  `reconciled: { planned_sessions: 1, fuel_logs: 1, activity_events: 3 }`, the
+  timeline cleared, and the regenerated turn's plan carried the new origin.
 
 ### M23 — production persistence + real user identity ✅
 _Make "Kona remembers me" real: Supabase Postgres + magic-link auth + per-user
@@ -44,10 +78,11 @@ RLS, behind the existing repository boundary. No visual redesign._
   `tsc` / `eslint` / `next build` clean. Verified locally in dev-fallback: the
   full journey (onboard → chat turn → profile fact saved → messages persisted &
   scoped → conversation summary) works end to end.
-- **Not solved (documented)**: editing a chat turn does not roll back structured
-  records it created — `ARCHITECTURE.md` §6b, `DEPLOYMENT.md`.
-- **Founder step to go live**: create a Supabase project, run `0001_init.sql`,
-  set `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` (+ deploy env). Full journey on a
+- **Edit-turn rollback**: closed by **M23.1** (below) — structured records are
+  now attributed to their turn and reconciled on edit.
+- **Founder step to go live**: create a Supabase project, run `0001_init.sql`
+  then `0002_origin_message_id.sql`, set `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY`
+  (+ deploy env). Full journey on a
   real project is the founder-review verification.
 
 ### M22 — Product Truth Audit ✅
@@ -343,8 +378,10 @@ integrations are out of this cycle. **Stop for a product review after M21.**
 - **M20** ✅ Goal context surfaces naturally — a slim "N weeks to your <goal>" line on Home; `goalContext()` computes weeks/days-until from a parsed or stated `event_date`; the chat model gets `weeks_until` and a nudge to weave timing in without acting like a periodised plan; `save_profile_fact` can set/update the goal + date from chat.
 - **M21** ✅ Stop prompting for every session up front — the engine flags only the next 1–2 key sessions `in_focus` (key days first, then soonest), the composer + real model chase just those and say the rest can wait, and the chat opener leads with the nearest notable upcoming session instead of a generic greeting.
 - **M22** ✅ Product Truth Audit — `Insight.basis` (reported / repeated / outcome / adaptation); frequency no longer implies effectiveness (`workingSetup` removed → `sportReads`: frequency fact, then one honest outcome read — working / condition-dependent / repeated-trouble / mixed-inconclusive); `unprovenSetup` for a single data point; `recommendation_adapted` fires only once a *later* turn's advice actually used an earlier recommendation. No UI change, no persistence.
+- **M23** ✅ Production persistence + real user identity — Supabase Postgres behind the unchanged `Repository` interface (`SupabaseRepository` alongside `InMemoryRepository`), RLS isolating every user's rows, Supabase magic-link auth (`middleware.ts`, `/login`, `/auth/callback`, sign-out), `lib/server-context.ts` resolving `{repo, userId, llm}` per request instead of a module-level demo user. No Supabase env → dev-only in-memory single-user fallback, refused in production. No visual redesign.
+- **M23.1** ✅ Turn attribution + edit reconciliation — every structured record a chat turn creates carries `origin_message_id`; editing a turn now reconciles (deletes) the records it made and nulls dangling links on records that survive, instead of silently leaving orphaned data. Documented, acceptable-for-alpha limitations for memory updates / profile facts / plan field-edits (§6b). No UI, no new features.
 
-**→ M14.1–M22 complete. STOP HERE for the founder product review before starting anything new (persistence included).**
+**→ M14.1–M23.1 complete. STOP HERE for the founder product review before starting anything new.**
 
 ## Completed work
 
@@ -360,10 +397,11 @@ _User ask: fix a mis-typed message and have Kona re-answer._
   on hover). Editing swaps the bubble for a textarea + "Save & resend"; on save
   the transcript is truncated at that message and the turn re-runs — the edited
   message and a fresh reply replace everything below.
-- **Known limitation** (documented, not fixed): structured records a replaced
-  turn created (a saved `PlannedSession`, a memory) are **not** rolled back —
-  the transcript and replies are corrected, the side effects are not. Fine for
-  the in-memory iteration phase; a turn-scoped rollback is a later item.
+- **Known limitation** (documented, not fixed at the time): structured records a
+  replaced turn created (a saved `PlannedSession`, a memory) are **not** rolled
+  back — the transcript and replies are corrected, the side effects are not.
+  Fine for the in-memory iteration phase. **Closed in M23.1** (turn attribution
+  + reconciliation on edit).
 - Tests: +3 (`deleteMessagesFrom` scoping; turn returns message ids; truncate +
   re-run replaces the transcript). 117 total; `tsc`, `eslint`, `next build`
   clean. Verified in the browser against the live model.
@@ -648,29 +686,36 @@ _Prompted by user feedback: Kona was silently defaulting unstated intensity to "
 - `npm audit`: 3 moderate + 1 high + 1 critical, **all** in the dev-only
   `vitest`/`vite`/`esbuild` toolchain (not Supabase, not shipped). Fix is a
   breaking `vitest` major bump — deferred.
-- **M23 — editing a chat turn** does not roll back structured records it created
-  (`ARCHITECTURE.md` §6b). Needs a `message_id`/`turn_id` stamp on every mutable
-  table + cascade. Deferred with a documented design.
+- **M23.1 residual limitations** (documented, acceptable for alpha —
+  `ARCHITECTURE.md` §6b): a memory *updated* (not first created) by an edited
+  turn reverts to unset, not its earlier value (no revision history); chat-set
+  profile facts (weight, bottle, goal) are one row per user with no per-fact
+  provenance, so an edit doesn't revert them; `update_planned_sessions` field
+  changes aren't reverted; the linear transcript model means "preserve a later
+  dependent record" only ever exercises as the FK-null safety net, never a real
+  branch.
 - **M23 — live Supabase verification** (real account, come back tomorrow) needs a
   Supabase project; done as the founder-review step per `DEPLOYMENT.md`. Local
   verification covered the dev-fallback journey + mocked auth + the
   env-guarded live suite.
 
 ## Next recommended task
-**Hold.** M14.1–M23 are done. Per the founder's instruction, **stop for review**
-after M23 — do not start another milestone.
+**Hold.** M14.1–M23.1 are done. Per the founder's instruction, **stop for
+review** — do not start another milestone.
 
 To bring persistence live (founder step): create a Supabase project, run
-`supabase/migrations/0001_init.sql`, set `NEXT_PUBLIC_SUPABASE_URL` /
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` locally and in the deploy env, then walk the
-journey in `DEPLOYMENT.md` (sign up → onboard → plan → chat → log → close →
-return → still remembered; second account sees nothing of the first).
+`supabase/migrations/0001_init.sql` then `0002_origin_message_id.sql`, set
+`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` locally and in the
+deploy env, then walk the journey in `DEPLOYMENT.md` (sign up → onboard → plan →
+chat → log → close → return → still remembered; second account sees nothing of
+the first).
 
-Candidates to raise at the review (not started): edit-turn structured-record
-rollback (design in §6b); "Week X of Y" once a periodised-block model exists; the
-chat *proactively* posting into an existing thread; polish pass (transitions,
-type hierarchy, Kona personality) that the founder explicitly deferred;
-`vitest` major bump to clear the dev-toolchain audit findings.
+Candidates to raise at the review (not started): "Week X of Y" once a
+periodised-block model exists; the chat *proactively* posting into an existing
+thread; polish pass (transitions, type hierarchy, Kona personality) that the
+founder explicitly deferred; `vitest` major bump to clear the dev-toolchain
+audit findings; memory revision history if the M23.1 "reverts to unset" limit
+turns out to matter in practice.
 
 M21 follow-ups worth a mention: the real model's prose can name a third key
 session the button prompts don't (`FOCUS_PROMPT_LIMIT` = 2) — harmless but worth
