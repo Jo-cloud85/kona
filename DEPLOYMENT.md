@@ -5,6 +5,16 @@ sessions, fuel, recovery, memories, activity events, conversations — in Supaba
 Postgres, isolated per user by Row Level Security, behind Supabase magic-link
 auth.
 
+**Live (2026-09-12):** deployed via `vercel link` + `vercel deploy --prod`,
+project `jo-youngs-projects/kona`, auto-connected to the `Jo-cloud85/kona`
+GitHub repo (pushes to `main` now auto-deploy to production; PR branches get
+preview deploys). Production URL: `https://kona-livid.vercel.app`. Env vars
+(`ANTHROPIC_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`KONA_LLM_MODEL`) are set in Vercel for both Production and Preview, copied from
+`.env.local`. **Outstanding:** the Supabase Auth redirect URL still needs to be
+added by hand (see step 5 under "Deploy (Vercel)" below) — the CLI can't do
+that part.
+
 ## Environments
 
 | Env | Persistence | Auth | Notes |
