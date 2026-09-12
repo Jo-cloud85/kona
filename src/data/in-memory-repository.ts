@@ -79,7 +79,7 @@ export class InMemoryRepository implements Repository {
     patch: Partial<
       Pick<
         PlannedSession,
-        'intensity' | 'duration_minutes' | 'distance_km' | 'is_long' | 'needs_detail' | 'notes' | 'time_of_day' | 'start_at'
+        'intensity' | 'duration_minutes' | 'distance_km' | 'distance_label' | 'is_long' | 'needs_detail' | 'notes' | 'time_of_day' | 'start_at'
       >
     >,
   ): Promise<PlannedSession | undefined> {

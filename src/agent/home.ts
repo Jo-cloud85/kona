@@ -153,6 +153,7 @@ export function titleFor(s: PlannedSession): string {
   const when = s.time_of_day ? `${s.time_of_day} ` : '';
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   if (s.is_long) return cap(`long ${when}${label}`);
+  if (s.distance_label) return `${s.distance_label} ${when}${label}`;
   if (s.distance_km) return `${s.distance_km} km ${when}${label}`;
   return cap(`${when}${label}`);
 }
@@ -163,6 +164,7 @@ export function durationLabel(s: PlannedSession): string {
       ? `${(s.duration_minutes / 60).toFixed(1).replace(/\.0$/, '')} hr`
       : `${s.duration_minutes} min`;
   }
+  if (s.distance_label) return s.distance_label;
   if (s.distance_km && s.distance_km > 0) return `${s.distance_km} km`;
   return 'length not set';
 }

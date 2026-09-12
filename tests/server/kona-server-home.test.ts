@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryRepository } from '../../src/data/index';
-import { DeterministicLlmClient } from '../../src/agent/index';
+import { DeterministicLlmClient, runTool } from '../../src/agent/index';
 import { getHome, getWeek, getStarter } from '../../lib/kona-server';
 import type { KonaContext } from '../../lib/server-context';
 
@@ -82,5 +82,24 @@ describe('standalone planned sessions (no weekly_plan_id) reach Home/Week/starte
     });
 
     await expect(getStarter(ctx)).resolves.not.toBeNull();
+  });
+});
+
+describe('a stated distance range reaches Home verbatim (save_planned_session tool call)', () => {
+  it('does not collapse "13-14km" into a fabricated-looking 13.5', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+    const start_at = isoTomorrow();
+
+    const result = await runTool(
+      'save_planned_session',
+      { sport: 'running', start_at, distance_km: 13.5, distance_label: '13-14km', intensity: 'easy' },
+      { repo, userId: USER_ID },
+    );
+    expect(result.ok).toBe(true);
+
+    const home = await getHome(ctx, start_at.slice(0, 10));
+    expect(home!.briefing.your_day.headline).toContain('13-14km');
+    expect(home!.briefing.your_day.headline).not.toContain('13.5');
   });
 });

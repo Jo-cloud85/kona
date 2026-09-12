@@ -90,6 +90,25 @@ describe('buildHome', () => {
     expect(yd.needs).toEqual([]);
   });
 
+  it('YOUR DAY: a stated distance range shows verbatim, not a fabricated midpoint number', () => {
+    const h = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [
+        session({
+          start_at: '2026-09-09T18:00:00',
+          distance_km: 13.5,
+          distance_label: '13-14km',
+          time_of_day: 'evening',
+        }),
+      ],
+      now: NOW,
+    });
+    expect(h.briefing.your_day.headline).toContain('13-14km');
+    expect(h.briefing.your_day.headline).not.toContain('13.5');
+    expect(h.selected.sessions[0]!.duration_label).toBe('13-14km');
+  });
+
   it('YOUR DAY: a long session shows the during-session references + post protein', () => {
     const h = buildHome({
       profile,

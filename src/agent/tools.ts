@@ -172,6 +172,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         start_at,
         time_of_day,
         distance_km: num(args, 'distance_km'),
+        distance_label: str(args, 'distance_label', false),
         duration_minutes: num(args, 'duration_minutes'),
         intensity: intensity(args, 'intensity') ?? 'easy',
         environment: (args.environment as CalculateInput['session']['environment']) ?? undefined,
@@ -235,6 +236,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
             ? `${day.date}T${TIME_OF_DAY_HHMM[time_of_day]}:00`
             : `${day.date}T${SEQUENCE_TIMES[Math.min(i, SEQUENCE_TIMES.length - 1)]}:00`;
           const distance_km = num(s, 'distance_km');
+          const distance_label = str(s, 'distance_label', false);
           const duration_minutes = num(s, 'duration_minutes');
           const isLong = s.is_long === true;
           const needs_detail = computeNeedsDetail({
@@ -252,6 +254,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
               start_at,
               time_of_day,
               distance_km,
+              distance_label,
               duration_minutes,
               intensity: intensity_,
               session_group_id: groupId,
@@ -343,11 +346,13 @@ export const TOOLS: Record<string, ToolDefinition> = {
       const newIntensity = intensity(args, 'intensity');
       const newDuration = num(args, 'duration_minutes');
       const newDistance = num(args, 'distance_km');
+      const newDistanceLabel = str(args, 'distance_label', false);
       const newTime = timeOfDay(args, 'time_of_day');
       if (
         newIntensity === undefined &&
         newDuration === undefined &&
         newDistance === undefined &&
+        newDistanceLabel === undefined &&
         newTime === undefined
       ) {
         throw new ToolError('update_planned_sessions needs an intensity, duration_minutes, distance_km, or time_of_day');
@@ -356,7 +361,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
       const applied_fields: ('intensity' | 'duration_minutes' | 'distance_km' | 'time_of_day')[] = [];
       if (newIntensity !== undefined) applied_fields.push('intensity');
       if (newDuration !== undefined) applied_fields.push('duration_minutes');
-      if (newDistance !== undefined) applied_fields.push('distance_km');
+      if (newDistance !== undefined || newDistanceLabel !== undefined) applied_fields.push('distance_km');
       if (newTime !== undefined) applied_fields.push('time_of_day');
 
       const updated = [];
@@ -373,6 +378,10 @@ export const TOOLS: Record<string, ToolDefinition> = {
         }
         if (newDistance !== undefined) {
           patch.distance_km = newDistance;
+          remaining.delete('duration_or_distance');
+        }
+        if (newDistanceLabel !== undefined) {
+          patch.distance_label = newDistanceLabel;
           remaining.delete('duration_or_distance');
         }
         if (newTime !== undefined) {
@@ -639,7 +648,14 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
         enum: TIME_OF_DAY_ENUM,
         description: 'morning / afternoon / evening. Derived from start_at if omitted.',
       },
-      distance_km: { type: 'number' },
+      distance_km: {
+        type: 'number',
+        description: 'A single distance in km. If the athlete gave a range (e.g. "13-14km"), use the midpoint here and put their exact words in distance_label.',
+      },
+      distance_label: {
+        type: 'string',
+        description: 'Only when distance_km alone would misrepresent what they said (a range like "13-14 km", "~10k"). Their own words, shown instead of the number.',
+      },
       duration_minutes: { type: 'number' },
       intensity: { type: 'string', enum: INTENSITY_ENUM },
       notes: { type: 'string' },
@@ -667,7 +683,14 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
                 type: 'object',
                 properties: {
                   sport: { type: 'string', enum: SPORT_ENUM },
-                  distance_km: { type: 'number' },
+                  distance_km: {
+                    type: 'number',
+                    description: 'A single distance in km. If the athlete gave a range (e.g. "13-14km"), use the midpoint here and put their exact words in distance_label.',
+                  },
+                  distance_label: {
+                    type: 'string',
+                    description: 'Only when distance_km alone would misrepresent what they said (a range like "13-14 km", "~10k"). Their own words, shown instead of the number.',
+                  },
                   duration_minutes: { type: 'number' },
                   intensity: { type: 'string', enum: INTENSITY_ENUM },
                   time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening.' },
@@ -700,7 +723,14 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       sport: { type: 'string', enum: SPORT_ENUM, description: 'Narrows to sessions of this sport.' },
       intensity: { type: 'string', enum: INTENSITY_ENUM },
       duration_minutes: { type: 'number' },
-      distance_km: { type: 'number' },
+      distance_km: {
+        type: 'number',
+        description: 'A single distance in km. If the athlete gave a range (e.g. "13-14km"), use the midpoint here and put their exact words in distance_label.',
+      },
+      distance_label: {
+        type: 'string',
+        description: 'Only when distance_km alone would misrepresent what they said (a range like "13-14 km", "~10k"). Their own words, shown instead of the number.',
+      },
       time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening.' },
     },
     required: [],

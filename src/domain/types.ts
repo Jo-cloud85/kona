@@ -118,6 +118,11 @@ export interface SessionInputCore {
   time_of_day?: TimeOfDay;
   duration_minutes?: number;
   distance_km?: number;
+  /** The athlete's own words for distance, when it wasn't a single clean
+   *  number — e.g. "13-14 km". Shown instead of distance_km on Home/Week when
+   *  present; distance_km (a defensible single value, e.g. the midpoint)
+   *  still drives the actual fueling math. */
+  distance_label?: string;
   intensity: Intensity;
   pre_fed_state?: PreFedState;
   environment?: Environment;

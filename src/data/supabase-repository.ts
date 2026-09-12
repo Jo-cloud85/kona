@@ -63,6 +63,7 @@ function sessionCoreToRow(c: SessionInputCore): Row {
     time_of_day: c.time_of_day ?? null,
     duration_minutes: c.duration_minutes ?? null,
     distance_km: c.distance_km ?? null,
+    distance_label: c.distance_label ?? null,
     intensity: c.intensity,
     pre_fed_state: c.pre_fed_state ?? null,
     environment: c.environment ?? null,
@@ -86,6 +87,7 @@ function rowToPlanned(r: Row): PlannedSession {
     time_of_day: r.time_of_day as PlannedSession['time_of_day'],
     duration_minutes: (r.duration_minutes as number | null) ?? undefined,
     distance_km: (r.distance_km as number | null) ?? undefined,
+    distance_label: (r.distance_label as string | null) ?? undefined,
     intensity: r.intensity as PlannedSession['intensity'],
     pre_fed_state: (r.pre_fed_state as PlannedSession['pre_fed_state']) ?? undefined,
     environment: (r.environment as PlannedSession['environment']) ?? undefined,
@@ -255,7 +257,7 @@ export class SupabaseRepository implements Repository {
     patch: Partial<
       Pick<
         PlannedSession,
-        'intensity' | 'duration_minutes' | 'distance_km' | 'is_long' | 'needs_detail' | 'notes' | 'time_of_day' | 'start_at'
+        'intensity' | 'duration_minutes' | 'distance_km' | 'distance_label' | 'is_long' | 'needs_detail' | 'notes' | 'time_of_day' | 'start_at'
       >
     >,
   ): Promise<PlannedSession | undefined> {

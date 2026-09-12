@@ -31,10 +31,10 @@ user-scoped anon client + RLS is the boundary.
 ## One-time Supabase setup
 
 1. Create a project at supabase.com.
-2. **SQL Editor → New query →** run each migration in order:
-   `supabase/migrations/0001_init.sql`, then `supabase/migrations/0002_origin_message_id.sql`.
-   (Or, with the Supabase CLI: `supabase db push`.) `0002` is additive and safe
-   to run on an existing project.
+2. **SQL Editor → New query →** run each migration in order: `0001_init.sql`,
+   `0002_origin_message_id.sql`, `0003_distance_label.sql` (all in
+   `supabase/migrations/`). (Or, with the Supabase CLI: `supabase db push`.)
+   Each is additive and safe to run on an existing project.
 3. **Authentication → Providers → Email**: enable, "Confirm email" on. For local
    testing you can also enable "Enable email OTP".
 4. **Authentication → URL Configuration**: set Site URL to your app origin and add
