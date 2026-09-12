@@ -820,7 +820,11 @@ export async function runTool(
     const data = await def.run(args, ctx);
     return { tool, ok: true, data };
   } catch (err) {
-    return { tool, ok: false, error: err instanceof Error ? err.message : String(err) };
+    const message = err instanceof Error ? err.message : String(err);
+    // Surfaced to the athlete as a plain-language apology (see COMPOSE_SYSTEM) —
+    // logged here too so a real cause is diagnosable, not just a black box.
+    console.error(`kona tool failed: ${tool}`, err);
+    return { tool, ok: false, error: message };
   }
 }
 

@@ -4,6 +4,9 @@ import { requireContext } from '../../../lib/route-helpers';
 // The core uses node:crypto and an in-memory store — must run on the Node runtime.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// A turn can make two sequential Claude calls (interpret + compose) plus tool
+// execution (DB writes) — give it real headroom instead of the platform default.
+export const maxDuration = 60;
 
 const MAX_MESSAGE_LEN = 2000;
 const CONV_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
