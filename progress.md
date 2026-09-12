@@ -3,11 +3,45 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M23.2 + M15.1 + UI pass done.** → **STOP for the founder product review** (before alpha).
+**M14.1–M23.2 + M15.1 + UI pass done. Live on Vercel, founder alpha testing underway.**
 Founder direction: no visual redesign *until told otherwise* (see UI pass
 below, explicitly requested), don't fabricate insights, stop for a
 product review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
+
+### Deployment + live alpha fixes (2026-09-12) ✅
+Deployed to Vercel (`https://kona-livid.vercel.app`, project
+`jo-youngs-projects/kona`, auto-deploys from GitHub `main`) and Supabase Auth
+wired up. Three real bugs found and fixed during the founder's first live
+testing pass, each deployed immediately:
+
+1. **Magic-link sign-in unreliable on Outlook/Live mail** — those providers
+   pre-fetch links in incoming email to scan them, which silently burns
+   Supabase's single-use magic-link token before the athlete ever clicks it.
+   Fixed by adding a 6-digit code fallback to `app/login/page.tsx`
+   (`supabase.auth.verifyOtp({ email, token, type: 'email' })`) alongside the
+   link — requires `{{ .Token }}` in Supabase's Magic Link email template.
+2. **Tool failures were invisible server-side** — `runTool`'s catch block
+   folded a failed tool call into an honest `ok:false` result (correct — no
+   fabrication, no crash) but logged nothing, so a real "couldn't save that"
+   report had no diagnosable cause. Added `console.error` there, and gave
+   `/api/chat` an explicit `maxDuration = 60` (a turn can make two sequential
+   Claude calls + a DB write; Vercel's platform default was tighter than that).
+   Deliberately did **not** add automatic retries — without an idempotency key
+   on tool calls, retrying a call that actually succeeded but whose response
+   timed out would silently create a duplicate record.
+3. **Standalone planned sessions invisible on Home** — "tomorrow I'm running
+   14km" (via `save_planned_session`, no `weekly_plan_id`) never showed up,
+   because `getHome`/`getWeek`/`getStarter` only ever fetched the latest
+   weekly plan's sessions. Not a timezone bug (my first, wrong guess — logged
+   here so it isn't re-suspected next time). Fixed by fetching every planned
+   session for the user (`listPlannedSessions`) instead; `buildHome`/`buildWeek`
+   already index by date so nothing outside the displayed range leaks in.
+   Regression test added (`tests/server/kona-server-home.test.ts`) — verified
+   it fails against the old code, passes against the fix.
+   Also, per a live product ask: Home's day-strip now shows 14 days (this week
+   + next) instead of 7, since a session more than a few days out had nowhere
+   to appear.
 
 ### UI/product experience pass ✅
 _Founder-approved reference screens (companion-first, dark, lime accent) turned
