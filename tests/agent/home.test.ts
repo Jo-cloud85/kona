@@ -51,7 +51,7 @@ function actual(over: Partial<ActualSession>): ActualSession {
 }
 
 describe('buildHome', () => {
-  it('lays out Mon–Sun of the current week with today marked and defaults to today', () => {
+  it('lays out this week + next (14 days) from Monday, with today marked and defaults to today', () => {
     const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
     expect(h.week.map((d) => d.date)).toEqual([
       '2026-09-07',
@@ -61,8 +61,15 @@ describe('buildHome', () => {
       '2026-09-11',
       '2026-09-12',
       '2026-09-13',
+      '2026-09-14',
+      '2026-09-15',
+      '2026-09-16',
+      '2026-09-17',
+      '2026-09-18',
+      '2026-09-19',
+      '2026-09-20',
     ]);
-    expect(h.week.map((d) => d.weekday)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+    expect(h.week.map((d) => d.weekday).slice(0, 7)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
     expect(h.week.find((d) => d.is_today)?.date).toBe('2026-09-09');
     expect(h.selected_date).toBe('2026-09-09');
     expect(h.greeting_name).toBe('Joan');

@@ -421,7 +421,9 @@ export function buildHome(input: {
   }
 
   const monday = mondayOf(now);
-  const week: HomeWeekDay[] = Array.from({ length: 7 }, (_, i) => {
+  // Two weeks (this week + next), not just the current one — an athlete telling
+  // Kona about a session more than a few days out couldn't see it land anywhere.
+  const week: HomeWeekDay[] = Array.from({ length: 14 }, (_, i) => {
     const date = isoDate(addDays(monday, i));
     return {
       date,

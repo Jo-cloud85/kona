@@ -152,7 +152,12 @@ export async function getHome(ctx: KonaContext, selectedDate?: string): Promise<
     ctx.repo.listMemories(ctx.userId),
   ]);
   const weeklyPlan = weeklyPlans.at(-1);
-  const sessions = weeklyPlan ? await ctx.repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  // All of the athlete's planned sessions, not just ones attached to the latest
+  // weekly plan — a standalone "tomorrow I'm running 14km" (save_planned_session)
+  // never gets a weekly_plan_id, so scoping to the plan silently hid it (found
+  // during alpha testing, 2026-09-12). buildHome indexes sessions by date, so
+  // anything outside the displayed week is naturally ignored anyway.
+  const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
   const today = ymdLocal(new Date());
   const checkinDoneToday = recoveryLogs.some((l) => ymdLocal(new Date(l.logged_at)) === today);
   return buildHome({
@@ -172,7 +177,7 @@ export async function getWeek(ctx: KonaContext): Promise<WeekView | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const weeklyPlan = (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
-  const sessions = weeklyPlan ? await ctx.repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
   return buildWeek({ profile, weeklyPlan, sessions });
 }
 
@@ -207,7 +212,6 @@ export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Prom
 export async function getStarter(ctx: KonaContext): Promise<ChatStarter | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
-  const weeklyPlan = (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
-  const sessions = weeklyPlan ? await ctx.repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
   return buildStarter(profile, { now: new Date(), sessions });
 }
