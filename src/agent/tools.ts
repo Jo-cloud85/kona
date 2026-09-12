@@ -161,22 +161,51 @@ export const TOOLS: Record<string, ToolDefinition> = {
   },
 
   save_planned_session: {
-    description: 'Persist a planned (intended) training session. Never overwrites an actual session.',
+    description:
+      "Persist a planned (intended) training session. Never overwrites an actual session. If the athlete already has a standalone session (not part of a saved weekly plan) for that same date and sport, this updates it in place — e.g. 'the Sunday run is now 13-14km' edits the existing Sunday run rather than adding a second one.",
     async run(args, ctx) {
       const start_at = str(args, 'start_at')!;
       const h = isoHour(start_at);
       const time_of_day = timeOfDay(args, 'time_of_day') ?? (h !== undefined ? timeOfDayFromHour(h) : undefined);
+      const sport_ = sport(args, 'sport')!;
+      const distance_km = num(args, 'distance_km');
+      const distance_label = str(args, 'distance_label', false);
+      const duration_minutes = num(args, 'duration_minutes');
+      const intensity_ = intensity(args, 'intensity');
+      const environment = (args.environment as CalculateInput['session']['environment']) ?? undefined;
+      const notes = str(args, 'notes', false);
+
+      // A standalone session (no weekly_plan_id) already on that date, same
+      // sport -> this is an edit, not a second session. Plan-attached sessions
+      // go through update_planned_sessions instead, so they're left alone here.
+      const date = start_at.slice(0, 10);
+      const existing = (await ctx.repo.listPlannedSessions(ctx.userId)).find(
+        (s) => s.weekly_plan_id === undefined && s.sport === sport_ && s.start_at.slice(0, 10) === date,
+      );
+      if (existing) {
+        const patch: Parameters<typeof ctx.repo.updatePlannedSession>[1] = { start_at };
+        if (time_of_day !== undefined) patch.time_of_day = time_of_day;
+        if (distance_km !== undefined) patch.distance_km = distance_km;
+        if (distance_label !== undefined) patch.distance_label = distance_label;
+        if (duration_minutes !== undefined) patch.duration_minutes = duration_minutes;
+        if (intensity_ !== undefined) patch.intensity = intensity_;
+        if (environment !== undefined) patch.environment = environment;
+        if (notes !== undefined) patch.notes = notes;
+        const updated = await ctx.repo.updatePlannedSession(existing.id, patch);
+        if (updated) return updated;
+      }
+
       return ctx.repo.savePlannedSession({
         user_id: ctx.userId,
-        sport: sport(args, 'sport')!,
+        sport: sport_,
         start_at,
         time_of_day,
-        distance_km: num(args, 'distance_km'),
-        distance_label: str(args, 'distance_label', false),
-        duration_minutes: num(args, 'duration_minutes'),
-        intensity: intensity(args, 'intensity') ?? 'easy',
-        environment: (args.environment as CalculateInput['session']['environment']) ?? undefined,
-        notes: str(args, 'notes', false),
+        distance_km,
+        distance_label,
+        duration_minutes,
+        intensity: intensity_ ?? 'easy',
+        environment,
+        notes,
         origin_message_id: ctx.originMessageId,
       });
     },
