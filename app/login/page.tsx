@@ -9,6 +9,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [codeError, setCodeError] = useState('');
 
   if (!CONFIGURED) {
     return (
@@ -48,16 +51,66 @@ export default function LoginPage() {
     }
   };
 
+  const verifyCode = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const token = code.trim();
+    if (!token) return;
+    setVerifying(true);
+    setCodeError('');
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'email' });
+      if (error) {
+        setCodeError(error.message);
+        setVerifying(false);
+        return;
+      }
+      // Full reload so the server (middleware, server components) picks up the new session cookie.
+      window.location.assign('/');
+    } catch (err) {
+      setCodeError(err instanceof Error ? err.message : 'Could not verify that code.');
+      setVerifying(false);
+    }
+  };
+
   return (
     <div className="app">
       <div className="landing">
-        <h1 className="wordmark">Kona</h1>
+        <div className="onboard-avatar">K</div>
+        <h1>Kona</h1>
         <p className="blurb">Your AI endurance companion. Sign in with a link — no password.</p>
 
         {status === 'sent' ? (
-          <p className="blurb">
-            Check <strong>{email}</strong> for a sign-in link. You can close this tab.
-          </p>
+          <>
+            <p className="blurb">
+              Check <strong>{email}</strong> for a sign-in link — tap it and you&apos;re in.
+            </p>
+            <p className="blurb">
+              Link not working? Some mail providers (Outlook/Live especially) scan links before you open the
+              email, which can use it up before you click it. Enter the 6-digit code from the same email instead:
+            </p>
+            <form className="form" onSubmit={verifyCode}>
+              <div className="field">
+                <label htmlFor="code">Code</label>
+                <input
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={8}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="123456"
+                />
+              </div>
+              {codeError && <p className="form-error">{codeError}</p>}
+              <div className="form-actions">
+                <button type="submit" className="cta" disabled={verifying || !code.trim()}>
+                  {verifying ? 'Verifying…' : 'Verify code'}
+                </button>
+              </div>
+            </form>
+          </>
         ) : (
           <form className="form" onSubmit={submit}>
             <div className="field">
