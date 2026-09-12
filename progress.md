@@ -42,6 +42,15 @@ testing pass, each deployed immediately:
    Also, per a live product ask: Home's day-strip now shows 14 days (this week
    + next) instead of 7, since a session more than a few days out had nowhere
    to appear.
+4. **A stated distance range was silently averaged** — "13-14km" saved as
+   `distance_km: 13.5`, a defensible number for the fueling math but one the
+   athlete never said, which is exactly the kind of invented precision the
+   product is supposed to avoid. Added an optional `distance_label` (new
+   column, `supabase/migrations/0003_distance_label.sql`, run on the Supabase
+   project same as 0001/0002) carrying the athlete's own words; Home/Week show
+   that instead of the number wherever the interpreter sets it. Threaded
+   through every tool that can set a distance (`save_planned_session`,
+   `save_weekly_plan`, `update_planned_sessions`).
 
 ### UI/product experience pass ✅
 _Founder-approved reference screens (companion-first, dark, lime accent) turned
