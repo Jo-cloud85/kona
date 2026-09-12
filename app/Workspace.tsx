@@ -75,6 +75,7 @@ export default function Workspace({
         onPrefillConsumed={onPrefillConsumed}
         onActivity={refreshList}
         onMenu={() => setSidebarOpen(true)}
+        onNewChat={() => persist(newConversationId())}
       />
     </div>
   );

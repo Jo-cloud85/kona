@@ -46,6 +46,7 @@ export default function CheckinDialog({ onClose, onDone }: { onClose: () => void
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="Evening check-in">
       <div className="dialog">
+        <div className="dialog-handle" aria-hidden />
         {reply === null ? (
           <>
             <h2>How did today go?</h2>
@@ -62,27 +63,28 @@ export default function CheckinDialog({ onClose, onDone }: { onClose: () => void
               </div>
             </div>
 
-            <div className="field">
-              <label>Did the plan(s) go as planned?</label>
-              <div className="choice-row">
-                <button className={`choice${asPlanned === true ? ' on' : ''}`} onClick={() => setAsPlanned(true)}>
-                  Yes
-                </button>
-                <button className={`choice${asPlanned === false ? ' on' : ''}`} onClick={() => setAsPlanned(false)}>
-                  No
-                </button>
+            <div className="choice-pair-row">
+              <div className="field">
+                <label>As planned?</label>
+                <div className="choice-row">
+                  <button className={`choice${asPlanned === true ? ' on' : ''}`} onClick={() => setAsPlanned(true)}>
+                    Yes
+                  </button>
+                  <button className={`choice${asPlanned === false ? ' on' : ''}`} onClick={() => setAsPlanned(false)}>
+                    No
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div className="field">
-              <label>Any injuries, cramps or pains?</label>
-              <div className="choice-row">
-                <button className={`choice${pains === true ? ' on' : ''}`} onClick={() => setPains(true)}>
-                  Yes
-                </button>
-                <button className={`choice${pains === false ? ' on' : ''}`} onClick={() => setPains(false)}>
-                  No
-                </button>
+              <div className="field">
+                <label>Pains?</label>
+                <div className="choice-row">
+                  <button className={`choice${pains === true ? ' on' : ''}`} onClick={() => setPains(true)}>
+                    Yes
+                  </button>
+                  <button className={`choice${pains === false ? ' on' : ''}`} onClick={() => setPains(false)}>
+                    No
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -106,7 +108,7 @@ export default function CheckinDialog({ onClose, onDone }: { onClose: () => void
                 Later
               </button>
               <button className="cta" disabled={!canSubmit} onClick={submit}>
-                {busy ? 'Saving…' : 'Log it'}
+                {busy ? 'Saving…' : 'Log it →'}
               </button>
             </div>
           </>

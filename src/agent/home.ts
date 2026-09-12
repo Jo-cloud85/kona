@@ -109,7 +109,7 @@ export interface HomeView {
   briefing: HomeBriefing;
 }
 
-function isoDate(d: Date): string {
+export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
@@ -117,13 +117,13 @@ function atMidnight(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function addDays(d: Date, n: number): Date {
+export function addDays(d: Date, n: number): Date {
   const x = atMidnight(d);
   x.setDate(x.getDate() + n);
   return x;
 }
 
-function mondayOf(d: Date): Date {
+export function mondayOf(d: Date): Date {
   const x = atMidnight(d);
   const dow = x.getDay(); // 0 Sun … 6 Sat
   return addDays(x, dow === 0 ? -6 : 1 - dow);
@@ -133,22 +133,22 @@ function parts(iso: string): [number, number, number] {
   return iso.split('-').map(Number) as [number, number, number];
 }
 
-function weekdayLabel(iso: string): string {
+export function weekdayLabel(iso: string): string {
   const [y, m, d] = parts(iso);
   return DAYS[new Date(y, m - 1, d).getDay()]!;
 }
 
-function dayOfMonth(iso: string): number {
+export function dayOfMonth(iso: string): number {
   return parts(iso)[2];
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function sportLabel(sport: Sport): string {
+export function sportLabel(sport: Sport): string {
   return SPORT_LABEL[sport] ?? 'session';
 }
 
-function titleFor(s: PlannedSession): string {
+export function titleFor(s: PlannedSession): string {
   const label = sportLabel(s.sport);
   const when = s.time_of_day ? `${s.time_of_day} ` : '';
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
@@ -157,7 +157,7 @@ function titleFor(s: PlannedSession): string {
   return cap(`${when}${label}`);
 }
 
-function durationLabel(s: PlannedSession): string {
+export function durationLabel(s: PlannedSession): string {
   if (s.duration_minutes && s.duration_minutes > 0) {
     return s.duration_minutes >= 90
       ? `${(s.duration_minutes / 60).toFixed(1).replace(/\.0$/, '')} hr`
@@ -205,7 +205,7 @@ function describeWhen(todayIso: string, dateIso: string): string {
 }
 
 const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-function weekdayFull(iso: string): string {
+export function weekdayFull(iso: string): string {
   const [y, m, d] = parts(iso);
   return WEEKDAY_FULL[new Date(y, m - 1, d).getDay()]!;
 }
@@ -220,7 +220,7 @@ function sessionNeeds(sessions: HomeSession[]): string[] {
   return [...needs];
 }
 
-function joinList(items: string[]): string {
+export function joinList(items: string[]): string {
   if (items.length <= 1) return items[0] ?? '';
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }

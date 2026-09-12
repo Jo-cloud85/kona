@@ -10,6 +10,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     return (
       <div className="app">
         <div className="landing">
+          <div className="onboard-avatar">K</div>
           <h1>Kona</h1>
           <p className="tagline">Your AI endurance companion.</p>
           <p className="blurb">
@@ -27,13 +28,14 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
   return (
     <div className="app">
       <div className="landing">
+        <div className="onboard-avatar">K</div>
         <h1>A bit about you</h1>
         <p className="blurb">
           That&apos;s all Kona needs to start. It&apos;ll pick up the rest — weight, bottle size, preferences —
           as you talk.
         </p>
       </div>
-      <ProfileForm mode="onboard" submitLabel="Start with Kona" onSaved={() => onDone()} />
+      <ProfileForm mode="onboard" submitLabel="Start with Kona →" onSaved={() => onDone()} />
     </div>
   );
 }

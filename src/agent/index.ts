@@ -28,6 +28,7 @@ export {
   type HomeWeekDay,
   type HomeBriefing,
 } from './home';
+export { buildWeek, type WeekView, type WeekDayView } from './week';
 export { buildCheckinLog, checkinReflection, type CheckinInput, type CheckinLog } from './checkin';
 export { deriveInsights, type Insight, type InsightKind, type InsightBasis, type InsightInput } from './insights';
 export {

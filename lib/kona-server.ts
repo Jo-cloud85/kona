@@ -7,6 +7,7 @@ import {
   buildHome,
   buildKnows,
   buildStarter,
+  buildWeek,
   checkinReflection,
   deriveInsights,
   handleMessage,
@@ -19,6 +20,7 @@ import {
   type HomeView,
   type Insight,
   type KnowsView,
+  type WeekView,
 } from '../src/agent/index';
 import type { KonaContext } from './server-context';
 
@@ -164,6 +166,14 @@ export async function getHome(ctx: KonaContext, selectedDate?: string): Promise<
     fuelLogs,
     memories,
   });
+}
+
+export async function getWeek(ctx: KonaContext): Promise<WeekView | null> {
+  const profile = await ctx.repo.getProfile(ctx.userId);
+  if (!profile?.onboarded_at) return null;
+  const weeklyPlan = (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
+  const sessions = weeklyPlan ? await ctx.repo.listPlannedSessionsForWeeklyPlan(weeklyPlan.id) : [];
+  return buildWeek({ profile, weeklyPlan, sessions });
 }
 
 export interface CheckinResult {

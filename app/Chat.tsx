@@ -44,6 +44,7 @@ export default function Chat({
   onPrefillConsumed,
   onActivity,
   onMenu,
+  onNewChat,
 }: {
   conversationId: string;
   greetingName?: string;
@@ -51,6 +52,7 @@ export default function Chat({
   onPrefillConsumed?: () => void;
   onActivity?: () => void;
   onMenu?: () => void;
+  onNewChat?: () => void;
 }) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [starter, setStarter] = useState<Starter | null>(null);
@@ -227,6 +229,15 @@ export default function Chat({
             {llm ? ` · ${llm}` : ''}
           </p>
         </div>
+        {onNewChat && (
+          <div className="header-actions">
+            <button className="icon-btn accent" aria-label="New chat" onClick={onNewChat}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="thread" ref={threadRef}>
@@ -376,8 +387,10 @@ export default function Chat({
           placeholder="Message Kona…"
           rows={1}
         />
-        <button onClick={() => void send()} disabled={busy || draft.trim().length === 0}>
-          Send
+        <button onClick={() => void send()} disabled={busy || draft.trim().length === 0} aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
         </button>
       </div>
     </div>

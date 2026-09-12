@@ -3,10 +3,63 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
 companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M23.2 + M15.1 done.** → **STOP for the founder product review** (before alpha).
-Founder direction: no visual redesign, don't fabricate insights, stop for a
+**M14.1–M23.2 + M15.1 + UI pass done.** → **STOP for the founder product review** (before alpha).
+Founder direction: no visual redesign *until told otherwise* (see UI pass
+below, explicitly requested), don't fabricate insights, stop for a
 product review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
+
+### UI/product experience pass ✅
+_Founder-approved reference screens (companion-first, dark, lime accent) turned
+into the visual direction for the real UI, ahead of alpha. Explicitly scoped as
+a product + UI refinement pass: no new backend architecture, persistence
+features, integrations, gamification, avatars, social features, or native
+mobile code._
+- **Design system** (`app/globals.css`, `app/layout.tsx`): new token set (dark
+  near-black ground + lime/chartreuse accent as the primary look, with a
+  matching light-mode palette for `prefers-color-scheme: light`), Manrope via
+  `next/font/google` for real typographic weight, pill-shaped buttons/nav/chips,
+  18–26px card radii throughout. Bottom nav now reads as pill (active tab) +
+  icon-only circles (inactive), matching the reference.
+- **Home** (`app/HomeTab.tsx`): the daily-briefing card gets a distinct
+  "Kona · —" tinted treatment (`.kona-card`/`.kona-eyebrow`) so companion
+  speech reads as visually distinct from plain data cards, per the "Kona
+  should feel like it's speaking" principle. Fuel numbers stay labelled
+  "references, not targets."
+- **"Your week"** (`src/agent/week.ts`, new `app/api/week/route.ts`,
+  `app/WeekView.tsx`) — new read-only screen, opened from a link under the
+  day-strip. Every field is derived from the same `buildDashboard()` already
+  used by Home/the old dashboard — no new persistence, no new calculation,
+  just a week-shaped read of data Kona already has (per-day fuel ranges,
+  `is_key_day`, daily protein baseline). Today's session renders as a filled
+  card; a double-session day renders as an outlined "Double" card — implements
+  founder principle 7 ("keep the week plan, but keep sessions/key-days visually
+  dominant, not a dense dashboard") which the day-strip alone didn't satisfy.
+- **Chat** (`app/Chat.tsx`, `app/Workspace.tsx`): added a "+" new-chat button in
+  the header (previously only reachable via the sidebar), circular send button,
+  starters render as full-width stacked rows instead of wrapped chips — matches
+  the reference chat screen exactly.
+- **Evening check-in** (`app/CheckinDialog.tsx`): restyled as a bottom sheet
+  (drag handle, slides from the bottom on mobile, centered modal ≥560px);
+  "As planned?" / "Pains?" now sit side by side.
+- **Onboarding** (`app/Onboarding.tsx`) / **Profile** (`app/HomeTab.tsx`
+  profile overlay): added the lime "K" avatar mark on onboarding and a
+  name/sports/sessions-per-week summary header on the profile overlay; numeric
+  profile fields (weight, bottle, sessions/week, age) read as tiles.
+- **Not built this pass** (flagged, not silently dropped): a computed
+  "last N check-ins" trend strip on Home — the reference screenshot implies new
+  per-day pass/fail/mixed derivation logic that doesn't exist yet anywhere in
+  the app (unlike the week view, which reused `buildDashboard()` wholesale).
+  Worth a small follow-up milestone if the founder wants it; scoped out here to
+  keep this pass to a refinement of what already exists.
+- Verified live in the browser (mobile viewport, dev-fallback in-memory user)
+  through onboarding → Home → Chat → weekly-plan tool-call flow → Your week →
+  Memory → Profile → evening check-in submit, screen by screen against the
+  reference set. Found and fixed one real bug in the process: a day that is
+  both "today" and a double-session got the double-session's outline styling
+  layered over the today fill, making its text unreadable — fixed with a
+  `:not(.is-today)` guard so "today" always wins visually.
+  `tsc` / `eslint` / `vitest` (194 pass, 4 skipped) / `next build` all clean.
 
 ### M23.2 — say the "because": memory that visibly changes advice ✅
 _Product memos 01/02 (Kona's Emotional Hook, The Judgment Loop) proposed that the
@@ -747,13 +800,18 @@ _Prompted by user feedback: Kona was silently defaulting unstated intensity to "
   change this call" sections before building anything further on top.
 
 ## Next recommended task
-**Hold for alpha.** M14.1–M23.2 are done. The founder is deploying to Vercel
-(Supabase already set up) to run a 10–20 person alpha — see `DEPLOYMENT.md`.
-Once live: walk the M23 journey once for sanity (sign up → onboard → plan →
-chat → log → close → return → still remembered), then specifically watch for
-M23.2's "because" moments landing naturally per the manual test notes given
-when M23.2 was implemented. Do not start another milestone before that
-feedback is in.
+**Hold for alpha.** M14.1–M23.2 + the UI/product experience pass are done. The
+founder is deploying to Vercel (Supabase already set up) to run a 10–20 person
+alpha — see `DEPLOYMENT.md`. Once live: walk the M23 journey once for sanity
+(sign up → onboard → plan → chat → log → close → return → still remembered) on
+the new UI on an actual phone, then specifically watch for M23.2's "because"
+moments landing naturally per the manual test notes given when M23.2 was
+implemented. Do not start another milestone before that feedback is in.
+
+If the founder wants the "last N check-ins" trend strip from the reference
+screens after all, that's the one piece of the approved direction deliberately
+not built this pass (see the UI pass notes above) — it needs a small new
+derivation (a pass/mixed/fail read per recent day) that doesn't exist yet.
 
 Candidates to raise at the review (not started): "Week X of Y" once a
 periodised-block model exists; the chat *proactively* posting into an existing

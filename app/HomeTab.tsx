@@ -4,6 +4,20 @@ import { useCallback, useEffect, useState } from 'react';
 import CheckinDialog from './CheckinDialog';
 import ProfileForm, { type ProfileValues } from './ProfileForm';
 import SignOutButton from './SignOutButton';
+import WeekView from './WeekView';
+
+const SPORT_LABEL: Record<string, string> = {
+  running: 'Running',
+  cycling: 'Cycling',
+  swimming: 'Swimming',
+  gym: 'Strength',
+  climbing: 'Climbing',
+  skating: 'Skating',
+  combat_sports: 'Combat sports',
+  hyrox: 'HYROX',
+  triathlon: 'Triathlon',
+  other: 'Training',
+};
 
 interface Range {
   min: number;
@@ -100,6 +114,7 @@ export default function HomeTab({
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileInitial, setProfileInitial] = useState<ProfileValues | null>(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
+  const [weekOpen, setWeekOpen] = useState(false);
 
   const load = useCallback((date?: string) => {
     const qs = date ? `?date=${encodeURIComponent(date)}` : '';
@@ -201,6 +216,12 @@ export default function HomeTab({
         ))}
       </div>
 
+      {data.has_plan && (
+        <button className="week-link" onClick={() => setWeekOpen(true)}>
+          Your week →
+        </button>
+      )}
+
       {data.checkin.due && !checkinOpen && (
         <button className="checkin-nudge" onClick={() => setCheckinOpen(true)}>
           Evening check-in — log how today went →
@@ -208,13 +229,19 @@ export default function HomeTab({
       )}
 
       {/* YOUR DAY */}
-      <section className="home-card brief-card">
-        <p className="brief-label">{dayLabel}</p>
+      <section className="home-card kona-card brief-card">
+        <p className="kona-eyebrow">
+          <span className="dot" aria-hidden />
+          Kona · {dayLabel}
+        </p>
         <p className="brief-headline">{yd.headline}</p>
         <p className="brief-line">{yd.line}</p>
 
         {yd.fuelling && (
           <div className="fuel-grid brief-fuel">
+            <p className="fuel-refs-label" style={{ gridColumn: '1 / -1' }}>
+              references, not targets
+            </p>
             <div className="fuel-stat">
               <span className="fuel-stat-label">Carbs</span>
               <span className="fuel-stat-value">
@@ -287,6 +314,8 @@ export default function HomeTab({
         />
       )}
 
+      {weekOpen && <WeekView onClose={() => setWeekOpen(false)} />}
+
       {profileOpen && (
         <div className="profile-overlay" role="dialog" aria-modal="true" aria-label="Profile">
           <div className="profile-overlay-bar">
@@ -295,8 +324,22 @@ export default function HomeTab({
               ✕
             </button>
           </div>
+          {profileInitial && (profileInitial.username || profileInitial.usual_sports?.length) && (
+            <div className="profile-head">
+              <div className="profile-head-avatar">{(profileInitial.username?.trim()[0] ?? initial).toUpperCase()}</div>
+              <div>
+                <h2>{profileInitial.username || name}</h2>
+                <p>
+                  {(profileInitial.usual_sports ?? []).map((s) => SPORT_LABEL[s] ?? s).join(', ')}
+                  {profileInitial.typical_weekly_sessions
+                    ? ` · ${profileInitial.typical_weekly_sessions} sessions / week`
+                    : ''}
+                </p>
+              </div>
+            </div>
+          )}
           <div className="app">
-            <div className="landing">
+            <div className="landing profile-blurb">
               <p className="blurb">
                 Update your weight, usual bottle, sports or goal — anything. It sharpens Kona&apos;s advice.
               </p>
