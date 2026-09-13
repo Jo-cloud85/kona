@@ -9,6 +9,49 @@ below, explicitly requested), don't fabricate insights, stop for a
 product review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
 
+## ⚠️ Known bug, not yet fixed: "today" can resolve to the wrong calendar
+date server-side (2026-09-14)
+Found live while testing the session-recap feature just after local
+midnight. `src/agent/orchestrator.ts`'s `now_iso` (what the chat LLM is told
+"now" is) is `new Date().toISOString()` — always UTC. `src/agent/home.ts`'s
+`ymdLocal` and friends use the server process's *local* timezone instead.
+Locally these happened to agree (dev server on the founder's own machine).
+**On Vercel, the server's local timezone is UTC**, so both paths actually
+compute the same (wrong) day for any athlete outside UTC, for however many
+hours their offset spans each day (~8/day for SGT) — e.g. a chat message
+sent at 00:20 SGT gets logged against the *previous* calendar day. Root
+cause: nothing in the app stores or knows the athlete's timezone; every
+"what day is it" computation is a guess from the server's own clock.
+Proper fix needs the client's local time threaded through (chat already
+has an unused `now` override in `HandleMessageInput` for exactly this —
+Home/Week/recap would need the same). Not attempted yet — real scope, own
+pass. Flagged to the founder; not started without explicit go-ahead.
+
+### Delete capability, rolling windows, Memory→Profile, session recap (2026-09-14) ✅
+Five related asks from live founder testing, built together since they touch
+the same screens:
+- `delete_planned_session` / `delete_actual_session` tools — Kona can now
+  actually remove a record instead of the only path being "log it as
+  skipped," which was creating false negative outcomes that fed the insight
+  engine (the exact "repeatedly run into problems" bug reported).
+- Home's day-strip and "Your week" are both now a rolling, today-anchored
+  14-day window (today − 6 … today + 7) instead of a fixed Monday–Sunday,
+  and Home auto-scrolls so today is the first visible day on open. Also
+  fixed: Week's `has_plan` flag only checked planned sessions, so a day
+  with just a logged actual session (no plan) wrongly showed the empty state.
+- Memory moved out of the bottom nav (now just Home/Chat) into Profile, as
+  a nested screen with a back button.
+- New post-session recap screen, opened by tapping a logged day in Your
+  week — distance/time, the planned fuelling target (not a fabricated
+  actual-consumption number — nothing computes that), what was logged, a
+  grounded Kona note (never inventing detail like pace splits the app
+  doesn't track), a chat hand-off button, and a link into the insight it
+  contributed to, when there is one.
+- Also fixed two more instances of the is-today CSS specificity bug from
+  earlier this week (a day that's both today and empty/rest lost its
+  dark-on-accent text to a same-specificity rule declared later; the
+  "Today" badge was lime-on-lime and invisible in dark mode).
+
 ### Deployment + live alpha fixes (2026-09-12) ✅
 Deployed to Vercel (`https://kona-livid.vercel.app`, project
 `jo-youngs-projects/kona`, auto-deploys from GitHub `main`) and Supabase Auth
