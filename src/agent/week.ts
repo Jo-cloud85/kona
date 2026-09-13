@@ -1,6 +1,6 @@
-import type { PlannedSession, Profile, Range, WeeklyPlan } from '../domain/types';
+import type { ActualSession, PlannedSession, Profile, Range, WeeklyPlan } from '../domain/types';
 import { buildDashboard } from './dashboard';
-import { addDays, dayOfMonth, durationLabel, isoDate, joinList, mondayOf, sportLabel, titleFor, weekdayFull, weekdayLabel } from './home';
+import { addDays, dayOfMonth, durationLabel, isoDate, joinList, sportLabel, titleFor, weekdayFull, weekdayLabel } from './home';
 
 /**
  * "Your week" — the week plan as a page, not a dashboard (product UI pass,
@@ -23,6 +23,9 @@ export interface WeekDayView {
   title: string | null;
   duration_label: string | null;
   fuelling: { carb_g_per_hour: Range; fluid_ml_per_hour: Range } | null;
+  /** true when this day has a logged actual session — the only days with a
+   *  post-session recap to open. */
+  has_recap: boolean;
 }
 
 export interface WeekView {
@@ -50,9 +53,20 @@ function rangeLabel(startIso: string, endIso: string): string {
   return sm === em ? `${sd} – ${ed} ${em}` : `${sd} ${sm} – ${ed} ${em}`;
 }
 
-export function buildWeek(input: { profile: Profile; weeklyPlan?: WeeklyPlan; sessions: PlannedSession[]; now?: Date }): WeekView {
+export function buildWeek(input: {
+  profile: Profile;
+  weeklyPlan?: WeeklyPlan;
+  sessions: PlannedSession[];
+  actualSessions?: ActualSession[];
+  now?: Date;
+}): WeekView {
   const now = input.now ?? new Date();
-  const monday = mondayOf(now);
+  // Rolling, today-anchored window (today - 6 .. today + 7 = 14 days), matching
+  // Home's day-strip — not a fixed Monday-Sunday. Fuelling numbers (from
+  // buildDashboard, below) still only resolve for days inside the athlete's
+  // actual stored weekly-plan week; days outside it show the session title
+  // without fuel chips, same as Home already does for an out-of-plan day.
+  const windowStart = addDays(now, -6);
 
   const byDate = new Map<string, PlannedSession[]>();
   for (const s of input.sessions) {
@@ -67,9 +81,10 @@ export function buildWeek(input: { profile: Profile; weeklyPlan?: WeeklyPlan; se
 
   const restSet = new Set(input.weeklyPlan?.rest_days ?? []);
   const hasPlan = input.weeklyPlan != null;
+  const actualDates = new Set((input.actualSessions ?? []).map((a) => a.start_at.slice(0, 10)));
 
-  const days: WeekDayView[] = Array.from({ length: 7 }, (_, i) => {
-    const date = isoDate(addDays(monday, i));
+  const days: WeekDayView[] = Array.from({ length: 14 }, (_, i) => {
+    const date = isoDate(addDays(windowStart, i));
     const sessions = byDate.get(date) ?? [];
     const isRest = restSet.has(date);
     const dashDay = dashByDate.get(date);
@@ -104,16 +119,23 @@ export function buildWeek(input: { profile: Profile; weeklyPlan?: WeeklyPlan; se
       title,
       duration_label: sessions.length === 1 ? durationLabel(sessions[0]!) : null,
       fuelling,
+      has_recap: actualDates.has(date),
     };
   });
 
-  const weekEnd = isoDate(addDays(monday, 6));
+  const windowEnd = isoDate(addDays(windowStart, 13));
   const keyDays = days.filter((d) => d.is_key_day).map((d) => weekdayFull(d.date));
+  const inWindow = (dateIso: string) => dateIso >= isoDate(windowStart) && dateIso <= windowEnd;
+  const sessionsInWindow = input.sessions.filter((s) => inWindow(s.start_at.slice(0, 10)));
+  const hasRecapInWindow = (input.actualSessions ?? []).some((a) => inWindow(a.start_at.slice(0, 10)));
 
   return {
-    has_plan: hasPlan,
-    range_label: hasPlan ? rangeLabel(isoDate(monday), weekEnd) : null,
-    session_count: input.sessions.length,
+    // Not just "is there a saved weekly plan" anymore — standalone sessions
+    // (no weekly_plan_id) and logged actual sessions (recaps) count as "there's
+    // something to show" too, even with zero planned sessions in the window.
+    has_plan: hasPlan || sessionsInWindow.length > 0 || hasRecapInWindow,
+    range_label: rangeLabel(isoDate(windowStart), windowEnd),
+    session_count: sessionsInWindow.length,
     rest_count: days.filter((d) => d.is_rest).length,
     protein_daily_g: dashboard.baseline.protein_daily_g,
     key_days_label: keyDays.length ? joinList(keyDays) : null,

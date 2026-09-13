@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import CheckinDialog from './CheckinDialog';
+import KnowsView from './KnowsView';
 import ProfileForm, { type ProfileValues } from './ProfileForm';
 import SignOutButton from './SignOutButton';
 import WeekView from './WeekView';
@@ -115,6 +116,9 @@ export default function HomeTab({
   const [profileInitial, setProfileInitial] = useState<ProfileValues | null>(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [weekOpen, setWeekOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const dayStripRef = useRef<HTMLDivElement>(null);
+  const scrolledToTodayRef = useRef(false);
 
   const load = useCallback((date?: string) => {
     const qs = date ? `?date=${encodeURIComponent(date)}` : '';
@@ -128,6 +132,17 @@ export default function HomeTab({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Opening Home should always land with today as the first visible day —
+  // scroll it into view once per mount, not on every subsequent day-pill tap.
+  useEffect(() => {
+    if (!data || scrolledToTodayRef.current) return;
+    const todayPill = dayStripRef.current?.querySelector<HTMLButtonElement>('.day-pill.today');
+    if (todayPill) {
+      todayPill.scrollIntoView({ inline: 'start', block: 'nearest' });
+      scrolledToTodayRef.current = true;
+    }
+  }, [data]);
 
   useEffect(() => {
     if (!data?.checkin.due || new Date().getHours() < 22) return;
@@ -200,7 +215,7 @@ export default function HomeTab({
         </button>
       </div>
 
-      <div className="day-strip" role="tablist" aria-label="Week">
+      <div className="day-strip" role="tablist" aria-label="Week" ref={dayStripRef}>
         {data.week.map((d) => (
           <button
             key={d.date}
@@ -216,11 +231,12 @@ export default function HomeTab({
         ))}
       </div>
 
-      {data.has_plan && (
-        <button className="week-link" onClick={() => setWeekOpen(true)}>
-          Your week →
-        </button>
-      )}
+      {/* Always shown — Your week has its own empty state, and gating this on
+          a formal weekly plan would hide it when there are only standalone
+          sessions or logged history to show. */}
+      <button className="week-link" onClick={() => setWeekOpen(true)}>
+        Your week →
+      </button>
 
       {data.checkin.due && !checkinOpen && (
         <button className="checkin-nudge" onClick={() => setCheckinOpen(true)}>
@@ -314,7 +330,22 @@ export default function HomeTab({
         />
       )}
 
-      {weekOpen && <WeekView onClose={() => setWeekOpen(false)} />}
+      {weekOpen && (
+        <WeekView
+          onClose={() => setWeekOpen(false)}
+          onOpenChat={onOpenChat}
+          onOpenMemory={() => {
+            setWeekOpen(false);
+            setMemoryOpen(true);
+          }}
+        />
+      )}
+
+      {memoryOpen && (
+        <div className="profile-overlay nested">
+          <KnowsView onBack={() => setMemoryOpen(false)} />
+        </div>
+      )}
 
       {profileOpen && (
         <div className="profile-overlay" role="dialog" aria-modal="true" aria-label="Profile">
@@ -360,6 +391,10 @@ export default function HomeTab({
                 Loading…
               </p>
             )}
+            <button className="home-cta" onClick={() => setMemoryOpen(true)}>
+              What Kona knows about you →
+            </button>
+
             <div className="profile-signout">
               <SignOutButton />
             </div>

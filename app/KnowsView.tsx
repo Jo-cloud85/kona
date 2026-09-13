@@ -34,7 +34,7 @@ const KIND_LABEL: Record<Insight['kind'], string> = {
   recommendation: 'Suggestion',
 };
 
-export default function KnowsView() {
+export default function KnowsView({ onBack }: { onBack?: () => void } = {}) {
   const [data, setData] = useState<KnowsView | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -62,6 +62,11 @@ export default function KnowsView() {
   return (
     <div className="knows">
       <header className="dash-head">
+        {onBack && (
+          <button className="back-btn" onClick={onBack} aria-label="Back to Profile">
+            ‹ Back
+          </button>
+        )}
         <h1>What Kona knows about you</h1>
         <p className="dash-sub">
           What you&apos;ve told Kona, what it&apos;s worked out from your training, and what&apos;s on record.

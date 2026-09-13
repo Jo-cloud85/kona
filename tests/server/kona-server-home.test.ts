@@ -156,3 +156,53 @@ describe('save_planned_session edits an existing standalone session instead of d
     expect(home!.selected.sessions).toHaveLength(2);
   });
 });
+
+describe('delete_planned_session / delete_actual_session', () => {
+  it('removes a planned session by date, so it stops showing on Home entirely (not marked skipped)', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+    const start_at = isoSessionDate();
+    const date = start_at.slice(0, 10);
+
+    await runTool('save_planned_session', { sport: 'running', start_at, distance_km: 14, intensity: 'easy' }, { repo, userId: USER_ID });
+    const del = await runTool('delete_planned_session', { date }, { repo, userId: USER_ID });
+    expect(del.ok).toBe(true);
+    expect((del.data as { deleted: boolean }).deleted).toBe(true);
+
+    expect(await repo.listPlannedSessions(USER_ID)).toHaveLength(0);
+    expect(await repo.listActualSessions(USER_ID)).toHaveLength(0); // never became a "skipped" actual session
+
+    const home = await getHome(ctx, date);
+    expect(home!.selected.sessions).toHaveLength(0);
+  });
+
+  it('errors instead of guessing when day + sport match more than one planned session', async () => {
+    const repo = new InMemoryRepository();
+    const start_at = isoSessionDate();
+    const date = start_at.slice(0, 10);
+
+    await runTool('save_planned_session', { sport: 'running', start_at, distance_km: 10, intensity: 'easy' }, { repo, userId: USER_ID });
+    await runTool('save_planned_session', { sport: 'swimming', start_at, distance_km: 1.5, intensity: 'easy' }, { repo, userId: USER_ID });
+
+    const del = await runTool('delete_planned_session', { date }, { repo, userId: USER_ID });
+    expect(del.ok).toBe(false);
+    expect(await repo.listPlannedSessions(USER_ID)).toHaveLength(2); // untouched — no guessing
+
+    const delSport = await runTool('delete_planned_session', { date, sport: 'running' }, { repo, userId: USER_ID });
+    expect(delSport.ok).toBe(true);
+    const remaining = await repo.listPlannedSessions(USER_ID);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toMatchObject({ sport: 'swimming' });
+  });
+
+  it('removes a logged actual session by date', async () => {
+    const repo = new InMemoryRepository();
+    const start_at = isoSessionDate();
+    const date = start_at.slice(0, 10);
+
+    await repo.saveActualSession({ user_id: USER_ID, sport: 'running', start_at, intensity: 'easy', status: 'completed' });
+    const del = await runTool('delete_actual_session', { date }, { repo, userId: USER_ID });
+    expect(del.ok).toBe(true);
+    expect(await repo.listActualSessions(USER_ID)).toHaveLength(0);
+  });
+});

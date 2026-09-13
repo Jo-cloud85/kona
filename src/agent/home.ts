@@ -7,6 +7,7 @@ import type {
   Profile,
   Range,
   RecoveryLog,
+  SessionInputCore,
   Sport,
   TimeOfDay,
   WeeklyPlan,
@@ -148,7 +149,7 @@ export function sportLabel(sport: Sport): string {
   return SPORT_LABEL[sport] ?? 'session';
 }
 
-export function titleFor(s: PlannedSession): string {
+export function titleFor(s: SessionInputCore): string {
   const label = sportLabel(s.sport);
   const when = s.time_of_day ? `${s.time_of_day} ` : '';
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
@@ -158,7 +159,7 @@ export function titleFor(s: PlannedSession): string {
   return cap(`${when}${label}`);
 }
 
-export function durationLabel(s: PlannedSession): string {
+export function durationLabel(s: SessionInputCore): string {
   if (s.duration_minutes && s.duration_minutes > 0) {
     return s.duration_minutes >= 90
       ? `${(s.duration_minutes / 60).toFixed(1).replace(/\.0$/, '')} hr`
@@ -422,11 +423,14 @@ export function buildHome(input: {
     else byDate.set(key, [s]);
   }
 
-  const monday = mondayOf(now);
-  // Two weeks (this week + next), not just the current one — an athlete telling
-  // Kona about a session more than a few days out couldn't see it land anywhere.
+  // Rolling, today-anchored window (today - 6 .. today + 7 = 14 days) rather
+  // than a fixed Monday-Sunday week — today is always the default-visible day,
+  // with 6 days of history a scroll-left away and a week+ of runway to the
+  // right, so a session further out than "this calendar week" still lands
+  // somewhere the athlete can see it.
+  const windowStart = addDays(now, -6);
   const week: HomeWeekDay[] = Array.from({ length: 14 }, (_, i) => {
-    const date = isoDate(addDays(monday, i));
+    const date = isoDate(addDays(windowStart, i));
     return {
       date,
       weekday: weekdayLabel(date),

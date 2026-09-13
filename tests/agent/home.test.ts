@@ -51,9 +51,14 @@ function actual(over: Partial<ActualSession>): ActualSession {
 }
 
 describe('buildHome', () => {
-  it('lays out this week + next (14 days) from Monday, with today marked and defaults to today', () => {
+  it('lays out a rolling 14-day window (today - 6 .. today + 7), today marked and default-selected', () => {
     const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
+    // NOW is Wed 2026-09-09, so the window runs Thu 09-03 .. Wed 09-16.
     expect(h.week.map((d) => d.date)).toEqual([
+      '2026-09-03',
+      '2026-09-04',
+      '2026-09-05',
+      '2026-09-06',
       '2026-09-07',
       '2026-09-08',
       '2026-09-09',
@@ -64,13 +69,12 @@ describe('buildHome', () => {
       '2026-09-14',
       '2026-09-15',
       '2026-09-16',
-      '2026-09-17',
-      '2026-09-18',
-      '2026-09-19',
-      '2026-09-20',
     ]);
-    expect(h.week.map((d) => d.weekday).slice(0, 7)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+    expect(h.week[0]!.date).toBe('2026-09-03');
+    expect(h.week.at(-1)!.date).toBe('2026-09-16');
     expect(h.week.find((d) => d.is_today)?.date).toBe('2026-09-09');
+    expect(h.week.filter((d) => d.date <= '2026-09-08')).toHaveLength(6); // 6 days scrollable to the left
+    expect(h.week.filter((d) => d.date >= '2026-09-10')).toHaveLength(7); // 7 days ahead to the right
     expect(h.selected_date).toBe('2026-09-09');
     expect(h.greeting_name).toBe('Joan');
   });

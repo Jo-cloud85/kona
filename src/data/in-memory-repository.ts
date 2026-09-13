@@ -142,6 +142,13 @@ export class InMemoryRepository implements Repository {
     return matches.sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   }
 
+  async deletePlannedSession(userId: string, id: string): Promise<boolean> {
+    const existing = this.planned.get(id);
+    if (!existing || existing.user_id !== userId) return false;
+    this.planned.delete(id);
+    return true;
+  }
+
   async saveActualSession(input: NewActualSession): Promise<ActualSession> {
     const session: ActualSession = {
       ...input,
@@ -161,6 +168,13 @@ export class InMemoryRepository implements Repository {
     return [...this.actual.values()]
       .filter((s) => s.user_id === userId)
       .sort((a, b) => a.start_at.localeCompare(b.start_at));
+  }
+
+  async deleteActualSession(userId: string, id: string): Promise<boolean> {
+    const existing = this.actual.get(id);
+    if (!existing || existing.user_id !== userId) return false;
+    this.actual.delete(id);
+    return true;
   }
 
   async saveFuelLog(input: NewFuelLog): Promise<FuelLog> {

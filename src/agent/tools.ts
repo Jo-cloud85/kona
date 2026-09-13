@@ -475,6 +475,44 @@ export const TOOLS: Record<string, ToolDefinition> = {
     },
   },
 
+  delete_planned_session: {
+    description:
+      "Remove a planned session the athlete said to delete/remove/cancel — not the same as marking it skipped. Errors if the day/sport doesn't uniquely identify one session.",
+    async run(args, ctx) {
+      const date = str(args, 'date')!;
+      const wantSport = sport(args, 'sport', false);
+      const matches = (await ctx.repo.listPlannedSessions(ctx.userId)).filter(
+        (s) => s.start_at.slice(0, 10) === date && (wantSport ? s.sport === wantSport : true),
+      );
+      if (matches.length === 0) throw new ToolError('No planned session found for that day/sport to delete.');
+      if (matches.length > 1) {
+        throw new ToolError(`${matches.length} planned sessions match that day — name the sport to pick one.`);
+      }
+      const target = matches[0]!;
+      const ok = await ctx.repo.deletePlannedSession(ctx.userId, target.id);
+      return { deleted: ok, session: { sport: target.sport, start_at: target.start_at, distance_km: target.distance_km, distance_label: target.distance_label } };
+    },
+  },
+
+  delete_actual_session: {
+    description:
+      "Remove a logged (actual) session the athlete said was a mistake / to delete — not the same as saving it with a status. Errors if the day/sport doesn't uniquely identify one session.",
+    async run(args, ctx) {
+      const date = str(args, 'date')!;
+      const wantSport = sport(args, 'sport', false);
+      const matches = (await ctx.repo.listActualSessions(ctx.userId)).filter(
+        (s) => s.start_at.slice(0, 10) === date && (wantSport ? s.sport === wantSport : true),
+      );
+      if (matches.length === 0) throw new ToolError('No logged session found for that day/sport to delete.');
+      if (matches.length > 1) {
+        throw new ToolError(`${matches.length} logged sessions match that day — name the sport to pick one.`);
+      }
+      const target = matches[0]!;
+      const ok = await ctx.repo.deleteActualSession(ctx.userId, target.id);
+      return { deleted: ok, session: { sport: target.sport, start_at: target.start_at, status: target.status } };
+    },
+  },
+
   calculate_fueling_targets: {
     description:
       'Run the deterministic calculation engine for a stored session. This is the ONLY source of fueling numbers.',
@@ -779,6 +817,24 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       link_to_plan_date: { type: 'string', description: 'YYYY-MM-DD to link this to an existing plan' },
     },
     required: ['status'],
+  },
+
+  delete_planned_session: {
+    type: 'object',
+    properties: {
+      date: { type: 'string', description: 'YYYY-MM-DD of the session to delete.' },
+      sport: { type: 'string', enum: SPORT_ENUM, description: 'Narrows to one sport if more than one session matches the day.' },
+    },
+    required: ['date'],
+  },
+
+  delete_actual_session: {
+    type: 'object',
+    properties: {
+      date: { type: 'string', description: 'YYYY-MM-DD of the logged session to delete.' },
+      sport: { type: 'string', enum: SPORT_ENUM, description: 'Narrows to one sport if more than one session matches the day.' },
+    },
+    required: ['date'],
   },
 
   calculate_fueling_targets: {

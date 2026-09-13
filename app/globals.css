@@ -838,6 +838,25 @@ button.cta:disabled {
   font-size: 22px;
 }
 
+/* Nested-overlay back navigation (Memory opened from Profile, session recap
+   opened from Your week) — distinct from the top-level "X" close pattern,
+   since these return to a parent screen rather than closing outright. */
+.back-btn {
+  display: block;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 4px;
+}
+.back-btn:hover {
+  color: var(--accent);
+}
+
 .dash-sub {
   margin: 0;
   color: var(--muted);
@@ -1359,6 +1378,54 @@ button.cta:disabled {
   gap: 10px;
 }
 
+/* ---- Session recap ("1i") ------------------------------------------- */
+
+.recap-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.recap-title-row h1 {
+  margin: 8px 0 0;
+}
+
+.recap-stats {
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 14px;
+}
+@media (max-width: 420px) {
+  .recap-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.recap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.recap-evidence {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+
+.recap-memory-link {
+  display: block;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.recap-memory-link:disabled {
+  cursor: default;
+}
+
 .fuel-stat {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -1437,6 +1504,13 @@ button.cta:disabled {
   background: var(--bg);
   overflow-y: auto;
   padding: 16px 0 32px;
+}
+
+/* A screen opened from inside another overlay (Memory from Profile, a
+   session recap from Your week) stacks above it. */
+.profile-overlay.nested {
+  z-index: 41;
+  padding: 0; /* content (e.g. .knows) supplies its own safe-area-aware padding */
 }
 
 .profile-overlay-bar {
@@ -2125,6 +2199,15 @@ button.cta:disabled {
   padding: 13px 16px;
 }
 
+.week-day.is-tappable {
+  cursor: pointer;
+}
+.week-day.is-tappable:hover,
+.week-day.is-tappable:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
 .week-day-dow {
   flex: 0 0 34px;
   font-size: 12px;
@@ -2183,7 +2266,8 @@ button.cta:disabled {
   color: var(--accent-text);
   opacity: 0.7;
 }
-.week-day.is-today .week-day-title {
+.week-day.is-today .week-day-title,
+.week-day.is-today .week-day-open {
   color: var(--accent-text);
 }
 .week-day.is-today .week-day-chip {
@@ -2208,14 +2292,17 @@ button.cta:disabled {
   border-radius: 999px;
 }
 @media (prefers-color-scheme: dark) {
-  .week-day-badge {
+  /* Only for a badge sitting on the plain dark row background (e.g. "Double") —
+     .is-today's own solid-accent row keeps the light-on-accent badge above,
+     which a same-color badge-on-badge would otherwise wash out. */
+  .week-day:not(.is-today) .week-day-badge {
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, transparent);
   }
 }
 
-.week-day.is-rest .week-day-title,
-.week-day.is-open .week-day-title {
+.week-day.is-rest:not(.is-today) .week-day-title,
+.week-day.is-open:not(.is-today) .week-day-title {
   color: var(--muted);
   font-weight: 600;
 }

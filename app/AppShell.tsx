@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Workspace from './Workspace';
-import KnowsView from './KnowsView';
 import HomeTab from './HomeTab';
 import type { ProfileValues } from './ProfileForm';
 
-type Tab = 'home' | 'memory' | 'chat';
+// Memory moved into Profile (avatar -> "What Kona knows about you") — no
+// longer a bottom-nav tab of its own.
+type Tab = 'home' | 'chat';
 const TAB_KEY = 'kona.tab';
 
 const NAV: { tab: Tab; label: string; icon: ReactNode }[] = [
@@ -17,17 +18,6 @@ const NAV: { tab: Tab; label: string; icon: ReactNode }[] = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
         <path d="M4 11.5 12 4l8 7.5" />
         <path d="M6 10.5V20h12v-9.5" />
-      </svg>
-    ),
-  },
-  {
-    tab: 'memory',
-    label: 'Memory',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-        <path d="M12 3a5 5 0 0 0-5 5c0 1.3.5 2.5 1.3 3.4A4 4 0 0 0 7 15a4 4 0 0 0 4 4h.5V5.5" />
-        <path d="M12 3a5 5 0 0 1 5 5c0 1.3-.5 2.5-1.3 3.4A4 4 0 0 1 17 15a4 4 0 0 1-4 4h-.5" />
-        <path d="M9 8.5h1.5M9 12h1.5M13.5 8.5H15M13.5 12H15" />
       </svg>
     ),
   },
@@ -55,12 +45,9 @@ export default function AppShell({
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(TAB_KEY);
-      const t =
-        raw === 'profile' || raw === 'daily'
-          ? 'home'
-          : raw === 'dashboard'
-            ? 'memory'
-            : (raw as Tab | null);
+      // 'memory' was a bottom-nav tab pre-relocation; land those users on Home,
+      // where "What Kona knows about you" now lives (avatar -> Profile).
+      const t = raw === 'profile' || raw === 'daily' || raw === 'dashboard' || raw === 'memory' ? 'home' : (raw as Tab | null);
       if (t && NAV.some((n) => n.tab === t)) setTab(t);
     } catch {
       /* ignore */
@@ -90,7 +77,6 @@ export default function AppShell({
         {tab === 'home' && (
           <HomeTab greetingName={greetingName} onProfileChange={onProfileChange} onOpenChat={openChat} />
         )}
-        {tab === 'memory' && <KnowsView />}
         {tab === 'chat' && (
           <Workspace
             greetingName={greetingName}

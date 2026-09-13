@@ -6,6 +6,7 @@ import {
   buildCheckinLog,
   buildHome,
   buildKnows,
+  buildSessionRecap,
   buildStarter,
   buildWeek,
   checkinReflection,
@@ -20,6 +21,7 @@ import {
   type HomeView,
   type Insight,
   type KnowsView,
+  type SessionRecap,
   type WeekView,
 } from '../src/agent/index';
 import type { KonaContext } from './server-context';
@@ -177,8 +179,28 @@ export async function getWeek(ctx: KonaContext): Promise<WeekView | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const weeklyPlan = (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
-  const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
-  return buildWeek({ profile, weeklyPlan, sessions });
+  const [sessions, actualSessions] = await Promise.all([
+    ctx.repo.listPlannedSessions(ctx.userId),
+    ctx.repo.listActualSessions(ctx.userId),
+  ]);
+  return buildWeek({ profile, weeklyPlan, sessions, actualSessions });
+}
+
+/** Post-session recap for one day (opened by tapping a day in "Your week").
+ *  Null when the athlete hasn't onboarded, or nothing was actually logged
+ *  that day — there's nothing honest to recap for a day that's only planned. */
+export async function getSessionRecap(ctx: KonaContext, date: string): Promise<SessionRecap | null> {
+  const profile = await ctx.repo.getProfile(ctx.userId);
+  if (!profile?.onboarded_at) return null;
+  const weeklyPlan = (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
+  const [plannedSessions, actualSessions, recoveryLogs, fuelLogs, memories] = await Promise.all([
+    ctx.repo.listPlannedSessions(ctx.userId),
+    ctx.repo.listActualSessions(ctx.userId),
+    ctx.repo.listRecoveryLogs(ctx.userId),
+    ctx.repo.listFuelLogs(ctx.userId),
+    ctx.repo.listMemories(ctx.userId),
+  ]);
+  return buildSessionRecap({ profile, date, weeklyPlan, plannedSessions, actualSessions, recoveryLogs, fuelLogs, memories });
 }
 
 export interface CheckinResult {

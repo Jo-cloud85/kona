@@ -349,6 +349,17 @@ export class SupabaseRepository implements Repository {
     return rows[0];
   }
 
+  async deletePlannedSession(userId: string, id: string): Promise<boolean> {
+    const { data, error } = await this.sb
+      .from('planned_sessions')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select('id');
+    if (error) fail('deletePlannedSession', error);
+    return (data as Row[]).length > 0;
+  }
+
   // --- actual sessions ----------------------------------------------
   async saveActualSession(input: NewActualSession): Promise<ActualSession> {
     const row = {
@@ -379,6 +390,12 @@ export class SupabaseRepository implements Repository {
       .order('start_at', { ascending: true });
     if (error) fail('listActualSessions', error);
     return (data as Row[]).map(rowToActual);
+  }
+
+  async deleteActualSession(userId: string, id: string): Promise<boolean> {
+    const { data, error } = await this.sb.from('sessions').delete().eq('id', id).eq('user_id', userId).select('id');
+    if (error) fail('deleteActualSession', error);
+    return (data as Row[]).length > 0;
   }
 
   // --- fuel logs ---------------------------------------------------

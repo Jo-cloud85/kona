@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import SessionRecapView from './SessionRecapView';
 
 interface Range {
   min: number;
@@ -17,6 +18,7 @@ interface WeekDay {
   title: string | null;
   duration_label: string | null;
   fuelling: { carb_g_per_hour: Range; fluid_ml_per_hour: Range } | null;
+  has_recap: boolean;
 }
 interface WeekViewData {
   has_plan: boolean;
@@ -33,9 +35,18 @@ function rangeText(r: Range): string {
   return r.min === r.max ? r.min.toLocaleString() : `${r.min.toLocaleString()}–${r.max.toLocaleString()}`;
 }
 
-export default function WeekView({ onClose }: { onClose: () => void }) {
+export default function WeekView({
+  onClose,
+  onOpenChat,
+  onOpenMemory,
+}: {
+  onClose: () => void;
+  onOpenChat?: (prefill: string) => void;
+  onOpenMemory?: () => void;
+}) {
   const [data, setData] = useState<WeekViewData | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [recapDate, setRecapDate] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/week')
@@ -90,7 +101,17 @@ export default function WeekView({ onClose }: { onClose: () => void }) {
               {data.days.map((d) => (
                 <div
                   key={d.date}
-                  className={`week-day${d.is_today ? ' is-today' : ''}${d.is_double ? ' is-double' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title ? ' is-open' : ''}`}
+                  role={d.has_recap ? 'button' : undefined}
+                  tabIndex={d.has_recap ? 0 : undefined}
+                  onClick={d.has_recap ? () => setRecapDate(d.date) : undefined}
+                  onKeyDown={
+                    d.has_recap
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') setRecapDate(d.date);
+                        }
+                      : undefined
+                  }
+                  className={`week-day${d.is_today ? ' is-today' : ''}${d.is_double ? ' is-double' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title ? ' is-open' : ''}${d.has_recap ? ' is-tappable' : ''}`}
                 >
                   <span className="week-day-dow">{d.weekday}</span>
                   <div className="week-day-main">
@@ -117,6 +138,15 @@ export default function WeekView({ onClose }: { onClose: () => void }) {
           </>
         )}
       </div>
+
+      {recapDate && (
+        <SessionRecapView
+          date={recapDate}
+          onBack={() => setRecapDate(null)}
+          onOpenChat={onOpenChat}
+          onOpenMemory={onOpenMemory}
+        />
+      )}
     </div>
   );
 }

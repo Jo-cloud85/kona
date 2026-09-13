@@ -111,10 +111,14 @@ export interface Repository {
     dateIso: string,
     sport?: Sport,
   ): Promise<PlannedSession | undefined>;
+  /** true if a row existed and was deleted. Scoped to userId regardless of RLS. */
+  deletePlannedSession(userId: string, id: string): Promise<boolean>;
 
   saveActualSession(input: NewActualSession): Promise<ActualSession>;
   getActualSession(id: string): Promise<ActualSession | undefined>;
   listActualSessions(userId: string): Promise<ActualSession[]>;
+  /** true if a row existed and was deleted. Scoped to userId regardless of RLS. */
+  deleteActualSession(userId: string, id: string): Promise<boolean>;
 
   saveFuelLog(input: NewFuelLog): Promise<FuelLog>;
   listFuelLogs(userId: string, sessionId?: string): Promise<FuelLog[]>;
