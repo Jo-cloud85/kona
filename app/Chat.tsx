@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { tzHeaders } from './client-tz';
 
 interface ChatEntry {
   /** Stored message id. Absent only briefly on an optimistic user bubble. */
@@ -72,7 +73,7 @@ export default function Chat({
     setPrompts([]);
     setPicks({});
     setEditingId(null);
-    fetch(`/api/chat?conversationId=${encodeURIComponent(conversationId)}`)
+    fetch(`/api/chat?conversationId=${encodeURIComponent(conversationId)}`, { headers: tzHeaders() })
       .then((r) => r.json())
       .then((data: { llm?: string; messages?: ChatEntry[]; starter?: Starter | null }) => {
         if (data.llm) setLlm(data.llm);
@@ -112,7 +113,7 @@ export default function Chat({
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...tzHeaders() },
           body: JSON.stringify({
             message,
             conversationId,

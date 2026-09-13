@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { tzHeaders } from './client-tz';
 import SessionRecapView from './SessionRecapView';
 
 interface Range {
@@ -49,7 +50,7 @@ export default function WeekView({
   const [recapDate, setRecapDate] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/week')
+    fetch('/api/week', { headers: tzHeaders() })
       .then((r) => r.json())
       .then((d: { week: WeekViewData | null }) => setData(d.week))
       .catch(() => undefined)

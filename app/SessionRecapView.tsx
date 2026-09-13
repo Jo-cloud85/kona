@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { tzHeaders } from './client-tz';
 
 interface Range {
   min: number;
@@ -50,7 +51,7 @@ export default function SessionRecapView({
   const [showWhy, setShowWhy] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/recap?date=${encodeURIComponent(date)}`)
+    fetch(`/api/recap?date=${encodeURIComponent(date)}`, { headers: tzHeaders() })
       .then((r) => r.json())
       .then((d: { recap: SessionRecap | null }) => setData(d.recap))
       .catch(() => undefined)

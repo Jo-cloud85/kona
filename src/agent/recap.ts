@@ -2,6 +2,7 @@ import type { ActualSession, FuelLog, PersistedMemory, Profile, Range, RecoveryL
 import { buildDashboard } from './dashboard';
 import { deriveInsights } from './insights';
 import { titleFor, weekdayFull } from './home';
+import { DEFAULT_TZ, localDateOf, localTimeOf } from '../domain/time';
 
 /**
  * A single session's post-session recap ("1i" in the reference set) — what
@@ -71,14 +72,13 @@ function hm(minutes: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-function localTime(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
 export function buildSessionRecap(input: {
   profile: Profile;
   date: string;
+  /** The athlete's IANA timezone — recovery/fuel logs are stored as true UTC
+   *  instants, so bucketing them onto `date` (an athlete-local calendar day)
+   *  needs it. Defaults to UTC (the old behaviour) if not given. */
+  tz?: string;
   weeklyPlan?: WeeklyPlan;
   plannedSessions: PlannedSession[];
   actualSessions: ActualSession[];
@@ -86,16 +86,20 @@ export function buildSessionRecap(input: {
   fuelLogs: FuelLog[];
   memories: PersistedMemory[];
 }): SessionRecap | null {
+  const tz = input.tz ?? DEFAULT_TZ;
+  // start_at is already a naive athlete-local datetime (resolved by the chat
+  // LLM against its own local "now" — see src/domain/time.ts), so this
+  // comparison needs no tz conversion; only the UTC-instant fields below do.
   const actual = input.actualSessions.find((a) => a.start_at.slice(0, 10) === input.date);
   if (!actual) return null;
 
   const dayRecovery = input.recoveryLogs
-    .filter((r) => r.logged_at.slice(0, 10) === input.date)
+    .filter((r) => localDateOf(r.logged_at, tz) === input.date)
     .sort((a, b) => b.logged_at.localeCompare(a.logged_at));
   const checkinLog = dayRecovery.map((r) => ({ r, parsed: parseCheckin(r.free_text) })).find((x) => x.parsed);
   const checkin = checkinLog?.parsed ?? null;
 
-  const dayFuel = input.fuelLogs.filter((f) => f.logged_at.slice(0, 10) === input.date);
+  const dayFuel = input.fuelLogs.filter((f) => localDateOf(f.logged_at, tz) === input.date);
   const fuel_carried = dayFuel.length
     ? dayFuel
         .flatMap((f) => f.items)
@@ -127,7 +131,11 @@ export function buildSessionRecap(input: {
     weekday_full: weekdayFull(input.date),
     title: titleFor(actual),
     feel_label: checkin?.feel ?? null,
-    logged_at_time: actual.created_at ? localTime(actual.created_at) : checkinLog ? localTime(checkinLog.r.logged_at) : null,
+    logged_at_time: actual.created_at
+      ? localTimeOf(actual.created_at, tz)
+      : checkinLog
+        ? localTimeOf(checkinLog.r.logged_at, tz)
+        : null,
     distance_km: actual.distance_km ?? null,
     distance_label: actual.distance_label ?? null,
     duration_label: actual.duration_minutes ? hm(actual.duration_minutes) : null,

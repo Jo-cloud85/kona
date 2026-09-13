@@ -2,6 +2,7 @@ import 'server-only';
 import type { Profile } from '../src/domain/types';
 import type { EditReconciliation } from '../src/data/index';
 import type { ProfileFormData } from '../src/domain/profile-input';
+import { athleteNow, localDateOf, DEFAULT_TZ } from '../src/domain/time';
 import {
   buildCheckinLog,
   buildHome,
@@ -60,8 +61,13 @@ export interface SentMessage {
   reconciled?: EditReconciliation;
 }
 
-export async function sendMessage(ctx: KonaContext, conversationId: string, message: string): Promise<SentMessage> {
-  const turn = await handleMessage(deps(ctx), { userId: ctx.userId, conversationId, message });
+export async function sendMessage(
+  ctx: KonaContext,
+  conversationId: string,
+  message: string,
+  tz: string = DEFAULT_TZ,
+): Promise<SentMessage> {
+  const turn = await handleMessage(deps(ctx), { userId: ctx.userId, conversationId, message, now: athleteNow(tz) });
   let session_prompts: unknown[] = [];
   for (const r of turn.tool_results) {
     const analysis = (r.data as { analysis?: { session_prompts?: { in_focus?: boolean }[] } } | undefined)?.analysis;
@@ -104,11 +110,12 @@ export async function editMessage(
   conversationId: string,
   messageId: string,
   newText: string,
+  tz: string = DEFAULT_TZ,
 ): Promise<SentMessage> {
   const removedIds = await ctx.repo.listMessageIdsFrom(ctx.userId, conversationId, messageId);
   const reconciled = await ctx.repo.deleteRecordsForMessages(ctx.userId, removedIds);
   await ctx.repo.deleteMessagesFrom(ctx.userId, conversationId, messageId);
-  const sent = await sendMessage(ctx, conversationId, newText);
+  const sent = await sendMessage(ctx, conversationId, newText, tz);
   return { ...sent, reconciled };
 }
 
@@ -119,6 +126,8 @@ export async function listConversations(ctx: KonaContext) {
 function ymdLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+// athleteNow()'s local getters already read back the athlete's wall clock
+// (see src/domain/time.ts) — ymdLocal(athleteNow(tz)) is "today" for them.
 
 export async function getInsights(ctx: KonaContext): Promise<Insight[]> {
   const [actualSessions, recoveryLogs, fuelLogs, memories] = await Promise.all([
@@ -143,7 +152,7 @@ export async function getKnows(ctx: KonaContext): Promise<KnowsView | null> {
   return buildKnows({ profile, memories, actualSessions, recoveryLogs, fuelLogs, events });
 }
 
-export async function getHome(ctx: KonaContext, selectedDate?: string): Promise<HomeView | null> {
+export async function getHome(ctx: KonaContext, selectedDate?: string, tz: string = DEFAULT_TZ): Promise<HomeView | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const [weeklyPlans, actualSessions, recoveryLogs, fuelLogs, memories] = await Promise.all([
@@ -160,8 +169,9 @@ export async function getHome(ctx: KonaContext, selectedDate?: string): Promise<
   // during alpha testing, 2026-09-12). buildHome indexes sessions by date, so
   // anything outside the displayed week is naturally ignored anyway.
   const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
-  const today = ymdLocal(new Date());
-  const checkinDoneToday = recoveryLogs.some((l) => ymdLocal(new Date(l.logged_at)) === today);
+  const now = athleteNow(tz);
+  const today = ymdLocal(now);
+  const checkinDoneToday = recoveryLogs.some((l) => localDateOf(l.logged_at, tz) === today);
   return buildHome({
     profile,
     weeklyPlan,
@@ -172,10 +182,11 @@ export async function getHome(ctx: KonaContext, selectedDate?: string): Promise<
     recoveryLogs,
     fuelLogs,
     memories,
+    now,
   });
 }
 
-export async function getWeek(ctx: KonaContext): Promise<WeekView | null> {
+export async function getWeek(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise<WeekView | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const weeklyPlan = (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
@@ -183,13 +194,13 @@ export async function getWeek(ctx: KonaContext): Promise<WeekView | null> {
     ctx.repo.listPlannedSessions(ctx.userId),
     ctx.repo.listActualSessions(ctx.userId),
   ]);
-  return buildWeek({ profile, weeklyPlan, sessions, actualSessions });
+  return buildWeek({ profile, weeklyPlan, sessions, actualSessions, now: athleteNow(tz) });
 }
 
 /** Post-session recap for one day (opened by tapping a day in "Your week").
  *  Null when the athlete hasn't onboarded, or nothing was actually logged
  *  that day — there's nothing honest to recap for a day that's only planned. */
-export async function getSessionRecap(ctx: KonaContext, date: string): Promise<SessionRecap | null> {
+export async function getSessionRecap(ctx: KonaContext, date: string, tz: string = DEFAULT_TZ): Promise<SessionRecap | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const weeklyPlan = (await ctx.repo.listWeeklyPlans(ctx.userId)).at(-1);
@@ -200,7 +211,7 @@ export async function getSessionRecap(ctx: KonaContext, date: string): Promise<S
     ctx.repo.listFuelLogs(ctx.userId),
     ctx.repo.listMemories(ctx.userId),
   ]);
-  return buildSessionRecap({ profile, date, weeklyPlan, plannedSessions, actualSessions, recoveryLogs, fuelLogs, memories });
+  return buildSessionRecap({ profile, date, tz, weeklyPlan, plannedSessions, actualSessions, recoveryLogs, fuelLogs, memories });
 }
 
 export interface CheckinResult {
@@ -231,9 +242,9 @@ export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Prom
 }
 
 /** The opening message + conversation starters. Null until the user has onboarded. */
-export async function getStarter(ctx: KonaContext): Promise<ChatStarter | null> {
+export async function getStarter(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise<ChatStarter | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
-  return buildStarter(profile, { now: new Date(), sessions });
+  return buildStarter(profile, { now: athleteNow(tz), sessions });
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import CheckinDialog from './CheckinDialog';
+import { tzHeaders } from './client-tz';
 import KnowsView from './KnowsView';
 import ProfileForm, { type ProfileValues } from './ProfileForm';
 import SignOutButton from './SignOutButton';
@@ -122,7 +123,7 @@ export default function HomeTab({
 
   const load = useCallback((date?: string) => {
     const qs = date ? `?date=${encodeURIComponent(date)}` : '';
-    return fetch(`/api/home${qs}`)
+    return fetch(`/api/home${qs}`, { headers: tzHeaders() })
       .then((r) => r.json())
       .then((d: { home: HomeView | null }) => setData(d.home))
       .catch(() => undefined)

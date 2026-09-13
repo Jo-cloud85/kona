@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryRepository } from '../../src/data/index';
 import { DeterministicLlmClient, runTool } from '../../src/agent/index';
 import { getHome, getWeek, getStarter } from '../../lib/kona-server';
@@ -205,4 +205,40 @@ describe('delete_planned_session / delete_actual_session', () => {
     expect(del.ok).toBe(true);
     expect(await repo.listActualSessions(USER_ID)).toHaveLength(0);
   });
+});
+
+describe('getHome/getWeek/sendMessage use the athlete\'s timezone for "today", not the server\'s clock', () => {
+  // 2026-09-13T16:20:00Z == 2026-09-14T00:20:00+08:00 — the exact real-world
+  // instant the bug was found at: server-local/UTC still reads the 13th, the
+  // athlete's own wall clock already reads the 14th.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-13T16:20:00.000Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('getHome reports "today" in the athlete\'s local date, not the server\'s', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+
+    const utcHome = await getHome(ctx, undefined, 'UTC');
+    expect(utcHome!.today).toBe('2026-09-13');
+
+    const sgtHome = await getHome(ctx, undefined, 'Asia/Singapore');
+    expect(sgtHome!.today).toBe('2026-09-14');
+  });
+
+  it('getWeek highlights the athlete\'s local today, not the server\'s', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+
+    const sgtWeek = await getWeek(ctx, 'Asia/Singapore');
+    expect(sgtWeek!.days.find((d) => d.is_today)?.date).toBe('2026-09-14');
+
+    const utcWeek = await getWeek(ctx, 'UTC');
+    expect(utcWeek!.days.find((d) => d.is_today)?.date).toBe('2026-09-13');
+  });
+
 });

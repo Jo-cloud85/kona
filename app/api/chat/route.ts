@@ -1,5 +1,5 @@
 import { editMessage, getStarter, listMessages, llmName, sendMessage } from '../../../lib/kona-server';
-import { requireContext } from '../../../lib/route-helpers';
+import { requireContext, requestTimezone } from '../../../lib/route-helpers';
 
 // The core uses node:crypto and an in-memory store — must run on the Node runtime.
 export const runtime = 'nodejs';
@@ -24,7 +24,7 @@ export async function GET(req: Request): Promise<Response> {
   return Response.json({
     llm: llmName(),
     messages: messages.map((m) => ({ id: m.id, role: m.role, content: m.content, at: m.created_at })),
-    starter: messages.length === 0 ? await getStarter(c.ctx) : null,
+    starter: messages.length === 0 ? await getStarter(c.ctx, requestTimezone(req)) : null,
   });
 }
 
@@ -63,10 +63,11 @@ export async function POST(req: Request): Promise<Response> {
     editId = editMessageId;
   }
 
+  const tz = requestTimezone(req);
   try {
     const { turn, session_prompts, reconciled } = editId
-      ? await editMessage(c.ctx, convId, editId, message.trim())
-      : await sendMessage(c.ctx, convId, message.trim());
+      ? await editMessage(c.ctx, convId, editId, message.trim(), tz)
+      : await sendMessage(c.ctx, convId, message.trim(), tz);
     return Response.json({
       reply: turn.reply,
       intent: turn.intent,

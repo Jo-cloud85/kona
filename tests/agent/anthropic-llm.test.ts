@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { createSeededRepository, DEMO_USER_ID } from '../../src/data/index';
+import { athleteNow } from '../../src/domain/time';
 import {
   AnthropicLlmClient,
   handleMessage,
@@ -192,5 +193,29 @@ describe('AnthropicLlmClient (fake transport, no network)', () => {
 
     expect(turn.intent).toBe('safety_escalation');
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('now_iso in the interpret prompt is the athlete\'s local wall clock, not the server\'s UTC clock (real alpha bug, 2026-09-14)', async () => {
+    const create = vi
+      .fn<AnthropicLike['messages']['create']>()
+      .mockResolvedValueOnce(msg([{ type: 'text', text: 'ok' }]));
+    const fake: AnthropicLike = { messages: { create } };
+    const repo = await createSeededRepository();
+    const deps: AgentDeps = { repo, llm: new AnthropicLlmClient({ client: fake }) };
+
+    // 2026-09-13T16:20:00Z is still the 13th in UTC, but already 2026-09-14
+    // 00:20 for an Asia/Singapore athlete — the exact real-world instant the
+    // bug (a "today" session saved under the wrong calendar day) was found at.
+    const realInstant = new Date('2026-09-13T16:20:00.000Z');
+    await handleMessage(deps, {
+      userId: DEMO_USER_ID,
+      conversationId: 'c-tz',
+      message: 'What am I doing today?',
+      now: athleteNow('Asia/Singapore', realInstant),
+    });
+
+    const interpretText = String(create.mock.calls[0]![0].messages[0]!.content);
+    expect(interpretText).toContain('2026-09-14');
+    expect(interpretText).not.toContain('2026-09-13');
   });
 });

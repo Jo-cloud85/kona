@@ -1,4 +1,5 @@
 import type { Repository } from '../data/repository';
+import { localIsoString } from '../domain/time';
 import { deriveTurnEvents } from './activity';
 import { buildContext } from './context';
 import { deriveInsights } from './insights';
@@ -96,7 +97,11 @@ function resolveArgs(
 
 export async function handleMessage(deps: AgentDeps, input: HandleMessageInput): Promise<AgentTurn> {
   const { repo, llm } = deps;
-  const nowIso = (input.now ?? new Date()).toISOString();
+  // localIsoString, not .toISOString(): the latter always renders the Date's
+  // true UTC instant regardless of how it was constructed, which would
+  // silently discard athleteNow()'s athlete-local reading (see
+  // src/domain/time.ts) and reintroduce the wrong-day bug this is fixing.
+  const nowIso = localIsoString(input.now ?? new Date());
 
   const userMessage = await repo.appendMessage({
     user_id: input.userId,
