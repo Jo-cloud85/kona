@@ -9,23 +9,44 @@ below, explicitly requested), don't fabricate insights, stop for a
 product review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
 
-## ⚠️ Known bug, not yet fixed: "today" can resolve to the wrong calendar
-date server-side (2026-09-14)
-Found live while testing the session-recap feature just after local
-midnight. `src/agent/orchestrator.ts`'s `now_iso` (what the chat LLM is told
-"now" is) is `new Date().toISOString()` — always UTC. `src/agent/home.ts`'s
-`ymdLocal` and friends use the server process's *local* timezone instead.
-Locally these happened to agree (dev server on the founder's own machine).
-**On Vercel, the server's local timezone is UTC**, so both paths actually
-compute the same (wrong) day for any athlete outside UTC, for however many
-hours their offset spans each day (~8/day for SGT) — e.g. a chat message
-sent at 00:20 SGT gets logged against the *previous* calendar day. Root
-cause: nothing in the app stores or knows the athlete's timezone; every
-"what day is it" computation is a guess from the server's own clock.
-Proper fix needs the client's local time threaded through (chat already
-has an unused `now` override in `HandleMessageInput` for exactly this —
-Home/Week/recap would need the same). Not attempted yet — real scope, own
-pass. Flagged to the founder; not started without explicit go-ahead.
+### "Today" now resolves against the athlete's timezone, not the server's (2026-09-14) ✅
+_Found live the same day, while testing the session-recap feature just after
+local midnight; fixed immediately after on explicit go-ahead. Root cause:
+nothing in the app stored or knew the athlete's timezone, so every "what day
+is it" computation guessed from the server's own clock — harmless
+coincidence in local dev (server = founder's own machine), wrong on Vercel
+(server timezone is UTC) for however many hours the athlete's offset spans
+each day (~8/day for Singapore): a chat message near local midnight got its
+new session, or a check-in note, attributed to the wrong calendar day._
+- New `src/domain/time.ts`: `athleteNow(tz, real)` returns a `Date` whose
+  LOCAL getters read back the athlete's wall clock for a real instant —
+  every existing "now" consumer (`buildHome`/`buildWeek`/`buildStarter`)
+  already reads local getters, so passing this in place of `new Date()`
+  fixed them with no further changes needed there. `localDateOf`/
+  `localTimeOf` do the same for bucketing already-stored UTC instants
+  (recovery/fuel `logged_at`) onto a local calendar day — needed so the
+  new recap screen's log-matching stays correct too, not just new saves.
+  `localIsoString` formats via local getters instead of `.toISOString()`,
+  which — caught by a failing test, not by inspection — always renders the
+  true UTC instant regardless of how the `Date` was built, silently
+  undoing `athleteNow()`'s entire point when `orchestrator.ts` used it for
+  `now_iso` (what the chat LLM resolves "today"/"tomorrow" against).
+- `app/client-tz.ts` sends the browser's IANA zone as an `x-kona-tz` header
+  on every request that resolves "today" (chat, home, week, recap);
+  `lib/route-helpers.ts`'s `requestTimezone()` reads + validates it,
+  falling back to UTC (the old behaviour) if a client hasn't sent one yet.
+- `created_at`/`logged_at` were never the problem and didn't change — they
+  stay real, unambiguous UTC instants in storage. Only how "now"/"today"
+  get *derived* from them changed.
+- Tests: direct coverage for `time.ts` at the exact real-world instant the
+  bug was found at; a prompt-content test proving `now_iso` reaches the LLM
+  as the athlete's local date (the test that caught the `toISOString()`
+  regression above); fake-timer integration tests for `getHome`/`getWeek`.
+  Live-verified end-to-end against the real model at the reproducing
+  instant: a "10km run today" message now lands on the right local date,
+  and a follow-up recovery/fuel message correctly correlates onto that
+  session in the recap screen (previously null — the second half of the
+  same bug).
 
 ### Delete capability, rolling windows, Memory→Profile, session recap (2026-09-14) ✅
 Five related asks from live founder testing, built together since they touch
