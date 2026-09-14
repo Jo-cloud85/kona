@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildStarter } from '../../src/agent/index';
+import type { KonaBriefing } from '../../src/agent/briefing';
 import type { PlannedSession, Profile } from '../../src/domain/types';
 
 const profile: Profile = {
@@ -26,6 +27,16 @@ function planned(over: Partial<PlannedSession>): PlannedSession {
   };
 }
 
+const NO_TARGET: KonaBriefing = {
+  has_target: false,
+  when: null,
+  date: null,
+  headline: null,
+  action: 'Nothing meaningful coming up in the next week — normal training and fuelling.',
+  why: null,
+  basis: null,
+};
+
 describe('buildStarter', () => {
   it('introduces itself warmly, by name, without a wall of numbers', () => {
     const s = buildStarter(profile);
@@ -36,6 +47,12 @@ describe('buildStarter', () => {
     // no fuelling numbers in the opener
     expect(s.greeting).not.toMatch(/\d+\s*(g|ml|kcal|mg)\b/);
     expect(s.greeting).not.toMatch(/protein target|sodium per litre/i);
+  });
+
+  it('is explicit it does not sync Strava/Garmin/a watch (M24.6 — no implied integration)', () => {
+    const s = buildStarter(profile);
+    expect(s.greeting).toMatch(/bring your training plan/i);
+    expect(s.greeting).toMatch(/don't sync strava, garmin/i);
   });
 
   it('asks what they are working towards when no goal is set', () => {
@@ -52,7 +69,7 @@ describe('buildStarter', () => {
   it('offers three conversation starters that prefill a parseable stub', () => {
     const s = buildStarter(profile);
     expect(s.prompts.map((p) => p.label)).toEqual([
-      'My training week',
+      'My training plan',
       "What I'm doing today or tomorrow",
       'My next race',
     ]);
@@ -64,35 +81,51 @@ describe('buildStarter', () => {
     expect(s.greeting).toMatch(/^Hi there, I'm Kona/);
   });
 
-  it('leads with a key session coming up in the next few days', () => {
+  it('leads with the Kona Briefing when one is given — same judgment as Home (M24.4)', () => {
+    const briefing: KonaBriefing = {
+      has_target: true,
+      when: 'Tomorrow',
+      date: '2026-09-10',
+      headline: 'Long run',
+      action: 'Bring extra fluid — your second bottle if you have one.',
+      why: 'Last time you did a similar long run (3 Sep), you said: "got very thirsty".',
+      basis: 'reported',
+    };
+    const s = buildStarter(profile, {
+      now: NOW,
+      sessions: [planned({ start_at: '2026-09-10T06:00:00', distance_km: 18, is_long: true })],
+      briefing,
+    });
+    expect(s.greeting).toMatch(/Tomorrow · Long run/);
+    expect(s.greeting).toMatch(/Bring extra fluid/);
+    expect(s.greeting).toMatch(/got very thirsty/);
+  });
+
+  it('asks for missing detail when the target session still needs it', () => {
+    const briefing: KonaBriefing = {
+      has_target: true,
+      when: 'Tomorrow',
+      date: '2026-09-10',
+      headline: 'Long run',
+      action: 'Nothing special to prepare — normal meals and fluids are fine.',
+      why: null,
+      basis: null,
+    };
     const s = buildStarter(profile, {
       now: NOW,
       sessions: [
-        planned({ sport: 'running', start_at: '2026-09-10T06:00:00', distance_km: 18, is_long: true }),
-        planned({ sport: 'swimming', start_at: '2026-09-12T18:00:00', intensity: 'easy' }),
+        planned({ start_at: '2026-09-10T06:00:00', is_long: true, needs_detail: ['duration_or_distance'] }),
       ],
+      briefing,
     });
-    expect(s.greeting).toMatch(/coming up tomorrow: your 18 km long running/i);
-    expect(s.greeting).toMatch(/real fuelling day|worth getting it right|worth getting right/i);
+    expect(s.greeting).toMatch(/fill in the rest of the details/i);
   });
 
-  it('mentions a non-key session more lightly, and asks for missing detail', () => {
-    const s = buildStarter(profile, {
-      now: NOW,
-      sessions: [planned({ sport: 'cycling', start_at: '2026-09-11T07:00:00', needs_detail: ['duration_or_distance'] })],
-    });
-    expect(s.greeting).toMatch(/you've got a cycling on friday/i);
-    expect(s.greeting).toMatch(/fill me in/i);
-  });
+  it('stays generic when nothing meaningful is coming up, or no briefing was given at all', () => {
+    const withNoTarget = buildStarter(profile, { now: NOW, sessions: [], briefing: NO_TARGET });
+    expect(withNoTarget.greeting).not.toMatch(/·/);
 
-  it('stays generic when nothing is coming up soon (or there is no plan)', () => {
-    const far = buildStarter(profile, {
-      now: NOW,
-      sessions: [planned({ start_at: '2026-09-20T06:00:00', distance_km: 10 })],
-    });
-    expect(far.greeting).not.toMatch(/coming up/i);
-
-    const none = buildStarter(profile, { now: NOW, sessions: [] });
-    expect(none.greeting).not.toMatch(/coming up|you've got a/i);
+    const withoutBriefing = buildStarter(profile, { now: NOW, sessions: [] });
+    expect(withoutBriefing.greeting).not.toMatch(/·/);
   });
 });

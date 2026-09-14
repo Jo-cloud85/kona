@@ -54,6 +54,15 @@ interface HomeWeekPreviewDay {
   title: string | null;
   duration_label: string | null;
 }
+export interface KonaBriefing {
+  has_target: boolean;
+  when: string | null;
+  date: string | null;
+  headline: string | null;
+  action: string;
+  why: string | null;
+  basis: 'reported' | 'repeated' | 'outcome' | 'adaptation' | null;
+}
 interface HomeView {
   greeting_name: string | null;
   today: string;
@@ -83,7 +92,7 @@ interface HomeView {
       } | null;
       needs: string[];
     };
-    next_key: { when: string; headline: string; line: string } | null;
+    kona_briefing: KonaBriefing;
     remembers: string[];
   };
 }
@@ -262,6 +271,7 @@ export default function HomeTab({
   const sel = data.selected;
   const b = data.briefing;
   const yd = b.your_day;
+  const kb = b.kona_briefing;
   const dayLabel = sel.is_today ? 'Your day' : `${WEEKDAY_FULL[sel.weekday] ?? sel.weekday} · ${longDate(sel.date)}`;
   const chatPrefill = sel.sessions.length
     ? `Change my ${WEEKDAY_FULL[sel.weekday] ?? sel.weekday} session to `
@@ -305,12 +315,22 @@ export default function HomeTab({
         </button>
       )}
 
-      {/* YOUR DAY */}
+      {/* KONA BRIEFING (M24) — "how should you approach the next session?" —
+          the one evidence-backed recommendation, always present. This is the
+          top card; "Your day" below is the plain factual/fueling-numbers
+          display for whichever day is selected. */}
       <section className="home-card kona-card brief-card">
         <p className="kona-eyebrow">
           <span className="dot" aria-hidden />
-          Kona · {dayLabel}
+          {kb.has_target ? `${kb.when} · ${kb.headline}` : 'Kona briefing'}
         </p>
+        <p className="brief-headline">{kb.action}</p>
+        {kb.why && <p className="brief-line brief-why">{kb.why}</p>}
+      </section>
+
+      {/* YOUR DAY */}
+      <section className="home-card brief-card">
+        <p className="brief-label">{dayLabel}</p>
         <p className="brief-headline">{yd.headline}</p>
         <p className="brief-line">{yd.line}</p>
 
@@ -382,17 +402,6 @@ export default function HomeTab({
         </button>
       </section>
 
-      {/* ONE THING TO THINK ABOUT */}
-      {b.next_key && (
-        <section className="home-card brief-card">
-          <p className="brief-label">One thing to think about</p>
-          <p className="brief-headline">
-            {b.next_key.when} — {b.next_key.headline}
-          </p>
-          <p className="brief-line">{b.next_key.line}</p>
-        </section>
-      )}
-
       {/* KONA REMEMBERS */}
       {b.remembers.length > 0 && (
         <section className="home-card brief-card">
@@ -412,6 +421,9 @@ export default function HomeTab({
       {checkinOpen && (
         <CheckinDialog
           contextLabel={checkinFor && checkinFor !== data.today ? weekdayFullFor(checkinFor) : undefined}
+          // Only today's own check-in closes the loop (M24.5) — a missed-day
+          // catch-up isn't about today's briefing.
+          konaBriefing={checkinFor === data.today ? kb : undefined}
           onClose={dismissCheckin}
           onDone={() => {
             if (checkinFor && checkinFor !== data.today) markMissedResolved(checkinFor);

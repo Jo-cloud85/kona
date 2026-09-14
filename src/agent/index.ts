@@ -31,7 +31,23 @@ export {
 export { buildWeek, type WeekView, type WeekDayView } from './week';
 export { buildSessionRecap, type SessionRecap } from './recap';
 export { buildCheckinLog, checkinReflection, type CheckinInput, type CheckinLog } from './checkin';
-export { deriveInsights, type Insight, type InsightKind, type InsightBasis, type InsightInput } from './insights';
+export {
+  deriveInsights,
+  effectiveIsLong,
+  similarSessionFlag,
+  type Insight,
+  type InsightKind,
+  type InsightBasis,
+  type InsightInput,
+  type SessionFlag,
+  type SessionFlagCategory,
+  type SessionCandidate,
+} from './insights';
+export {
+  buildKonaBriefing,
+  findNextMeaningfulSession,
+  type KonaBriefing,
+} from './briefing';
 export {
   buildKnows,
   type KnowsView,

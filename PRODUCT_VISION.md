@@ -9,15 +9,23 @@ Suggested positioning:
 Possible supporting line:
 > Kona learns what you're training for, what you did, how you fuelled and how you felt — then helps you prepare for the next one.
 
-## Product thesis (2026 reset)
-Kona is an AI endurance companion for the **self-coached, moderately serious,
-multi-sport recreational athlete** — conceptually a simplified "Jarvis for
-endurance training". The athlete should feel Kona understands what they are
-training for, what they are doing today, what they have done recently, how they
-fuelled, how they felt, what has worked before, what hasn't, and their
-preferences and constraints. Fuelling is the initial wedge; the long-term value
-is the **relationship and accumulated understanding of the athlete**, not a
-calculator or a nutrition tracker.
+## Product thesis (2026 reset, refined M24)
+Kona is a **sustainable performance companion** for the self-coached,
+moderately serious, multi-sport recreational athlete — conceptually a
+simplified "Jarvis for endurance training." The athlete already has a
+training plan and often existing tools (Strava, Garmin, COROS, Apple Watch);
+Kona's job is not to replace or generate that plan, but to answer, given
+everything going on with the athlete, how they should approach the next
+session. **You bring your training plan. Kona helps you execute it
+sustainably.**
+
+Session judgment — not fuelling numbers — is the wedge. Fuelling, hydration,
+recovery, reported discomfort and what has or hasn't worked before are all
+*inputs* to that judgment, not the product itself. The long-term value is the
+**relationship and accumulated understanding of the athlete**, not a
+calculator or a nutrition tracker. See `M24` (the Kona Briefing) for the
+concrete product experience this drives: memory → judgment → one specific,
+evidence-backed action, or an honest "nothing special needed."
 
 Architecture: **foundation model + structured athlete context + longitudinal
 memory + deterministic calculation/rules engine + conversation.** We do not train

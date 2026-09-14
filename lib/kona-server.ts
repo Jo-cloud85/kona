@@ -7,6 +7,7 @@ import {
   buildCheckinLog,
   buildHome,
   buildKnows,
+  buildKonaBriefing,
   buildSessionRecap,
   buildStarter,
   buildWeek,
@@ -173,6 +174,7 @@ export async function getHome(ctx: KonaContext, selectedDate?: string, tz: strin
   const today = ymdLocal(now);
   const recoveryDates = new Set(recoveryLogs.map((l) => localDateOf(l.logged_at, tz)));
   const checkinDoneToday = recoveryDates.has(today);
+  const konaBriefing = buildKonaBriefing({ today, sessions, actualSessions, recoveryLogs });
   return buildHome({
     profile,
     weeklyPlan,
@@ -185,6 +187,7 @@ export async function getHome(ctx: KonaContext, selectedDate?: string, tz: strin
     fuelLogs,
     memories,
     now,
+    konaBriefing,
   });
 }
 
@@ -247,6 +250,14 @@ export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Prom
 export async function getStarter(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise<ChatStarter | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
-  const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
-  return buildStarter(profile, { now: athleteNow(tz), sessions });
+  const [sessions, actualSessions, recoveryLogs] = await Promise.all([
+    ctx.repo.listPlannedSessions(ctx.userId),
+    ctx.repo.listActualSessions(ctx.userId),
+    ctx.repo.listRecoveryLogs(ctx.userId),
+  ]);
+  const now = athleteNow(tz);
+  // Same judgment as Home (M24.4) — literally the same function, so the
+  // opener and the Home briefing can never say different things.
+  const briefing = buildKonaBriefing({ today: ymdLocal(now), sessions, actualSessions, recoveryLogs });
+  return buildStarter(profile, { now, sessions, briefing });
 }

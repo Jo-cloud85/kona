@@ -15,6 +15,13 @@ export interface CheckinInput {
   went_as_planned: boolean;
   pains: boolean;
   elaborate?: string;
+  /** M24.5 — closes the loop on a Kona Briefing recommendation. Only asked
+   *  (and only meaningful) when Home actually gave a real, evidence-backed
+   *  action for today — see the `konaBriefing` prop threaded through
+   *  CheckinDialog. Undefined when the question wasn't shown at all. */
+  followed_recommendation?: boolean;
+  /** Only meaningful when `followed_recommendation` is true. */
+  recommendation_outcome?: 'better' | 'worse' | 'same';
 }
 
 export interface CheckinLog {
@@ -48,6 +55,22 @@ export function buildCheckinLog(input: CheckinInput): CheckinLog {
     `Injuries / cramps / pains: ${input.pains ? 'yes' : 'no'}.`,
   ];
   if (elaborate) parts.push(`Notes: ${elaborate}`);
+  // Closes the loop on a Kona Briefing recommendation (M24.5). Phrasing is
+  // deliberate, not incidental: it's chosen to trip insights.ts's existing
+  // positiveFeel / TROUBLE_RE wording, so the NEXT similarSessionFlag lookup
+  // for a comparable session reads this outcome the same way it reads any
+  // other recovery note — no change needed to insights.ts's input surface.
+  if (input.followed_recommendation === true) {
+    const outcome =
+      input.recommendation_outcome === 'worse'
+        ? 'but it still felt rough'
+        : input.recommendation_outcome === 'better'
+          ? 'and it went well'
+          : 'about the same as usual, no issues';
+    parts.push(`Followed Kona's earlier suggestion for today's session — ${outcome}.`);
+  } else if (input.followed_recommendation === false) {
+    parts.push("Did not follow Kona's earlier suggestion for today's session.");
+  }
   const free_text = parts.join(' ');
 
   const parsed = parseRecovery(elaborate || feel);

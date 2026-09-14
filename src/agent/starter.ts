@@ -1,10 +1,13 @@
 import type { PlannedSession, Profile, Sport } from '../domain/types';
+import type { KonaBriefing } from './briefing';
 
 /**
  * The opening message Kona shows on an empty conversation. Warm and short — an
  * assistant introducing itself, NOT an app reciting a calculation. When there's
- * a plan, it also *initiates*: it leads with the nearest session worth preparing
- * for, rather than waiting to be asked.
+ * a plan, it also *initiates*: it leads with the Kona Briefing (M24) — the
+ * SAME judgment Home shows, not a separate read of the schedule — so the
+ * athlete is never made to ask "what should I do today?" before Kona uses
+ * what it already knows.
  */
 
 export interface ChatStarter {
@@ -18,6 +21,8 @@ export interface StarterContext {
   now: Date;
   /** Planned sessions from the current weekly plan (any dates). */
   sessions: PlannedSession[];
+  /** The same briefing `lib/kona-server.ts` computes for Home (M24.4). */
+  briefing?: KonaBriefing;
 }
 
 const SPORT_LABEL: Record<Sport, string> = {
@@ -33,57 +38,6 @@ const SPORT_LABEL: Record<Sport, string> = {
   other: 'training',
 };
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-/** Whole days from `now` (local midnight) to the date string, or null if past. */
-function daysUntil(dateStr: string, now: Date): number {
-  const [y, m, d] = dateStr.split('-').map(Number) as [number, number, number];
-  const then = new Date(y, m - 1, d).getTime();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  return Math.round((then - today) / 86_400_000);
-}
-
-function whenLabel(days: number, dateStr: string): string {
-  if (days === 0) return 'today';
-  if (days === 1) return 'tomorrow';
-  const [y, m, d] = dateStr.split('-').map(Number) as [number, number, number];
-  return `on ${WEEKDAY[new Date(y, m - 1, d).getDay()]}`;
-}
-
-function describeSession(s: PlannedSession): string {
-  const dist = s.distance_km ? `${s.distance_km} km ` : '';
-  const effort = s.is_long ? 'long ' : s.intensity && s.intensity !== 'easy' ? `${s.intensity} ` : '';
-  const sport = SPORT_LABEL[s.sport] ?? s.sport;
-  return `${dist}${effort}${sport}`.trim();
-}
-
-/** The next session worth preparing for, within the next few days. Key sessions
- *  (long / hard / part of a double day) win; otherwise just the soonest one. */
-function nextNotable(sessions: PlannedSession[], now: Date): { session: PlannedSession; days: number; key: boolean } | null {
-  const today = ymd(now);
-  const byDate = new Map<string, number>();
-  for (const s of sessions) {
-    const day = s.start_at.slice(0, 10);
-    byDate.set(day, (byDate.get(day) ?? 0) + 1);
-  }
-  const upcoming = sessions
-    .map((s) => ({ s, days: daysUntil(s.start_at.slice(0, 10), now) }))
-    .filter(({ s, days }) => s.start_at.slice(0, 10) >= today && days >= 0 && days <= 3)
-    .sort((a, b) => a.days - b.days || a.s.start_at.localeCompare(b.s.start_at));
-  if (upcoming.length === 0) return null;
-
-  const isKey = (s: PlannedSession) =>
-    Boolean(s.is_long) || s.intensity === 'hard' || (byDate.get(s.start_at.slice(0, 10)) ?? 0) > 1;
-
-  const key = upcoming.find(({ s }) => isKey(s));
-  const pick = key ?? upcoming[0]!;
-  return { session: pick.s, days: pick.days, key: Boolean(key) };
-}
-
 export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarter {
   const name = profile.username?.trim() || 'there';
   const sports =
@@ -94,8 +48,8 @@ export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarte
   const lines = [
     `Hi ${name}, I'm Kona — your endurance companion.`,
     '',
-    `I'll help you prepare for sessions, remember what actually happens, and use that history the next time. ` +
-      `I've got ${sports} from your setup.`,
+    `Bring your training plan and I'll help you execute it sustainably — I don't sync Strava, Garmin or a watch, ` +
+      `so tell me in your own words. I've got ${sports} from your setup.`,
   ];
 
   if (profile.goal?.text) {
@@ -104,28 +58,17 @@ export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarte
     lines.push(
       '',
       `What are you working towards right now — a race, an event, or just staying consistent? ` +
-        `Then tell me about your week or your next session.`,
+        `Then tell me your plan or your next session.`,
     );
   }
 
-  const notable = ctx ? nextNotable(ctx.sessions, ctx.now) : null;
-  if (notable) {
-    const when = whenLabel(notable.days, notable.session.start_at.slice(0, 10));
-    const desc = describeSession(notable.session);
-    const needsDetail = (notable.session.needs_detail ?? []).length > 0;
-    if (notable.key) {
-      lines.push(
-        '',
-        needsDetail
-          ? `Coming up ${when}: your ${desc}. That's a session worth getting right — tell me the details and we'll sort the fuelling.`
-          : `Coming up ${when}: your ${desc}. That's a real fuelling day — want to plan it before then?`,
-      );
-    } else {
-      lines.push(
-        '',
-        `You've got a ${desc} ${when}. ` +
-          (needsDetail ? `Fill me in on it and I'll help you prepare.` : `Say the word and I'll help you fuel it.`),
-      );
+  const briefing = ctx?.briefing;
+  if (briefing?.has_target) {
+    lines.push('', `${briefing.when} · ${briefing.headline}`);
+    lines.push(briefing.why ? `${briefing.action} ${briefing.why}` : briefing.action);
+    const targetSessions = (ctx?.sessions ?? []).filter((s) => s.start_at.slice(0, 10) === briefing.date);
+    if (targetSessions.some((s) => (s.needs_detail ?? []).length > 0)) {
+      lines.push('Fill in the rest of the details when you get a chance and I can sort the fuelling too.');
     }
   }
 
@@ -136,7 +79,7 @@ export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarte
   return {
     greeting: lines.join('\n'),
     prompts: [
-      { label: 'My training week', prefill: 'My typical training week is: ' },
+      { label: 'My training plan', prefill: 'My training plan is: ' },
       { label: "What I'm doing today or tomorrow", prefill: "Tomorrow I'm doing " },
       { label: 'My next race', prefill: 'My next race is ' },
     ],

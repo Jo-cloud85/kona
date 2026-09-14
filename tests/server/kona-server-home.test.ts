@@ -291,3 +291,47 @@ describe('a missed end-of-day check-in stays flagged once the local day has pass
     expect(resolvedHome!.checkin.missed_date).toBeNull(); // logged the same local day it was due
   });
 });
+
+describe('the Kona Briefing (M24) reaches Home and the chat starter identically', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('getHome.briefing.kona_briefing and getStarter\'s opener say the exact same thing', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+
+    // A comparable past long run with a reported hydration flag, a week ago.
+    vi.setSystemTime(new Date('2026-09-07T18:00:00.000Z'));
+    await repo.saveActualSession({
+      user_id: USER_ID,
+      sport: 'running',
+      intensity: 'easy',
+      is_long: true,
+      start_at: '2026-09-07T18:00:00',
+      status: 'completed',
+    });
+    await repo.saveRecoveryLog({ user_id: USER_ID, free_text: 'got very thirsty in the final third' });
+
+    // Today: a matching long run planned for tomorrow.
+    vi.setSystemTime(new Date('2026-09-14T08:00:00.000Z'));
+    await repo.savePlannedSession({
+      user_id: USER_ID,
+      sport: 'running',
+      start_at: '2026-09-15T18:00:00',
+      is_long: true,
+      intensity: 'easy',
+    });
+
+    const home = await getHome(ctx, undefined, 'UTC');
+    const starter = await getStarter(ctx, 'UTC');
+
+    expect(home!.briefing.kona_briefing.has_target).toBe(true);
+    expect(home!.briefing.kona_briefing.why).toMatch(/thirsty/i);
+    expect(starter!.greeting).toContain(home!.briefing.kona_briefing.action);
+    expect(starter!.greeting).toContain(home!.briefing.kona_briefing.why);
+  });
+});

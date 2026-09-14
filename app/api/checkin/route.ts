@@ -28,11 +28,22 @@ export async function POST(req: Request): Promise<Response> {
   const elaborate =
     typeof b.elaborate === 'string' && b.elaborate.trim() ? b.elaborate.trim().slice(0, 500) : undefined;
 
+  // M24.5 — optional: only present when Home showed a real Kona Briefing
+  // action for today and the athlete answered the follow-up.
+  const followed_recommendation = typeof b.followed_recommendation === 'boolean' ? b.followed_recommendation : undefined;
+  const OUTCOMES = ['better', 'worse', 'same'];
+  const recommendation_outcome =
+    followed_recommendation === true && typeof b.recommendation_outcome === 'string' && OUTCOMES.includes(b.recommendation_outcome)
+      ? (b.recommendation_outcome as 'better' | 'worse' | 'same')
+      : undefined;
+
   const result = await submitCheckin(c.ctx, {
     workout_feel,
     went_as_planned: b.went_as_planned,
     pains: b.pains,
     elaborate,
+    followed_recommendation,
+    recommendation_outcome,
   });
   if (!result) return Response.json({ error: 'Finish onboarding first.' }, { status: 409 });
   return Response.json(result);

@@ -13,6 +13,7 @@ import type {
   WeeklyPlan,
 } from '../domain/types';
 import { goalContext } from '../domain/goal';
+import type { KonaBriefing } from './briefing';
 import { buildDashboard } from './dashboard';
 import { deriveInsights, type Insight } from './insights';
 
@@ -95,8 +96,10 @@ export interface HomeBriefing {
     /** Details still missing for the selected day's session(s): e.g. ["effort","time"]. */
     needs: string[];
   };
-  /** "What should I prepare for next?" — the next key session, or null. */
-  next_key: { when: string; headline: string; line: string } | null;
+  /** "How should you approach the next session?" (M24) — ONE evidence-backed
+   *  recommendation for the next genuinely meaningful session, today or ahead.
+   *  Always has an `action`; `why` is null unless real evidence exists. */
+  kona_briefing: KonaBriefing;
   /** "Anything relevant Kona remembers?" — 0–2 lines; empty hides the section. */
   remembers: string[];
 }
@@ -229,11 +232,12 @@ function preFuelNote(sessions: HomeSession[]): string | null {
   return null;
 }
 
-/** "Tomorrow" / "Saturday" / "next Tuesday" for a future date relative to today. */
-function describeWhen(todayIso: string, dateIso: string): string {
+/** "Today" / "Tomorrow" / "Saturday" / "next Tuesday" relative to today. */
+export function describeWhen(todayIso: string, dateIso: string): string {
   const t = new Date(`${todayIso}T00:00:00`);
   const d = new Date(`${dateIso}T00:00:00`);
   const days = Math.round((d.getTime() - t.getTime()) / 86_400_000);
+  if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   if (days >= 2 && days <= 6) return weekdayFull(dateIso);
   return `next ${weekdayFull(dateIso)}`;
@@ -287,7 +291,7 @@ function buildYourDay(opts: {
     if (!hasPlan) {
       return {
         headline: 'No plan yet',
-        line: "Tell Kona your week in chat and the day's plan shows up here.",
+        line: "Bring your training plan in chat — Kona doesn't sync Strava or Garmin, so tell it in your own words and the day's plan shows up here.",
         fuelling: null,
         needs: [],
       };
@@ -340,70 +344,6 @@ function buildYourDay(opts: {
   return { headline, line, fuelling: during, needs };
 }
 
-function buildNextKey(opts: {
-  today: string;
-  dashDays: (DashDayLite & { date: string })[];
-  plannedByDate: Map<string, PlannedSession[]>;
-  insights: Insight[];
-  usedTexts: Set<string>;
-}): HomeBriefing['next_key'] {
-  const key = opts.dashDays
-    .filter((d) => d.date > opts.today && d.is_key_day)
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
-  if (!key) return null;
-
-  const planned = opts.plannedByDate.get(key.date) ?? [];
-  const double = planned.length > 1;
-  const long = planned.find((s) => s.is_long);
-  const sportOf = (s: PlannedSession) => sportLabel(s.sport);
-
-  let headline: string;
-  if (double) {
-    headline = `Double session — ${joinList(planned.map(sportOf))}`;
-  } else if (long) {
-    const dur = long.duration_minutes
-      ? `${Math.floor(long.duration_minutes / 60)}h${long.duration_minutes % 60 ? String(long.duration_minutes % 60).padStart(2, '0') : ''} `
-      : long.distance_km
-        ? `${long.distance_km} km `
-        : '';
-    headline = `${dur}long ${sportOf(long)}`.trim();
-    headline = headline.charAt(0).toUpperCase() + headline.slice(1);
-  } else {
-    headline = joinList(planned.map((s) => titleFor(s)));
-  }
-
-  let line: string;
-  if (double) {
-    line = 'Your bigger fuelling day. Prep fluids and a carb option, and something with protein for between the two.';
-  } else if (long) {
-    line = 'A big fuelling day. Eat normally through the day before, and have your bottle and easy carbs ready.';
-  } else {
-    line = 'The hard one this week. Normal meals; make sure the meal afterwards has protein.';
-  }
-
-  // "This worked before" — only from a pattern that is actually outcome-backed
-  // (never from a frequency count, and never from a low-certainty / mixed /
-  // condition-dependent read). Never fabricated.
-  const sports = new Set(planned.map((s) => s.sport as string));
-  const pattern = opts.insights.find(
-    (i) =>
-      i.kind === 'pattern' &&
-      i.basis === 'outcome' &&
-      i.certainty !== 'low' &&
-      [...sports].some((sp) => i.text.toLowerCase().includes(sp)),
-  );
-  const staple = opts.insights.find((i) => i.kind === 'fact' && i.topic === 'fuelling' && /staple/i.test(i.text));
-  if (pattern && !opts.usedTexts.has(pattern.text)) {
-    line += ` ${pattern.text} I'd keep your usual setup.`;
-    opts.usedTexts.add(pattern.text);
-  } else if (staple && !opts.usedTexts.has(staple.text)) {
-    line += ` ${staple.text}`;
-    opts.usedTexts.add(staple.text);
-  }
-
-  return { when: describeWhen(opts.today, key.date), headline, line };
-}
-
 const PREF_KEY = /(^prefers?_|preference|^only_|^no_|^cant_|^cannot_|constraint|fuel|setup)/i;
 
 function buildRemembers(opts: {
@@ -445,6 +385,11 @@ export function buildHome(input: {
   recoveryLogs?: RecoveryLog[];
   fuelLogs?: FuelLog[];
   memories?: PersistedMemory[];
+  /** Computed by the caller (`lib/kona-server.ts`, via `buildKonaBriefing`) —
+   *  not built here, to keep this module free of a runtime dependency on
+   *  `./briefing` (which itself imports plain helpers from this file).
+   *  Optional only so tests that don't care about it can omit it. */
+  konaBriefing?: KonaBriefing;
 }): HomeView {
   const now = input.now ?? new Date();
   const today = isoDate(now);
@@ -524,7 +469,19 @@ export function buildHome(input: {
     fuelLogs: input.fuelLogs ?? [],
     memories: input.memories ?? [],
   });
+  const konaBriefing: KonaBriefing = input.konaBriefing ?? {
+    has_target: false,
+    when: null,
+    date: null,
+    headline: null,
+    action: 'Nothing special to prepare — normal meals and fluids are fine.',
+    why: null,
+    basis: null,
+  };
   const usedTexts = new Set<string>();
+  // The briefing's own evidence sentence shouldn't also repeat verbatim in
+  // "Kona remembers" — same de-dup convention buildNextKey used to follow.
+  if (konaBriefing.why) usedTexts.add(konaBriefing.why);
 
   const your_day = buildYourDay({
     sessions: selectedSessions,
@@ -534,7 +491,6 @@ export function buildHome(input: {
     dashDay,
     postProtein: dashboard.baseline.post_session_protein_g,
   });
-  const next_key = buildNextKey({ today, dashDays, plannedByDate: byDate, insights, usedTexts });
   const remembers = buildRemembers({ insights, memories: input.memories ?? [], usedTexts });
 
   const todayDay = week.find((d) => d.is_today);
@@ -567,6 +523,6 @@ export function buildHome(input: {
       is_rest: restSet.has(selected_date),
       sessions: selectedSessions,
     },
-    briefing: { your_day, next_key, remembers },
+    briefing: { your_day, kona_briefing: konaBriefing, remembers },
   };
 }

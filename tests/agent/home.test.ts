@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildHome } from '../../src/agent/index';
-import type { ActualSession, PlannedSession, Profile, RecoveryLog, WeeklyPlan } from '../../src/domain/types';
+import { buildHome, type KonaBriefing } from '../../src/agent/index';
+import type { PlannedSession, Profile, RecoveryLog, WeeklyPlan } from '../../src/domain/types';
 
 const profile: Profile = {
   user_id: 'user_demo',
@@ -36,20 +36,6 @@ function session(over: Partial<PlannedSession>): PlannedSession {
     ...over,
   };
 }
-function actual(over: Partial<ActualSession>): ActualSession {
-  return {
-    id: `a_${Math.random()}`,
-    user_id: 'user_demo',
-    kind: 'actual',
-    sport: 'cycling',
-    intensity: 'easy',
-    start_at: '2026-09-01T07:00:00',
-    status: 'completed',
-    created_at: '2026-09-01T08:00:00Z',
-    ...over,
-  };
-}
-
 describe('buildHome', () => {
   it('lays out a rolling 14-day window (today - 6 .. today + 7), today marked and default-selected', () => {
     const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
@@ -135,7 +121,7 @@ describe('buildHome', () => {
 
     const noPlan = buildHome({ profile, sessions: [], now: NOW });
     expect(noPlan.briefing.your_day.headline).toMatch(/no plan/i);
-    expect(noPlan.briefing.your_day.line).toMatch(/tell kona your week/i);
+    expect(noPlan.briefing.your_day.line).toMatch(/bring your training plan/i);
   });
 
   it('YOUR DAY: unset details are listed and the line nudges to chat', () => {
@@ -152,48 +138,24 @@ describe('buildHome', () => {
     expect(h.briefing.your_day.line).toMatch(/sort it in chat/i);
   });
 
-  it('ONE THING TO THINK ABOUT: points at the next key day and folds in a real outcome-backed pattern', () => {
-    // Thu 2026-09-10 is a long ride; three prior rides that ALL completed and
-    // felt good — an outcome-backed working setup, not just three repetitions.
-    const dates = ['2026-08-30', '2026-09-03', '2026-09-06'];
-    const priorRides = dates.map((d) =>
-      actual({ sport: 'cycling', start_at: `${d}T07:00:00`, distance_km: 40, status: 'completed' }),
-    );
-    const feltGood = dates.map(
-      (d, i) =>
-        ({
-          id: `rg${i}`,
-          user_id: 'u',
-          logged_at: `${d}T20:00:00Z`,
-          free_text: 'felt strong, no issues',
-          overall_severity: 'none',
-        }) as RecoveryLog,
-    );
-    const h = buildHome({
-      profile,
-      weeklyPlan: plan(),
-      sessions: [session({ start_at: '2026-09-10T07:00:00', sport: 'cycling', distance_km: 90, is_long: true })],
-      now: NOW,
-      actualSessions: priorRides,
-      recoveryLogs: feltGood,
-    });
-    const nk = h.briefing.next_key;
-    expect(nk).not.toBeNull();
-    expect(nk!.when).toBe('Tomorrow');
-    expect(nk!.headline.toLowerCase()).toContain('long');
-    expect(nk!.line).toMatch(/big fuelling day/i);
-    expect(nk!.line).toMatch(/cycling sessions have been going well/i); // the outcome-backed pattern
-    expect(nk!.line).not.toMatch(/all went to plan/i); // not the bare frequency line
+  it('KONA BRIEFING: buildHome threads a caller-computed briefing through untouched (M24 — buildKonaBriefing owns the judgment, see briefing.test.ts)', () => {
+    const briefing: KonaBriefing = {
+      has_target: true,
+      when: 'Tomorrow',
+      date: '2026-09-10',
+      headline: 'Long ride',
+      action: 'Bring extra fluid — your second bottle if you have one.',
+      why: 'Last time you did a similar long ride, you said: "got very thirsty".',
+      basis: 'reported',
+    };
+    const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW, konaBriefing: briefing });
+    expect(h.briefing.kona_briefing).toEqual(briefing);
   });
 
-  it('ONE THING TO THINK ABOUT is null when nothing notable is coming up', () => {
-    const h = buildHome({
-      profile,
-      weeklyPlan: plan(),
-      sessions: [session({ start_at: '2026-09-11T07:00:00', distance_km: 5, intensity: 'easy' })],
-      now: NOW,
-    });
-    expect(h.briefing.next_key).toBeNull();
+  it('KONA BRIEFING defaults to an honest "nothing special" state when the caller omits it', () => {
+    const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
+    expect(h.briefing.kona_briefing.has_target).toBe(false);
+    expect(h.briefing.kona_briefing.action).toMatch(/nothing special/i);
   });
 
   it('KONA REMEMBERS surfaces a recurring-symptom fact, and is empty with no history', () => {
@@ -213,27 +175,30 @@ describe('buildHome', () => {
     expect(empty.briefing.remembers).toEqual([]);
   });
 
-  it('does not repeat the same pattern in ONE THING and KONA REMEMBERS', () => {
-    const dates = ['2026-08-30', '2026-09-03', '2026-09-06'];
-    const priorRuns = dates.map((d) =>
-      actual({ sport: 'running', start_at: `${d}T07:00:00`, distance_km: 8, status: 'completed' }),
-    );
-    const feltGood = dates.map(
-      (d, i) =>
-        ({ id: `rr${i}`, user_id: 'u', logged_at: `${d}T20:00:00Z`, free_text: 'went well', overall_severity: 'low' }) as RecoveryLog,
-    );
+  it('does not repeat the Kona Briefing\'s own evidence sentence inside KONA REMEMBERS', () => {
+    // A recurring-symptom fact Kona would otherwise surface under "remembers" —
+    // reused here as the briefing's own "why", to prove buildHome excludes it.
     const h = buildHome({
       profile,
       weeklyPlan: plan(),
-      sessions: [session({ start_at: '2026-09-10T07:00:00', distance_km: 20, is_long: true })],
+      sessions: [],
       now: NOW,
-      actualSessions: priorRuns,
-      recoveryLogs: feltGood,
+      recoveryLogs: [
+        { id: 'r1', user_id: 'u', logged_at: '2026-08-20T20:00:00Z', free_text: 'left calf tight' } as RecoveryLog,
+        { id: 'r2', user_id: 'u', logged_at: '2026-09-05T20:00:00Z', free_text: 'calf sore again', overall_severity: 'moderate' } as RecoveryLog,
+      ],
+      konaBriefing: {
+        has_target: true,
+        when: 'Tomorrow',
+        date: '2026-09-10',
+        headline: 'Long run',
+        action: 'Ease into it.',
+        why: "You've noted calf 2 times — most recently 5 Sep. Kona doesn't diagnose; this is just a flag.",
+        basis: 'reported',
+      },
     });
-    const inNext = h.briefing.next_key?.line ?? '';
-    const patternText = 'running sessions have been going well';
-    expect(inNext).toContain(patternText);
-    expect(h.briefing.remembers.some((t) => t.includes(patternText))).toBe(false);
+    // Without the dedup, this exact text would also appear under "remembers".
+    expect(h.briefing.remembers.some((t) => /calf/i.test(t))).toBe(false);
   });
 
   it('ignores a malformed selectedDate and falls back to today', () => {

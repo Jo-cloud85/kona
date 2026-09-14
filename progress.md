@@ -1,13 +1,69 @@
 # Kona — Progress
 
 ## Current milestone
-**Product reset (2026) in progress.** Kona re-scoped to an *AI endurance
-companion* — relationship + accumulated understanding, not a nutrition tracker.
-**M14.1–M23.2 + M15.1 + UI pass done. Live on Vercel, founder alpha testing underway.**
-Founder direction: no visual redesign *until told otherwise* (see UI pass
-below, explicitly requested), don't fabricate insights, stop for a
-product review after each milestone. See the reset milestone plan below +
-`PRODUCT_VISION.md`.
+**Product reset (2026) in progress.** Kona re-scoped to a *sustainable
+performance companion* (thesis refined M24) — relationship + judgment, not a
+nutrition tracker. **M14.1–M24 + M15.1 + UI pass done. Live on Vercel, founder
+alpha testing underway.** Founder direction: no visual redesign *until told
+otherwise* (see UI pass below, explicitly requested), don't fabricate
+insights, stop for a product review after each milestone. See the reset
+milestone plan below + `PRODUCT_VISION.md`.
+
+### M24 — The Kona Briefing (2026-09-14) ✅
+Product Thesis 2.0 audit (same day) found Kona's judgment layer
+(`src/agent/insights.ts`) was real and honest but only reached the user when
+they typed something — Home's "Your day" card and the chat opener were both
+template-only, never touching `insights`. M24 closes that gap: proves
+**memory → judgment → action**, not just "Home is more personalized."
+- **`src/agent/briefing.ts`** (new) — `buildKonaBriefing()`: finds the next
+  *genuinely meaningful* session (long / hard·race / a double day — not every
+  planned session) within a 7-day horizon, today included, then asks for one
+  piece of comparable evidence. Deterministic, no LLM call. Returns an honest
+  default ("nothing special to prepare" / "nothing meaningful coming up") when
+  no evidence or no target exists — never fabricates.
+- **`similarSessionFlag()`** (`src/agent/insights.ts`) — a new, narrower kind
+  of evidence than the file's existing aggregate reads: the single most
+  recent *genuinely comparable* past session (same sport **and** matching
+  shape — same-sport-alone is never enough) and whether it had something
+  concrete to report (thirst/GI/cramp/stopped-early). `basis: 'reported'`
+  always — one instance is never `outcome` or `repeated`. Comparable-but-
+  uneventful yields no insight.
+- **`effectiveIsLong()`** (`src/agent/insights.ts`) — found live, same day:
+  an 18km run the athlete called "long" in chat wasn't recognised as
+  meaningful because the LLM's tool call hadn't set `is_long: true`. Fixed by
+  classifying via the same deterministic engine the fueling calc already uses
+  (`classifySession` → LONG/VERY_LONG from distance+pace), not just the raw
+  flag — an 18km run is long regardless of what one chat turn happened to set.
+- Home: the evidence-backed briefing replaces "One thing to think about" as
+  the top card; "Your day" is demoted to the plain factual/fueling-numbers
+  card beneath it. Chat's opener (`getStarter`) now calls the *same*
+  `buildKonaBriefing` Home does — literally the same function, not a second
+  drifting implementation (retired `starter.ts`'s own `nextNotable()`).
+- Check-in closes the loop (M24.5), kept deliberately lightweight: no new
+  table, no new activity-event type. `CheckinDialog` reuses the
+  `kona_briefing` Home already fetched — when it's a real, evidence-backed
+  action for *today* specifically, one optional extra question ("did you
+  follow it, better/worse/same?") appends a clause to the check-in's free
+  text, phrased to trip the *existing* `positiveFeel`/`TROUBLE_RE` wording in
+  `insights.ts` — so the next `similarSessionFlag` lookup picks it up through
+  the same evidence path as everything else, no widened data surface.
+- Copy (M24.6): reframed from "tell Kona your week" to "bring your training
+  plan," and made explicit everywhere relevant that Kona doesn't sync
+  Strava/Garmin/a watch — manual narration is the point, not a gap.
+  `PRODUCT_VISION.md`'s stale "fuelling is the initial wedge" line updated to
+  match — session judgment is the wedge now, fuelling is one input to it.
+- Verified live end-to-end (dev-fallback server, real model): logged a past
+  18km run with a reported hydration flag, planned a matching future 18km
+  run — Home's briefing showed *"Bring extra fluid — your second bottle if
+  you have one. Last time you did a similar long run (7 Sep), you said:
+  'Felt fine otherwise, just that thirst issue in the last third'."* —
+  matching the brief's own worked example almost verbatim.
+- Explicit non-goals held: no wearable integration, no AI-generated plans, no
+  macro tracking, no dashboards/scores, no push notifications, no second
+  agent. `recommendations` (a dormant table reserved for this) deliberately
+  left unused — noted as a conscious deferral if a future milestone wants a
+  literal persisted record rather than the current recompute-from-Home
+  approach.
 
 ### Home: "Your week" preview card + a missed check-in survives past midnight (2026-09-14) ✅
 Two of three founder asks from the same message; the third (daily carb/water/

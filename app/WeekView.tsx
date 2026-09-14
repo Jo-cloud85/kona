@@ -71,8 +71,8 @@ export default function WeekView({
 
         {loaded && (!data || !data.has_plan) && (
           <p className="plan-empty">
-            No week on record yet. Tell Kona your week in chat — sessions, rest days, whatever you&apos;ve got — and
-            it&apos;ll show up here.
+            No week on record yet. Bring your training plan in chat — sessions, rest days, whatever you&apos;ve got.
+            Kona doesn&apos;t sync Strava or Garmin, so tell it in your own words and it&apos;ll show up here.
           </p>
         )}
 

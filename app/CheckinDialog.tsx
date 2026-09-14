@@ -8,6 +8,7 @@ export default function CheckinDialog({
   onClose,
   onDone,
   contextLabel,
+  konaBriefing,
 }: {
   onClose: () => void;
   onDone: () => void;
@@ -15,15 +16,22 @@ export default function CheckinDialog({
    *  log itself still saves against today (see /api/checkin), but the copy
    *  should be honest about which day it's asking about. */
   contextLabel?: string;
+  /** M24.5 — closes the loop. Only passed for today's own check-in, and only
+   *  produces the follow-up question when a real, evidence-backed action was
+   *  actually given (not the honest "nothing special" default). */
+  konaBriefing?: { has_target: boolean; action: string; why: string | null };
 }) {
   const [feel, setFeel] = useState<string | null>(null);
   const [asPlanned, setAsPlanned] = useState<boolean | null>(null);
   const [pains, setPains] = useState<boolean | null>(null);
   const [elaborate, setElaborate] = useState('');
+  const [followed, setFollowed] = useState<boolean | null>(null);
+  const [outcome, setOutcome] = useState<'better' | 'worse' | 'same' | null>(null);
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState<string | null>(null);
   const [err, setErr] = useState('');
 
+  const showLoop = Boolean(konaBriefing?.has_target && konaBriefing.why);
   const canSubmit = feel !== null && asPlanned !== null && pains !== null && !busy;
 
   const submit = async () => {
@@ -39,6 +47,8 @@ export default function CheckinDialog({
           went_as_planned: asPlanned,
           pains,
           elaborate: elaborate.trim() || undefined,
+          followed_recommendation: showLoop && followed !== null ? followed : undefined,
+          recommendation_outcome: showLoop && followed === true && outcome !== null ? outcome : undefined,
         }),
       });
       const data = await res.json();
@@ -112,6 +122,41 @@ export default function CheckinDialog({
                 placeholder="e.g. calf tightened on the last km, or skipped the run — worked late"
               />
             </div>
+
+            {showLoop && (
+              <div className="field">
+                <label>
+                  Kona suggested: {konaBriefing!.action} <span className="hint">optional</span>
+                </label>
+                <div className="choice-row">
+                  <button className={`choice${followed === true ? ' on' : ''}`} onClick={() => setFollowed(true)}>
+                    Followed it
+                  </button>
+                  <button
+                    className={`choice${followed === false ? ' on' : ''}`}
+                    onClick={() => {
+                      setFollowed(false);
+                      setOutcome(null);
+                    }}
+                  >
+                    Didn&apos;t
+                  </button>
+                </div>
+                {followed === true && (
+                  <div className="choice-row">
+                    <button className={`choice${outcome === 'better' ? ' on' : ''}`} onClick={() => setOutcome('better')}>
+                      Better
+                    </button>
+                    <button className={`choice${outcome === 'same' ? ' on' : ''}`} onClick={() => setOutcome('same')}>
+                      About the same
+                    </button>
+                    <button className={`choice${outcome === 'worse' ? ' on' : ''}`} onClick={() => setOutcome('worse')}>
+                      Worse
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {err && <p className="form-error">{err}</p>}
             <div className="dialog-actions">

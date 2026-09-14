@@ -2009,6 +2009,13 @@ button.cta:disabled {
   color: var(--text);
 }
 
+/* The Kona Briefing's "why" (M24) — the evidence behind the action, one
+   notch quieter than the action itself so the action reads first. */
+.brief-why {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
 .brief-fuel {
   margin-top: 8px;
 }

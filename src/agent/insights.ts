@@ -1,4 +1,6 @@
-import type { ActualSession, FuelLog, PersistedMemory, RecoveryLog } from '../domain/types';
+import type { ActualSession, FuelLog, Intensity, PersistedMemory, RecoveryLog, Sport } from '../domain/types';
+import { classifySession } from '../engine/index';
+import { getRules } from '../rules/index';
 
 /**
  * The pattern layer. Turns the athlete's accumulated history into a small set of
@@ -37,6 +39,19 @@ import type { ActualSession, FuelLog, PersistedMemory, RecoveryLog } from '../do
  *
  * When results are mixed or thin, the honest output is "too early / not enough
  * to change anything on" — with NO recommendation — not a confident guess.
+ *
+ * SINGLE-INSTANCE EVIDENCE (M24.2). `similarSessionFlag` below is a different
+ * shape of question from everything else in this file: instead of reading
+ * across a whole window ("how have your runs been going"), it's scoped to ONE
+ * upcoming session and asks "is there something specific about the most
+ * recent genuinely comparable session worth flagging". Its basis is always
+ * `reported` — ONE instance is never `repeated` or `outcome` (those require
+ * more than one observation) — but a single concrete, dated, quoted report is
+ * still honest, useful evidence, just weaker than a pattern. Comparability
+ * alone (same sport) is never enough to produce anything; it must also share
+ * session shape (long vs not, or stated intensity), and the matched session
+ * must have something notable to report — a comparable-but-uneventful match
+ * yields no insight, same "don't fabricate" discipline as everywhere else.
  */
 
 export type InsightKind = 'fact' | 'pattern' | 'hypothesis' | 'recommendation';
@@ -449,11 +464,22 @@ function stapleFuel(input: InsightInput): Insight[] {
     }));
 }
 
+// Local, not imported from home.ts's SPORT_LABEL — home.ts imports deriveInsights
+// from this file, so importing a value back would create a runtime cycle.
+const SPORT_NOUN: Partial<Record<Sport, string>> = {
+  running: 'run',
+  cycling: 'ride',
+  swimming: 'swim',
+};
+
+const HYDRATION_RE = /\b(thirst\w*|dehydrat\w*|ran out of (?:water|fluid)|out of (?:water|fluid)|parched|bonk\w*)\b/i;
+const GI_RE = /\b(gi|stomach|gut|nausea|nauseous|the runs)\b/i;
+const CRAMP_RE = /\bcramp\w*\b/i;
+
 /** Early thirst / running low on fluid, mentioned more than once. FACT. */
 function hydrationFlag(input: InsightInput): Insight[] {
-  const re = /\b(thirst\w*|dehydrat\w*|ran out of (?:water|fluid)|out of (?:water|fluid)|parched|bonk\w*)\b/i;
   const hits = input.recoveryLogs
-    .filter((r) => re.test(r.free_text))
+    .filter((r) => HYDRATION_RE.test(r.free_text))
     .map((r) => ({ date: dateOf(r.logged_at), quote: r.free_text }))
     .sort((a, b) => a.date.localeCompare(b.date));
   if (hits.length < 2) return [];
@@ -470,6 +496,108 @@ function hydrationFlag(input: InsightInput): Insight[] {
       evidence: hits.map((h) => `${human(h.date)} · "${snippet(h.quote)}"`),
     },
   ];
+}
+
+// --- single-session evidence (M24.2) --------------------------------------
+
+export type SessionFlagCategory = 'thirst' | 'gi' | 'cramp' | 'trouble' | 'stopped_early';
+
+export interface SessionFlag {
+  category: SessionFlagCategory;
+  /** Plain language, ready to show as the briefing's "why". */
+  text: string;
+  basis: InsightBasis;
+  certainty: 'moderate' | 'low';
+  as_of: string;
+  evidence: string[];
+}
+
+/** The shape of an upcoming session worth comparing against history. */
+export interface SessionCandidate {
+  sport: Sport;
+  is_long?: boolean;
+  intensity: Intensity;
+}
+
+/**
+ * A session counts as "long" either because it was explicitly flagged that
+ * way, or because its distance/duration classifies as LONG/VERY_LONG by the
+ * same deterministic engine the fueling calc uses (`src/engine/classify.ts`)
+ * — an 18km run is long whether or not the chat turn that logged it happened
+ * to set `is_long`. Exported so `briefing.ts` classifies "is this upcoming
+ * session meaningful" the identical way, not a second, drifting definition.
+ */
+export function effectiveIsLong(s: {
+  sport: Sport;
+  intensity: Intensity;
+  is_long?: boolean;
+  duration_minutes?: number;
+  distance_km?: number;
+}): boolean {
+  if (s.is_long) return true;
+  try {
+    const cls = classifySession(
+      { sport: s.sport, intensity: s.intensity, duration_minutes: s.duration_minutes, distance_km: s.distance_km },
+      getRules(),
+    ).duration_class;
+    return cls === 'LONG' || cls === 'VERY_LONG';
+  } catch {
+    return false; // not enough info to classify — treated as not-long, not an error
+  }
+}
+
+function comparable(s: ActualSession, candidate: SessionCandidate): boolean {
+  if (s.sport !== candidate.sport) return false;
+  // A long session is only comparable to another long one — a 5k jog is not
+  // evidence for a marathon-length effort, even same-sport. Otherwise, match
+  // on stated intensity rather than treating "both not flagged long" as a match.
+  return candidate.is_long ? effectiveIsLong(s) : s.intensity === candidate.intensity;
+}
+
+/**
+ * The most recent genuinely comparable past session, and what (if anything)
+ * notable happened — the evidence behind one Kona Briefing action (M24.2).
+ * See the SINGLE-INSTANCE EVIDENCE note above the file doctrine comment.
+ */
+export function similarSessionFlag(
+  candidate: SessionCandidate,
+  input: { actualSessions: ActualSession[]; recoveryLogs: RecoveryLog[] },
+): SessionFlag | null {
+  const idx = recoveryIndex(input.recoveryLogs);
+  const match = [...input.actualSessions]
+    .filter((s) => comparable(s, candidate))
+    .sort((a, b) => b.start_at.localeCompare(a.start_at))[0];
+  if (!match) return null;
+
+  const date = dateOf(match.start_at);
+  const rec = idx.bySession.get(match.id) ?? idx.byDate.get(date);
+  const hay = `${rec?.free_text ?? ''} ${(rec?.reported_symptoms ?? []).join(' ')} ${match.reason ?? ''}`;
+
+  let category: SessionFlagCategory | null = null;
+  if (HYDRATION_RE.test(hay)) category = 'thirst';
+  else if (GI_RE.test(hay)) category = 'gi';
+  else if (CRAMP_RE.test(hay)) category = 'cramp';
+  else if (match.status === 'stopped_early') category = 'stopped_early';
+  else if (TROUBLE_RE.test(hay)) category = 'trouble';
+  if (!category) return null;
+
+  const quote = rec?.free_text || match.reason || '';
+  const sportNoun = SPORT_NOUN[candidate.sport] ?? candidate.sport;
+  const shape = candidate.is_long ? `long ${sportNoun}` : `${candidate.intensity} ${sportNoun}`;
+  const said = quote ? `you said: "${snippet(quote)}"` : "it didn't go entirely to plan";
+
+  return {
+    category,
+    text: `Last time you did a similar ${shape} (${human(date)}), ${said}.`,
+    basis: 'reported',
+    certainty: 'moderate',
+    as_of: date,
+    evidence: [
+      quote
+        ? `${human(date)} · "${snippet(quote)}"`
+        : `${human(date)} · ${match.status.replace('_', ' ')}${match.reason ? ` (${snippet(match.reason, 40)})` : ''}`,
+    ],
+  };
 }
 
 // --- entry point --------------------------------------------------------

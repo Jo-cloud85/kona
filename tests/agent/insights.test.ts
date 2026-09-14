@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveInsights, type InsightInput } from '../../src/agent/index';
+import { deriveInsights, similarSessionFlag, type InsightInput } from '../../src/agent/index';
 import type { ActualSession, FuelLog, PersistedMemory, RecoveryLog } from '../../src/domain/types';
 
 let n = 0;
@@ -114,5 +114,112 @@ describe('deriveInsights', () => {
     const fact = out.find((i) => i.kind === 'fact' && /sis gel/i.test(i.text));
     expect(fact?.text).toMatch(/logged sis gel 3 times/i);
     expect(fact?.topic).toBe('fuelling');
+  });
+});
+
+describe('similarSessionFlag (M24.2 — single comparable session)', () => {
+  it('returns null with no history at all', () => {
+    expect(
+      similarSessionFlag({ sport: 'running', is_long: true, intensity: 'easy' }, { actualSessions: [], recoveryLogs: [] }),
+    ).toBeNull();
+  });
+
+  it('no insight merely because two sessions share a sport — a short easy run is not evidence for a long run', () => {
+    const sessions = [actual({ sport: 'running', is_long: false, intensity: 'easy', start_at: '2026-09-01T06:00:00' })];
+    const recs = [recovery({ logged_at: '2026-09-01T20:00:00Z', free_text: 'felt really thirsty by the end' })];
+    const flag = similarSessionFlag(
+      { sport: 'running', is_long: true, intensity: 'easy' },
+      { actualSessions: sessions, recoveryLogs: recs },
+    );
+    expect(flag).toBeNull();
+  });
+
+  it('a comparable session with nothing notable to report yields no insight (comparability alone is not evidence)', () => {
+    const sessions = [actual({ sport: 'running', is_long: true, intensity: 'easy', start_at: '2026-09-01T18:00:00' })];
+    const recs = [recovery({ logged_at: '2026-09-01T20:00:00Z', free_text: 'legs felt great, no issues' })];
+    const flag = similarSessionFlag(
+      { sport: 'running', is_long: true, intensity: 'easy' },
+      { actualSessions: sessions, recoveryLogs: recs },
+    );
+    expect(flag).toBeNull();
+  });
+
+  it('a genuinely comparable long evening run with a reported hydration flag becomes a single-instance FACT', () => {
+    const sessions = [actual({ sport: 'running', is_long: true, intensity: 'easy', start_at: '2026-09-01T18:00:00' })];
+    const recs = [
+      recovery({ logged_at: '2026-09-01T21:00:00Z', free_text: 'got really thirsty during the last third' }),
+    ];
+    const flag = similarSessionFlag(
+      { sport: 'running', is_long: true, intensity: 'easy' },
+      { actualSessions: sessions, recoveryLogs: recs },
+    );
+    expect(flag).not.toBeNull();
+    expect(flag?.category).toBe('thirst');
+    expect(flag?.basis).toBe('reported'); // ONE instance — never 'outcome' or 'repeated'
+    expect(flag?.text).toContain('1 Sep');
+    expect(flag?.text).toContain('thirsty during the last third');
+    expect(flag?.evidence).toHaveLength(1);
+  });
+
+  it('prefers the most recent genuinely comparable session, even over a more dramatic older one', () => {
+    const sessions = [
+      actual({ sport: 'running', is_long: true, intensity: 'easy', start_at: '2026-08-01T18:00:00' }),
+      actual({ sport: 'running', is_long: true, intensity: 'easy', start_at: '2026-09-10T18:00:00' }),
+    ];
+    const recs = [
+      recovery({ logged_at: '2026-08-01T21:00:00Z', free_text: 'stomach cramped badly, awful run' }),
+      recovery({ logged_at: '2026-09-10T21:00:00Z', free_text: 'felt fine, no issues' }),
+    ];
+    // The most recent one (10 Sep) was uneventful, so there is nothing to flag —
+    // it must NOT fall back to the older dramatic one.
+    const flag = similarSessionFlag(
+      { sport: 'running', is_long: true, intensity: 'easy' },
+      { actualSessions: sessions, recoveryLogs: recs },
+    );
+    expect(flag).toBeNull();
+  });
+
+  it('a stopped_early session with no recovery log still flags, from the session record alone', () => {
+    const sessions = [
+      actual({ sport: 'cycling', is_long: true, intensity: 'hard', start_at: '2026-09-05T07:00:00', status: 'stopped_early' }),
+    ];
+    const flag = similarSessionFlag(
+      { sport: 'cycling', is_long: true, intensity: 'hard' },
+      { actualSessions: sessions, recoveryLogs: [] },
+    );
+    expect(flag?.category).toBe('stopped_early');
+    expect(flag?.basis).toBe('reported');
+  });
+
+  it('a non-long session matches on intensity instead', () => {
+    const sessions = [actual({ sport: 'running', is_long: false, intensity: 'hard', start_at: '2026-09-01T18:00:00' })];
+    const recs = [recovery({ logged_at: '2026-09-01T21:00:00Z', free_text: 'cramped up badly near the end' })];
+    const flag = similarSessionFlag(
+      { sport: 'running', is_long: false, intensity: 'hard' },
+      { actualSessions: sessions, recoveryLogs: recs },
+    );
+    expect(flag?.category).toBe('cramp');
+
+    // A different intensity, same non-long shape, is not comparable.
+    const noMatch = similarSessionFlag(
+      { sport: 'running', is_long: false, intensity: 'easy' },
+      { actualSessions: sessions, recoveryLogs: recs },
+    );
+    expect(noMatch).toBeNull();
+  });
+
+  it('an 18km run is "long" by distance even when is_long was never explicitly set (real alpha gap, 2026-09-14)', () => {
+    // 18km at an easy running pace (~6 min/km) is 108 min — LONG per the
+    // engine's own duration_classes (>=90, <=150) — regardless of the is_long flag.
+    const sessions = [
+      actual({ sport: 'running', is_long: undefined, intensity: 'easy', distance_km: 18, start_at: '2026-09-07T18:00:00' }),
+    ];
+    const recs = [recovery({ logged_at: '2026-09-07T21:00:00Z', free_text: 'got very thirsty in the final third' })];
+    const flag = similarSessionFlag(
+      { sport: 'running', is_long: true, intensity: 'easy' },
+      { actualSessions: sessions, recoveryLogs: recs },
+    );
+    expect(flag).not.toBeNull();
+    expect(flag?.category).toBe('thirst');
   });
 });
