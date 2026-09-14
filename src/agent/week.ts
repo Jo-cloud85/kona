@@ -1,6 +1,6 @@
 import type { ActualSession, PlannedSession, Profile, Range, WeeklyPlan } from '../domain/types';
 import { buildDashboard } from './dashboard';
-import { addDays, dayOfMonth, durationLabel, isoDate, joinList, sportLabel, titleFor, weekdayFull, weekdayLabel } from './home';
+import { addDays, dayOfMonth, dayTitle, durationLabel, isoDate, joinList, weekdayFull, weekdayLabel } from './home';
 
 /**
  * "Your week" — the week plan as a page, not a dashboard (product UI pass,
@@ -89,16 +89,7 @@ export function buildWeek(input: {
     const isRest = restSet.has(date);
     const dashDay = dashByDate.get(date);
 
-    let title: string | null = null;
-    if (sessions.length > 1) {
-      title = joinList(sessions.map((s) => sportLabel(s.sport))).replace(/^\w/, (c) => c.toUpperCase());
-    } else if (sessions.length === 1) {
-      title = titleFor(sessions[0]!);
-    } else if (isRest) {
-      title = 'Rest';
-    } else if (hasPlan) {
-      title = null; // open day — nothing told to Kona yet
-    }
+    const title = dayTitle(sessions, isRest);
 
     const fuelling =
       dashDay && (dashDay.carb_g_per_hour || dashDay.fluid_ml_per_hour)

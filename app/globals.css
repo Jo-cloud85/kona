@@ -1243,22 +1243,6 @@ button.cta:disabled {
   background: var(--accent-text);
 }
 
-.week-link {
-  align-self: flex-start;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  margin-top: -6px;
-}
-.week-link:hover {
-  color: var(--accent);
-}
-
 .home-card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -1614,6 +1598,15 @@ button.cta:disabled {
 }
 .checkin-nudge:hover {
   border-color: var(--accent);
+}
+
+/* Same nudge, reused inside the Profile overlay (pressing the badged avatar
+   when a check-in is due) — .profile-overlay only pads vertically, so every
+   direct child supplies its own width/centering (see .profile-head above). */
+.profile-checkin-nudge {
+  width: calc(100% - 32px);
+  max-width: 680px;
+  margin: 0 auto 14px;
 }
 
 /* ---- Evening check-in: bottom sheet ----------------------------------- */

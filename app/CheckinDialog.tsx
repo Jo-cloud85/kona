@@ -4,7 +4,18 @@ import { useState } from 'react';
 
 const FEELS = ['Feeling great!', 'Breezed it', 'Solid grind', 'Survived', 'Dying...', "Didn't happen"];
 
-export default function CheckinDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+export default function CheckinDialog({
+  onClose,
+  onDone,
+  contextLabel,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+  /** e.g. "Tuesday" when this is catching up on a missed day's check-in — the
+   *  log itself still saves against today (see /api/checkin), but the copy
+   *  should be honest about which day it's asking about. */
+  contextLabel?: string;
+}) {
   const [feel, setFeel] = useState<string | null>(null);
   const [asPlanned, setAsPlanned] = useState<boolean | null>(null);
   const [pains, setPains] = useState<boolean | null>(null);
@@ -49,7 +60,7 @@ export default function CheckinDialog({ onClose, onDone }: { onClose: () => void
         <div className="dialog-handle" aria-hidden />
         {reply === null ? (
           <>
-            <h2>How did today go?</h2>
+            <h2>How did {contextLabel ?? 'today'} go?</h2>
             <p className="dialog-sub">A quick end-of-day check-in. Kona logs it — nothing gets diagnosed.</p>
 
             <div className="field">

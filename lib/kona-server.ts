@@ -171,13 +171,15 @@ export async function getHome(ctx: KonaContext, selectedDate?: string, tz: strin
   const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
   const now = athleteNow(tz);
   const today = ymdLocal(now);
-  const checkinDoneToday = recoveryLogs.some((l) => localDateOf(l.logged_at, tz) === today);
+  const recoveryDates = new Set(recoveryLogs.map((l) => localDateOf(l.logged_at, tz)));
+  const checkinDoneToday = recoveryDates.has(today);
   return buildHome({
     profile,
     weeklyPlan,
     sessions,
     selectedDate,
     checkinDoneToday,
+    recoveryDates,
     actualSessions,
     recoveryLogs,
     fuelLogs,

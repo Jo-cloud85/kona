@@ -66,6 +66,20 @@ export interface HomeWeekDay {
   has_session: boolean;
 }
 
+/** A short, forward-looking preview of the week for the Home tab — the same
+ *  per-day title/duration "Your week" already computes, just the first few
+ *  days (today first), for a card that links through to the full page. */
+export interface HomeWeekPreviewDay {
+  date: string;
+  weekday: string;
+  day_of_month: number;
+  is_today: boolean;
+  is_rest: boolean;
+  is_double: boolean;
+  title: string | null;
+  duration_label: string | null;
+}
+
 export interface HomeBriefing {
   /** "What am I doing today?" + "does it matter?" */
   your_day: {
@@ -92,11 +106,17 @@ export interface HomeView {
   today: string;
   selected_date: string;
   week: HomeWeekDay[];
+  /** Today + the next few days, for the "Your week" preview card. */
+  week_preview: HomeWeekPreviewDay[];
   has_plan: boolean;
   /** One-line goal context ("11 weeks to your first Olympic-distance triathlon"), or null. */
   goal_line: string | null;
-  /** End-of-day check-in state (for the profile-avatar dot + evening popup). */
-  checkin: { due: boolean; done: boolean };
+  /** End-of-day check-in state (for the profile-avatar dot + evening popup).
+   *  `missed_date` is the most recent PAST day (within the rolling window)
+   *  that had a training session and never got checked in — it keeps the
+   *  reminder alive past midnight instead of silently dropping it when
+   *  "today" rolls over (real alpha feedback, 2026-09-14). */
+  checkin: { due: boolean; done: boolean; today_due: boolean; missed_date: string | null };
   selected: {
     date: string;
     weekday: string;
@@ -168,6 +188,18 @@ export function durationLabel(s: SessionInputCore): string {
   if (s.distance_label) return s.distance_label;
   if (s.distance_km && s.distance_km > 0) return `${s.distance_km} km`;
   return 'length not set';
+}
+
+/** A day's title for a week-shaped view (Home's preview, the full "Your week"
+ *  page): joined sports for a double day, the single session's title, "Rest",
+ *  or null for an open day — nothing told to Kona yet. */
+export function dayTitle(sessions: PlannedSession[], isRest: boolean): string | null {
+  if (sessions.length > 1) {
+    return joinList(sessions.map((s) => sportLabel(s.sport))).replace(/^\w/, (c) => c.toUpperCase());
+  }
+  if (sessions.length === 1) return titleFor(sessions[0]!);
+  if (isRest) return 'Rest';
+  return null;
 }
 
 function sessionView(s: PlannedSession): HomeSession {
@@ -405,6 +437,10 @@ export function buildHome(input: {
   selectedDate?: string;
   /** Whether the user has already done an end-of-day check-in today. */
   checkinDoneToday?: boolean;
+  /** Local calendar dates (YYYY-MM-DD, already resolved to the athlete's
+   *  timezone by the caller — see lib/kona-server.ts) that have a recovery
+   *  log. Used to find a past day whose check-in was never done. */
+  recoveryDates?: Set<string>;
   actualSessions?: ActualSession[];
   recoveryLogs?: RecoveryLog[];
   fuelLogs?: FuelLog[];
@@ -439,6 +475,24 @@ export function buildHome(input: {
       is_selected: date === selected_date,
       is_rest: restSet.has(date),
       has_session: (byDate.get(date)?.length ?? 0) > 0,
+    };
+  });
+
+  // Today first, then the next few days — a short forward-looking preview
+  // for the Home card (the full rolling window is "Your week").
+  const week_preview: HomeWeekPreviewDay[] = Array.from({ length: 4 }, (_, i) => {
+    const date = isoDate(addDays(now, i));
+    const sessions = byDate.get(date) ?? [];
+    const isRest = restSet.has(date);
+    return {
+      date,
+      weekday: weekdayLabel(date),
+      day_of_month: dayOfMonth(date),
+      is_today: date === today,
+      is_rest: isRest,
+      is_double: sessions.length > 1,
+      title: dayTitle(sessions, isRest),
+      duration_label: sessions.length === 1 ? durationLabel(sessions[0]!) : null,
     };
   });
 
@@ -485,16 +539,25 @@ export function buildHome(input: {
 
   const todayDay = week.find((d) => d.is_today);
   const checkinDone = input.checkinDoneToday ?? false;
-  const checkinDue = !checkinDone && !!todayDay && !todayDay.is_rest && todayDay.has_session;
+  const todayDue = !checkinDone && !!todayDay && !todayDay.is_rest && todayDay.has_session;
+
+  // The most recent PAST day (within the rolling window) that had a training
+  // session and no matching recovery log — carries the reminder past
+  // midnight instead of losing it when "today" rolls over.
+  const missedDays = week.filter(
+    (d) => !d.is_today && d.date < today && !d.is_rest && d.has_session && !(input.recoveryDates?.has(d.date) ?? false),
+  );
+  const missedCheckinDate = missedDays.length ? missedDays[missedDays.length - 1]!.date : null;
 
   return {
     greeting_name: input.profile.username ?? null,
     today,
     selected_date,
     week,
+    week_preview,
     has_plan: input.weeklyPlan != null,
     goal_line: goalContext(input.profile.goal, now).phrase,
-    checkin: { due: checkinDue, done: checkinDone },
+    checkin: { due: todayDue || missedCheckinDate != null, done: checkinDone, today_due: todayDue, missed_date: missedCheckinDate },
     selected: {
       date: selected_date,
       weekday: weekdayLabel(selected_date),

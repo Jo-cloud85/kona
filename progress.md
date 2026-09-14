@@ -9,6 +9,40 @@ below, explicitly requested), don't fabricate insights, stop for a
 product review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
 
+### Home: "Your week" preview card + a missed check-in survives past midnight (2026-09-14) ✅
+Two of three founder asks from the same message; the third (daily carb/water/
+salt targets on "Your week") conflicted with a documented product decision —
+flagged back to the founder rather than built. See `CALCULATION_ENGINE_SPEC.md`
+§23: a whole-day nutrition estimate was deliberately removed in the 2026 reset
+for making Kona feel like a generic macro tracker; only protein has a real
+*daily* number (§8.1) — fluid/carb/sodium are session references by design
+(`src/engine/profile-baseline.ts`, `buildWeek`'s footnote). **Founder decision:
+leave as-is** — no daily fluid/carb/sodium targets; the §23 reasoning stands.
+- Home's "Your week →" hyperlink replaced with an actual preview card (today
+  first, then the next 3 days, real per-day titles) below the "Your day" card
+  — tapping through still opens the full "Your week" page. `buildHome` gained
+  `week_preview`; the per-day title logic ("Rest" / joined sports for a
+  double day / the session title / null for an open day) was pulled out of
+  `buildWeek` into a shared `dayTitle()` in `src/agent/home.ts` so Home and
+  the full week page can't drift.
+- A training day's end-of-day check-in that never happened no longer
+  disappears when the day rolls over — `checkin.missed_date` is the most
+  recent past day (in the rolling window) with a session and no matching
+  recovery log, computed the same tz-aware way as `checkinDoneToday`
+  (`localDateOf`, not a naive UTC slice — the exact bug class §"Today"
+  above just fixed). The profile-avatar dot and the check-in nudge now cover
+  both "today's check-in is due" and "a past day's check-in was missed";
+  tapping either opens the check-in dialog with honest copy ("How did Sunday
+  go?", not "today"). Because a late check-in always saves against *today*
+  (the log has no way to backdate itself to the day it's catching up on), a
+  resolved missed day is tracked client-side (`localStorage`) rather than
+  re-derived from the log — the server keeps reporting the raw missed date
+  forever, same as before.
+- Caught in testing (not by inspection): computing the "resolved" flag in a
+  `useEffect` + its own `useState` lagged one render behind `data`, so a
+  just-resolved day's auto-popup could fire once more before the resolution
+  "caught up" — fixed by computing it inline during render instead.
+
 ### "Today" now resolves against the athlete's timezone, not the server's (2026-09-14) ✅
 _Found live the same day, while testing the session-recap feature just after
 local midnight; fixed immediately after on explicit go-ahead. Root cause:

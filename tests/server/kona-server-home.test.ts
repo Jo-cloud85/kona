@@ -242,3 +242,52 @@ describe('getHome/getWeek/sendMessage use the athlete\'s timezone for "today", n
   });
 
 });
+
+describe('a missed end-of-day check-in stays flagged once the local day has passed (2026-09-14 alpha feedback)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('getHome flags yesterday (athlete-local) as missed once "today" rolls over, and stays due', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+
+    vi.setSystemTime(new Date('2026-09-13T10:00:00.000Z')); // 2026-09-13T18:00 SGT
+    await repo.savePlannedSession({
+      user_id: USER_ID,
+      sport: 'running',
+      start_at: '2026-09-13T18:00:00',
+      distance_km: 10,
+      intensity: 'easy',
+    });
+
+    vi.setSystemTime(new Date('2026-09-13T16:20:00.000Z')); // 2026-09-14T00:20 SGT — next local day
+    const home = await getHome(ctx, undefined, 'Asia/Singapore');
+    expect(home!.today).toBe('2026-09-14');
+    expect(home!.checkin.missed_date).toBe('2026-09-13');
+    expect(home!.checkin.due).toBe(true);
+    expect(home!.checkin.today_due).toBe(false); // today itself has no session yet
+  });
+
+  it('a recovery log dated the same local day as the session resolves it; a next-day log does not', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+
+    vi.setSystemTime(new Date('2026-09-13T10:00:00.000Z')); // 2026-09-13T18:00 SGT
+    await repo.savePlannedSession({
+      user_id: USER_ID,
+      sport: 'running',
+      start_at: '2026-09-13T18:00:00',
+      distance_km: 10,
+      intensity: 'easy',
+    });
+    await repo.saveRecoveryLog({ user_id: USER_ID, free_text: 'End-of-day check-in — felt fine' });
+
+    vi.setSystemTime(new Date('2026-09-13T16:20:00.000Z')); // next local day
+    const resolvedHome = await getHome(ctx, undefined, 'Asia/Singapore');
+    expect(resolvedHome!.checkin.missed_date).toBeNull(); // logged the same local day it was due
+  });
+});

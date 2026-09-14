@@ -281,8 +281,13 @@ describe('buildHome', () => {
       sessions: [session({ start_at: '2026-09-09T07:00:00', distance_km: 6, time_of_day: 'morning' })],
       now: NOW,
     };
-    expect(buildHome(withSession).checkin).toEqual({ due: true, done: false });
-    expect(buildHome({ ...withSession, checkinDoneToday: true }).checkin).toEqual({ due: false, done: true });
+    expect(buildHome(withSession).checkin).toEqual({ due: true, done: false, today_due: true, missed_date: null });
+    expect(buildHome({ ...withSession, checkinDoneToday: true }).checkin).toEqual({
+      due: false,
+      done: true,
+      today_due: false,
+      missed_date: null,
+    });
 
     const restToday = buildHome({
       profile,
@@ -291,5 +296,45 @@ describe('buildHome', () => {
       now: NOW,
     });
     expect(restToday.checkin.due).toBe(false);
+  });
+
+  it('flags the most recent PAST training day with no check-in as missed, surviving past midnight (2026-09-14 alpha feedback)', () => {
+    const sessions = [
+      session({ start_at: '2026-09-08T07:00:00' }), // Tue — never checked in
+      session({ start_at: '2026-09-09T07:00:00' }), // Wed (today) — its own due/today_due path, not "missed"
+    ];
+
+    const noCheckins = buildHome({ profile, weeklyPlan: plan(), sessions, now: NOW });
+    expect(noCheckins.checkin.missed_date).toBe('2026-09-08');
+    expect(noCheckins.checkin.due).toBe(true);
+
+    // Tuesday gets a recovery log (in the athlete's local day) -> no longer missed.
+    const resolved = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions,
+      recoveryDates: new Set(['2026-09-08']),
+      now: NOW,
+    });
+    expect(resolved.checkin.missed_date).toBeNull();
+    expect(resolved.checkin.today_due).toBe(true); // today's own check-in is still due
+  });
+
+  it('week_preview starts with today and carries real per-day titles', () => {
+    const h = buildHome({
+      profile,
+      weeklyPlan: plan(),
+      sessions: [
+        session({ start_at: '2026-09-09T07:00:00', distance_km: 6 }),
+        session({ start_at: '2026-09-10T18:00:00', distance_km: 10 }),
+      ],
+      now: NOW,
+    });
+    expect(h.week_preview).toHaveLength(4);
+    expect(h.week_preview[0]).toMatchObject({ date: '2026-09-09', is_today: true });
+    expect(h.week_preview[0]!.title).toMatch(/6 km/);
+    expect(h.week_preview[1]).toMatchObject({ date: '2026-09-10', is_today: false });
+    expect(h.week_preview[1]!.title).toMatch(/10 km/);
+    expect(h.week_preview[2]).toMatchObject({ date: '2026-09-11', title: null }); // open day — nothing told to Kona yet
   });
 });
