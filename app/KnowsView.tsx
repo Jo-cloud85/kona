@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { readCache, writeCache } from './data-cache';
 
 interface Insight {
   kind: 'fact' | 'pattern' | 'hypothesis' | 'recommendation';
@@ -35,13 +36,17 @@ const KIND_LABEL: Record<Insight['kind'], string> = {
 };
 
 export default function KnowsView({ onBack }: { onBack?: () => void } = {}) {
-  const [data, setData] = useState<KnowsView | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const cached = readCache<KnowsView | null>('knows');
+  const [data, setData] = useState<KnowsView | null>(cached ? cached.value : null);
+  const [loaded, setLoaded] = useState(cached !== null);
 
   useEffect(() => {
     fetch('/api/knows')
       .then((r) => r.json())
-      .then((d: { knows: KnowsView | null }) => setData(d.knows))
+      .then((d: { knows: KnowsView | null }) => {
+        setData(d.knows);
+        writeCache('knows', d.knows);
+      })
       .catch(() => undefined)
       .finally(() => setLoaded(true));
   }, []);

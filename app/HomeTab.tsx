@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import CheckinDialog from './CheckinDialog';
 import { tzHeaders } from './client-tz';
+import { readCache, writeCache } from './data-cache';
 
 interface Range {
   min: number;
@@ -138,8 +139,14 @@ export default function HomeTab({
    *  greeting name / goal line may have changed). */
   profileVersion: number;
 }) {
-  const [data, setData] = useState<HomeView | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  // Keyed by profileVersion (not by selected date — a remount always lands
+  // back on today's default view, so only that default is worth caching for
+  // an instant repaint; a day-pill tap already updates in place without a
+  // spinner, see `load` below).
+  const cacheKey = `home:${profileVersion}`;
+  const cached = readCache<HomeView | null>(cacheKey);
+  const [data, setData] = useState<HomeView | null>(cached ? cached.value : null);
+  const [loaded, setLoaded] = useState(cached !== null);
   const [checkinOpen, setCheckinOpen] = useState(false);
   // Which date the open CheckinDialog is about — today, or a missed past day
   // caught up on late. Drives the dialog's copy and which local dismiss/
@@ -148,14 +155,20 @@ export default function HomeTab({
   const dayStripRef = useRef<HTMLDivElement>(null);
   const scrolledToTodayRef = useRef(false);
 
-  const load = useCallback((date?: string) => {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
-    return fetch(`/api/home${qs}`, { headers: tzHeaders() })
-      .then((r) => r.json())
-      .then((d: { home: HomeView | null }) => setData(d.home))
-      .catch(() => undefined)
-      .finally(() => setLoaded(true));
-  }, []);
+  const load = useCallback(
+    (date?: string) => {
+      const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+      return fetch(`/api/home${qs}`, { headers: tzHeaders() })
+        .then((r) => r.json())
+        .then((d: { home: HomeView | null }) => {
+          setData(d.home);
+          if (!date) writeCache(cacheKey, d.home);
+        })
+        .catch(() => undefined)
+        .finally(() => setLoaded(true));
+    },
+    [cacheKey],
+  );
 
   useEffect(() => {
     void load();

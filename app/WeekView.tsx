@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { tzHeaders } from './client-tz';
+import { readCache, writeCache } from './data-cache';
 import SessionRecapView from './SessionRecapView';
 
 interface Range {
@@ -43,14 +44,18 @@ export default function WeekView({
   onOpenChat?: (prefill: string) => void;
   onOpenMemory?: () => void;
 }) {
-  const [data, setData] = useState<WeekViewData | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const cached = readCache<WeekViewData | null>('week');
+  const [data, setData] = useState<WeekViewData | null>(cached ? cached.value : null);
+  const [loaded, setLoaded] = useState(cached !== null);
   const [recapDate, setRecapDate] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/week', { headers: tzHeaders() })
       .then((r) => r.json())
-      .then((d: { week: WeekViewData | null }) => setData(d.week))
+      .then((d: { week: WeekViewData | null }) => {
+        setData(d.week);
+        writeCache('week', d.week);
+      })
       .catch(() => undefined)
       .finally(() => setLoaded(true));
   }, []);

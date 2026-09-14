@@ -10,6 +10,60 @@ built under those constraints. Don't fabricate insights, stop for a product
 review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
 
+### Consistent 32px left/right/top offset across all tabs (2026-09-15) ✅
+Founder noticed the Week tab's title and its day-cards didn't line up — measured
+it: "Week" sat 16px from the screen edge, but the day-cards below sat 32px in.
+Root cause: `WeekView.tsx`'s own `.week` wrapper had its own left/right/top
+padding, nested inside the shared `.home` wrapper that already supplies that
+padding — the two stacked instead of one superseding the other. Every other
+tab (Home, You, Memory) doesn't have this extra nested wrapper, so their
+titles and cards already lined up with each other, just at the narrower 16px.
+
+Asked the founder which value should become the standard: fix Week to match
+everyone else at 16px, or widen everyone else to match Week's (accidentally
+doubled) 32px. Founder chose 32px everywhere — more breathing room on every
+screen. Changes: `.home` and `.knows` (the shared wrapper `HomeTab`/`WeekView`/
+`YouTab`/`KnowsView` all render into) went from 16px to 32px left/right;
+`.week` had its own redundant left/right/top padding removed entirely (bottom
+padding left as-is, out of scope — the founder only asked about left, right,
+top); Chat's `.header`/`.thread`/`.composer` (previously 20px/20px/16px, its
+own inconsistent set) moved to 32px too, and `.header`'s top padding moved
+from 16px to 20px to match the `.home` family's top offset. `ProfileOverlay`
+and `CheckinDialog` are overlays, not tabs, and were left untouched — out of
+what was asked. Verified live at 375px: measured `getBoundingClientRect()` /
+`paddingLeft` on all five tabs post-fix — title and content both sit at
+`x: 32` everywhere, confirmed by screenshot too.
+
+### Client-side tab cache (2026-09-14) ✅
+Founder flagged tab switches feeling laggy. Root cause: `AppShell.tsx` keys
+its active tab's wrapper on `tab` (`key={tab}`), so switching Home ↔ Chat ↔
+Week ↔ Memory ↔ You fully unmounts/remounts the tab component every time —
+each revisit re-showed a "Loading…" spinner and refetched data that hadn't
+changed since the last visit. Not a database performance problem (the whole
+app is one user's own data over a fast local Supabase query), so no
+server-side cache was warranted — just a redundant-refetch-on-remount
+problem.
+
+Fix: `app/data-cache.ts`, a module-level `Map` (survives the remount because
+it isn't React state — cleared only on a real page reload, e.g. sign-out's
+`window.location.assign`, so nothing carries across accounts). `HomeTab`,
+`WeekView`, `KnowsView`, `YouTab` now seed their initial `data`/`loaded`
+state from the cache before their fetch effect runs, then always fetch fresh
+in the background and overwrite the cache (stale-while-revalidate) — so a
+revisited tab paints instantly with last-known data instead of blanking to a
+spinner, while still self-correcting the moment the fresh response lands.
+`HomeTab` caches only the no-date default load (keyed by `profileVersion`,
+since a remount always lands back on today) — a day-pill tap already updates
+in place without a spinner, so caching per-date would add complexity for no
+visible benefit. `YouTab` keys on `profileVersion` too, so a profile save
+still forces a fresh paint rather than showing stale goal/name data. Chat
+was deliberately left uncached — its message thread is mutable mid-session
+(edits, in-flight sends) and stale caching risk there outweighs the win.
+Verified live: `Loading…` shows the first time a tab is visited each
+session; every revisit after that repaints with zero network wait (confirmed
+by reading the DOM on the very next microtask after the nav click — faster
+than any real fetch could resolve).
+
 ### M26 — "You": Arc progression + Direction B reskin (2026-09-14) ✅
 Founder ran a redesign concept through Claude Design and got back
 `Kona You Screen.dc.html` ("Direction B — Companion/Identity"), then

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { tzHeaders } from './client-tz';
+import { readCache, writeCache } from './data-cache';
 
 interface ArcStage {
   name: string;
@@ -45,16 +46,21 @@ function shortDate(iso: string): string {
 }
 
 export default function YouTab({ profileVersion }: { profileVersion: number }) {
-  const [data, setData] = useState<YouView | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const cacheKey = `you:${profileVersion}`;
+  const cached = readCache<YouView | null>(cacheKey);
+  const [data, setData] = useState<YouView | null>(cached ? cached.value : null);
+  const [loaded, setLoaded] = useState(cached !== null);
 
   useEffect(() => {
     fetch('/api/you', { headers: tzHeaders() })
       .then((r) => r.json())
-      .then((d: { you: YouView | null }) => setData(d.you))
+      .then((d: { you: YouView | null }) => {
+        setData(d.you);
+        writeCache(cacheKey, d.you);
+      })
       .catch(() => undefined)
       .finally(() => setLoaded(true));
-  }, [profileVersion]);
+  }, [cacheKey]);
 
   if (!loaded) {
     return (
