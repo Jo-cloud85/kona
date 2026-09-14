@@ -108,7 +108,7 @@ export type MissingDetail = 'intensity' | 'duration_or_distance' | 'time_of_day'
 
 /** Coarse time-of-day bucket for a session. Drives pre-fuel advice (a morning
  *  session is likely done before a full breakfast). */
-export type TimeOfDay = 'morning' | 'afternoon' | 'evening';
+export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
 
 export interface SessionInputCore {
   sport: Sport;

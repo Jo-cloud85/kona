@@ -35,6 +35,7 @@ const LOADERS: Record<string, () => Promise<RouteMod>> = {
   conversations: () => import('../../app/api/conversations/route'),
   profile: () => import('../../app/api/profile/route'),
   chat: () => import('../../app/api/chat/route'),
+  you: () => import('../../app/api/you/route'),
 };
 const ROUTES = Object.keys(LOADERS);
 const loadRoute = (name: string): Promise<RouteMod> => LOADERS[name]!();

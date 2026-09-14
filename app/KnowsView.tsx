@@ -63,7 +63,7 @@ export default function KnowsView({ onBack }: { onBack?: () => void } = {}) {
     <div className="knows">
       <header className="dash-head">
         {onBack && (
-          <button className="back-btn" onClick={onBack} aria-label="Back to Profile">
+          <button className="back-btn" onClick={onBack} aria-label="Back">
             ‹ Back
           </button>
         )}

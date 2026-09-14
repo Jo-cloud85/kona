@@ -3,23 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import CheckinDialog from './CheckinDialog';
 import { tzHeaders } from './client-tz';
-import KnowsView from './KnowsView';
-import ProfileForm, { type ProfileValues } from './ProfileForm';
-import SignOutButton from './SignOutButton';
-import WeekView from './WeekView';
-
-const SPORT_LABEL: Record<string, string> = {
-  running: 'Running',
-  cycling: 'Cycling',
-  swimming: 'Swimming',
-  gym: 'Strength',
-  climbing: 'Climbing',
-  skating: 'Skating',
-  combat_sports: 'Combat sports',
-  hyrox: 'HYROX',
-  triathlon: 'Triathlon',
-  other: 'Training',
-};
 
 interface Range {
   min: number;
@@ -51,16 +34,18 @@ interface HomeWeekPreviewDay {
   is_today: boolean;
   is_rest: boolean;
   is_double: boolean;
+  is_key_day: boolean;
   title: string | null;
   duration_label: string | null;
 }
 export interface KonaBriefing {
-  has_target: boolean;
   when: string | null;
   date: string | null;
-  headline: string | null;
+  session_label: string | null;
+  headline: string;
   action: string;
   why: string | null;
+  deviation: { planned: string; actual: string; reason: string | null } | null;
   basis: 'reported' | 'repeated' | 'outcome' | 'adaptation' | null;
 }
 interface HomeView {
@@ -136,24 +121,30 @@ function markMissedResolved(date: string) {
 
 export default function HomeTab({
   greetingName,
-  onProfileChange,
   onOpenChat,
+  onOpenProfile,
+  onOpenWeek,
+  profileVersion,
 }: {
   greetingName?: string;
-  onProfileChange: (p: ProfileValues) => void;
   onOpenChat: (prefill: string) => void;
+  /** Opens the shared Profile overlay (Home's own avatar button per the
+   *  mockup's own stated intent — Profile is deliberately not a tab). Pass
+   *  a check-in nudge when one is due so Profile can surface it too. */
+  onOpenProfile: (checkin?: { label: string; onOpen: () => void }) => void;
+  /** Navigates to the Week tab. */
+  onOpenWeek: () => void;
+  /** Bumped by AppShell whenever Profile is saved, so Home reloads (the
+   *  greeting name / goal line may have changed). */
+  profileVersion: number;
 }) {
   const [data, setData] = useState<HomeView | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [profileInitial, setProfileInitial] = useState<ProfileValues | null>(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
   // Which date the open CheckinDialog is about — today, or a missed past day
   // caught up on late. Drives the dialog's copy and which local dismiss/
   // resolved key gets touched.
   const [checkinFor, setCheckinFor] = useState<string | null>(null);
-  const [weekOpen, setWeekOpen] = useState(false);
-  const [memoryOpen, setMemoryOpen] = useState(false);
   const dayStripRef = useRef<HTMLDivElement>(null);
   const scrolledToTodayRef = useRef(false);
 
@@ -168,7 +159,7 @@ export default function HomeTab({
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, profileVersion]);
 
   // Opening Home should always land with today as the first visible day —
   // scroll it into view once per mount, not on every subsequent day-pill tap.
@@ -241,16 +232,6 @@ export default function HomeTab({
       ? `You missed checking in on ${weekdayFullFor(missedDate)} — tap to update →`
       : 'Evening check-in — log how today went →';
 
-  const openProfile = () => {
-    setProfileOpen(true);
-    if (!profileInitial) {
-      fetch('/api/profile')
-        .then((r) => r.json())
-        .then((d: { profile: ProfileValues | null }) => setProfileInitial(d.profile ?? {}))
-        .catch(() => setProfileInitial({}));
-    }
-  };
-
   if (!loaded) {
     return (
       <div className="home">
@@ -287,7 +268,13 @@ export default function HomeTab({
           <p className="home-date">{longDate(data.today)}</p>
           {data.goal_line && <p className="home-goal">{data.goal_line}</p>}
         </div>
-        <button className="home-avatar" onClick={openProfile} aria-label="Profile">
+        <button
+          className="home-avatar"
+          onClick={() =>
+            onOpenProfile(effectiveDue ? { label: checkinNudgeLabel(), onOpen: () => openCheckin(missedDate) } : undefined)
+          }
+          aria-label="Profile"
+        >
           {initial}
           {effectiveDue && <span className="avatar-dot" aria-hidden />}
         </button>
@@ -315,17 +302,29 @@ export default function HomeTab({
         </button>
       )}
 
-      {/* KONA BRIEFING (M24) — "how should you approach the next session?" —
-          the one evidence-backed recommendation, always present. This is the
-          top card; "Your day" below is the plain factual/fueling-numbers
+      {/* KONA'S CALL (M24 + M25.1) — "given everything Kona knows, what
+          matters today?" The one dominant judgment block: WHAT (headline) →
+          WHY (evidence, when real) → WHAT TO DO (the recommendation). This is
+          the top card; "Your day" below is the plain factual/fueling-numbers
           display for whichever day is selected. */}
-      <section className="home-card kona-card brief-card">
+      <section className="home-card kona-card brief-card kona-call">
         <p className="kona-eyebrow">
           <span className="dot" aria-hidden />
-          {kb.has_target ? `${kb.when} · ${kb.headline}` : 'Kona briefing'}
+          {kb.session_label ? `${kb.when} · ${kb.session_label}` : "Kona's call"}
         </p>
-        <p className="brief-headline">{kb.action}</p>
+        <p className="kona-call-headline">{kb.headline}</p>
         {kb.why && <p className="brief-line brief-why">{kb.why}</p>}
+        {kb.deviation && (
+          <p className="kona-deviation">
+            Planned {kb.deviation.planned} · Actual {kb.deviation.actual}
+            {kb.deviation.reason ? ` · ${kb.deviation.reason}` : ''}
+          </p>
+        )}
+        <p className="kona-call-label">Recommendation</p>
+        <p className="brief-line">{kb.action}</p>
+        <button className="home-link" onClick={() => onOpenChat("Tell me more about today's call — ")}>
+          Ask Kona about this →
+        </button>
       </section>
 
       {/* YOUR DAY */}
@@ -384,35 +383,41 @@ export default function HomeTab({
           {data.week_preview.map((d) => (
             <div
               key={d.date}
-              className={`week-day${d.is_today ? ' is-today' : ''}${d.is_double ? ' is-double' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title ? ' is-open' : ''}`}
+              className={`week-day${d.is_today ? ' is-today' : ''}${!d.is_today && (d.is_key_day || d.is_double) ? ' is-key' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title ? ' is-open' : ''}`}
             >
               <span className="week-day-dow">{d.weekday}</span>
               <div className="week-day-main">
                 <span className="week-day-title">{d.title ?? <span className="week-day-open">Nothing planned</span>}</span>
               </div>
               {d.is_today && <span className="week-day-badge">Today</span>}
-              {!d.is_today && d.duration_label && d.duration_label !== 'length not set' && (
+              {!d.is_today && (d.is_key_day || d.is_double) && (
+                <span className="week-day-badge key">{d.is_key_day ? 'Key' : 'Double'}</span>
+              )}
+              {!d.is_today && !d.is_key_day && !d.is_double && d.duration_label && d.duration_label !== 'length not set' && (
                 <span className="week-day-meta">{d.duration_label}</span>
               )}
             </div>
           ))}
         </div>
-        <button className="home-link" onClick={() => setWeekOpen(true)}>
+        <button className="home-link" onClick={onOpenWeek}>
           See your full week →
         </button>
       </section>
 
-      {/* KONA REMEMBERS */}
-      {b.remembers.length > 0 && (
-        <section className="home-card brief-card">
-          <p className="brief-label">Kona remembers</p>
+      {/* KONA REMEMBERS — always shown, per the mockup, with an honest
+          empty state rather than hidden when there's nothing yet. */}
+      <section className="home-card brief-card">
+        <p className="brief-label">Kona remembers</p>
+        {b.remembers.length > 0 ? (
           <ul className="remembers-list">
             {b.remembers.map((t, i) => (
               <li key={i}>{t}</li>
             ))}
           </ul>
-        </section>
-      )}
+        ) : (
+          <p className="brief-line">Still getting to know you — this fills in as you log sessions and check in.</p>
+        )}
+      </section>
 
       <p className="home-foot">
         Kona doesn&apos;t diagnose. Session references are general starting points, not exact targets.
@@ -434,88 +439,6 @@ export default function HomeTab({
         />
       )}
 
-      {weekOpen && (
-        <WeekView
-          onClose={() => setWeekOpen(false)}
-          onOpenChat={onOpenChat}
-          onOpenMemory={() => {
-            setWeekOpen(false);
-            setMemoryOpen(true);
-          }}
-        />
-      )}
-
-      {memoryOpen && (
-        <div className="profile-overlay nested">
-          <KnowsView onBack={() => setMemoryOpen(false)} />
-        </div>
-      )}
-
-      {profileOpen && (
-        <div className="profile-overlay" role="dialog" aria-modal="true" aria-label="Profile">
-          <div className="profile-overlay-bar">
-            <h1>Profile</h1>
-            <button className="profile-close" onClick={() => setProfileOpen(false)} aria-label="Close">
-              ✕
-            </button>
-          </div>
-          {effectiveDue && (
-            <button
-              className="checkin-nudge profile-checkin-nudge"
-              onClick={() => {
-                setProfileOpen(false);
-                openCheckin(missedDate);
-              }}
-            >
-              {checkinNudgeLabel()}
-            </button>
-          )}
-          {profileInitial && (profileInitial.username || profileInitial.usual_sports?.length) && (
-            <div className="profile-head">
-              <div className="profile-head-avatar">{(profileInitial.username?.trim()[0] ?? initial).toUpperCase()}</div>
-              <div>
-                <h2>{profileInitial.username || name}</h2>
-                <p>
-                  {(profileInitial.usual_sports ?? []).map((s) => SPORT_LABEL[s] ?? s).join(', ')}
-                  {profileInitial.typical_weekly_sessions
-                    ? ` · ${profileInitial.typical_weekly_sessions} sessions / week`
-                    : ''}
-                </p>
-              </div>
-            </div>
-          )}
-          <div className="app">
-            <div className="landing profile-blurb">
-              <p className="blurb">
-                Update your weight, usual bottle, sports or goal — anything. It sharpens Kona&apos;s advice.
-              </p>
-            </div>
-            {profileInitial ? (
-              <ProfileForm
-                initial={profileInitial}
-                submitLabel="Save changes"
-                onSaved={(p) => {
-                  onProfileChange(p);
-                  setProfileInitial(p);
-                  setProfileOpen(false);
-                  void load(data.selected_date === data.today ? undefined : data.selected_date);
-                }}
-              />
-            ) : (
-              <p className="dash-msg" style={{ textAlign: 'center' }}>
-                Loading…
-              </p>
-            )}
-            <button className="home-cta" onClick={() => setMemoryOpen(true)}>
-              What Kona knows about you →
-            </button>
-
-            <div className="profile-signout">
-              <SignOutButton />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

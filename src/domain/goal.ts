@@ -101,28 +101,46 @@ export interface GoalContext {
   weeks_until: number | null;
   /** One ready-to-show line, or null when there's nothing time-relevant to say. */
   phrase: string | null;
+  /** Just the goal's name, date clause stripped — e.g. "Olympic triathlon".
+   *  Present whenever a goal is set, even without a parseable date. */
+  short_text: string | null;
+  /** Just the countdown, no goal name — e.g. "11 weeks away", "Race day".
+   *  Only present when there's a date to count down to. */
+  countdown: string | null;
 }
 
 export function goalContext(goal: TrainingGoal | undefined, now: Date = new Date()): GoalContext {
   if (!goal?.text) {
-    return { text: null, event_date: null, days_until: null, weeks_until: null, phrase: null };
+    return { text: null, event_date: null, days_until: null, weeks_until: null, phrase: null, short_text: null, countdown: null };
   }
+  const short_text = shortGoal(goal.text);
   const event_date = goal.event_date ?? parseGoalDate(goal.text, now);
   if (!event_date) {
-    return { text: goal.text, event_date: null, days_until: null, weeks_until: null, phrase: null };
+    return { text: goal.text, event_date: null, days_until: null, weeks_until: null, phrase: null, short_text, countdown: null };
   }
 
   const [y, m, d] = event_date.split('-').map(Number) as [number, number, number];
   const days_until = Math.round((new Date(y, m - 1, d).getTime() - atMidnight(now).getTime()) / 86_400_000);
   const weeks_until = Math.round(days_until / 7);
-  const g = shortGoal(goal.text);
 
   let phrase: string | null;
-  if (days_until < 0) phrase = null;
-  else if (days_until === 0) phrase = `Race day — ${g}.`;
-  else if (days_until <= 7) phrase = `Race week — ${g} in ${days_until} day${days_until === 1 ? '' : 's'}.`;
-  else if (days_until <= 21) phrase = `${days_until} days to your ${g}.`;
-  else phrase = `${weeks_until} weeks to your ${g}.`;
+  let countdown: string | null;
+  if (days_until < 0) {
+    phrase = null;
+    countdown = null;
+  } else if (days_until === 0) {
+    phrase = `Race day — ${short_text}.`;
+    countdown = 'Race day';
+  } else if (days_until <= 7) {
+    phrase = `Race week — ${short_text} in ${days_until} day${days_until === 1 ? '' : 's'}.`;
+    countdown = `Race week — ${days_until} day${days_until === 1 ? '' : 's'}`;
+  } else if (days_until <= 21) {
+    phrase = `${days_until} days to your ${short_text}.`;
+    countdown = `${days_until} days away`;
+  } else {
+    phrase = `${weeks_until} weeks to your ${short_text}.`;
+    countdown = `${weeks_until} weeks away`;
+  }
 
-  return { text: goal.text, event_date, days_until, weeks_until, phrase };
+  return { text: goal.text, event_date, days_until, weeks_until, phrase, short_text, countdown };
 }

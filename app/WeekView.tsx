@@ -37,11 +37,9 @@ function rangeText(r: Range): string {
 }
 
 export default function WeekView({
-  onClose,
   onOpenChat,
   onOpenMemory,
 }: {
-  onClose: () => void;
   onOpenChat?: (prefill: string) => void;
   onOpenMemory?: () => void;
 }) {
@@ -58,12 +56,11 @@ export default function WeekView({
   }, []);
 
   return (
-    <div className="profile-overlay" role="dialog" aria-modal="true" aria-label="Your week">
-      <div className="profile-overlay-bar">
-        <h1>Your week</h1>
-        <button className="profile-close" onClick={onClose} aria-label="Close">
-          ✕
-        </button>
+    <div className="home week-tab">
+      <div className="home-top">
+        <div>
+          <p className="home-greeting">Week</p>
+        </div>
       </div>
 
       <div className="week">
@@ -112,7 +109,7 @@ export default function WeekView({
                         }
                       : undefined
                   }
-                  className={`week-day${d.is_today ? ' is-today' : ''}${d.is_double ? ' is-double' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title ? ' is-open' : ''}${d.has_recap ? ' is-tappable' : ''}`}
+                  className={`week-day${d.is_today ? ' is-today' : ''}${!d.is_today && (d.is_key_day || d.is_double) ? ' is-key' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title ? ' is-open' : ''}${d.has_recap ? ' is-tappable' : ''}`}
                 >
                   <span className="week-day-dow">{d.weekday}</span>
                   <div className="week-day-main">
@@ -127,8 +124,10 @@ export default function WeekView({
                     )}
                   </div>
                   {d.is_today && <span className="week-day-badge">Today</span>}
-                  {!d.is_today && d.is_double && <span className="week-day-badge">Double</span>}
-                  {!d.is_today && !d.is_double && d.duration_label && d.duration_label !== 'length not set' && (
+                  {!d.is_today && (d.is_key_day || d.is_double) && (
+                    <span className="week-day-badge key">{d.is_key_day ? 'Key' : 'Double'}</span>
+                  )}
+                  {!d.is_today && !d.is_key_day && !d.is_double && d.duration_label && d.duration_label !== 'length not set' && (
                     <span className="week-day-meta">{d.duration_label}</span>
                   )}
                 </div>

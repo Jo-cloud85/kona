@@ -3,11 +3,275 @@
 ## Current milestone
 **Product reset (2026) in progress.** Kona re-scoped to a *sustainable
 performance companion* (thesis refined M24) — relationship + judgment, not a
-nutrition tracker. **M14.1–M24 + M15.1 + UI pass done. Live on Vercel, founder
-alpha testing underway.** Founder direction: no visual redesign *until told
-otherwise* (see UI pass below, explicitly requested), don't fabricate
-insights, stop for a product review after each milestone. See the reset
-milestone plan below + `PRODUCT_VISION.md`.
+nutrition tracker. **M14.1–M26 + M15.1 + UI pass done. Live on Vercel, founder
+alpha testing underway.** M26 (2026-09-14) reversed the earlier "no visual
+redesign" / "no gamification" stances — see below — everything before it was
+built under those constraints. Don't fabricate insights, stop for a product
+review after each milestone. See the reset milestone plan below +
+`PRODUCT_VISION.md`.
+
+### M26 — "You": Arc progression + Direction B reskin (2026-09-14) ✅
+Founder ran a redesign concept through Claude Design and got back
+`Kona You Screen.dc.html` ("Direction B — Companion/Identity"), then
+explicitly approved (via direct confirmation, not inferred) two reversals of
+standing constraints: `PRODUCT_VISION.md`'s "Gamification / XP / avatar
+cosmetics — NOT in scope; do not build," and its "no major visual redesign"
+line. Both docs updated accordingly.
+
+- **Theme**: `app/globals.css` went dark-only (collapsed the old
+  light-default + `prefers-color-scheme: dark` override into a single
+  `:root` token block) — near-black background with purple/orange radial
+  gradients, translucent "frosted glass" cards (`backdrop-filter: blur`,
+  new `.glass` utility + `@supports` fallback for engines without blur),
+  three new gradient tokens (`--grad-performance/recovery/vital`) for the
+  progression surface only. `--accent` (lime) untouched — nav/CTAs/day-pill
+  unchanged. Font swapped app-wide, Manrope → Urbanist (`app/layout.tsx`).
+  Because the existing token layer was already clean (only 3 hardcoded
+  color literals in the whole 2467-line file, confirmed by grep before
+  starting), the reskin cascaded through nearly every screen — Home, Chat,
+  Week, Memory, dialogs, Profile — from the token swap alone; blur was added
+  explicitly to ~10 card/scrim selectors.
+- **New "You" tab** (`app/YouTab.tsx`, third bottom-nav tab in
+  `app/AppShell.tsx`): progression/identity content only — an avatar ring
+  showing real Arc-stage progress (not a fabricated "sport mix" breakdown —
+  we don't have that data), the Arc bar, a goal card (reuses the existing
+  `Profile.goal`/`goalContext()` — no new data model needed), a "Kona
+  learned" card (reuses `deriveInsights()`), and milestone cards.
+  Account-settings Profile stayed a *separate*, unchanged overlay — lifted
+  out of `HomeTab.tsx` into `app/ProfileOverlay.tsx` so both Home's avatar
+  and You's new settings icon open the same screen.
+- **`src/agent/progression.ts`** (new, deterministic, no LLM): `computeMilestones()`
+  scans full session history for the earliest qualifying session per
+  milestone (first 5K/10K/half-marathon/triathlon) — never invents a date.
+  `computeArcProgress()` places the athlete on a 5-stage Arc (Foundation →
+  Rhythm → Judgment → Composure → Command) using **only** behaviour/
+  engagement counts — consistent weeks trained, check-ins logged,
+  recommendations adapted — never pace/PR/outcome quality, per
+  PRODUCT_VISION's un-reversed reward-behaviours-only guardrail. New
+  `getYou()` in `lib/kona-server.ts` + `GET /api/you`.
+- Verified live (dev-fallback, mobile viewport): onboarded a fresh athlete
+  with a goal ("First Olympic triathlon in 11 weeks") — You correctly showed
+  the honest early state (Foundation, "Still learning," all milestones "Not
+  yet"). Logged a 6km run via chat (real tool call, `log_actual`) and
+  confirmed live: "First 5K" milestone flipped to achieved with today's real
+  date, Arc bar showed real partial progress — full pipeline (chat → tool →
+  stored session → `progression.ts` → `/api/you` → UI) confirmed working
+  end-to-end, not just unit-tested.
+- 10 new unit tests (`tests/agent/progression.test.ts`) covering milestone
+  earliest-wins-not-latest, threshold edges, monotonic Arc-stage placement.
+  `tsc`/`eslint`/`vitest` (281 passed)/`next build` all clean.
+- **Fidelity pass (same day)**: founder compared the first pass against the
+  actual Claude Design screenshots and flagged two gaps — the avatar mark
+  read as a flat lime pie-chart, not the mockup's frosted-glass faceplate
+  with a masked progress *arc* and a glowing chevron core; and the bottom
+  nav only had 3 icons (Home/Chat/You) against the mockup's 5. Confirmed
+  with the founder before restructuring nav (a real IA change, not styling)
+  and then matched it exactly: **Week** is a persistent tab again (was a
+  Home preview card with an overlay), **Profile** is a persistent tab (was
+  an overlay opened from an avatar button, now `app/ProfileTab.tsx`), and
+  "What Kona knows about you" moved from Profile onto the You tab (now
+  reached via a link at the bottom of You, not a settings icon — deleted).
+  `app/WeekView.tsx` lost its `onClose`/overlay chrome to become a plain
+  tab. Avatar ring rebuilt as a true masked annulus (`mask: radial-gradient`
+  cutting the middle out of a `conic-gradient`, matching the mockup's own
+  technique) over a frosted-glass disc with a CSS-triangle glowing chevron;
+  "Kona learned" recolored to a distinct violet/purple tint (was reusing the
+  Arc card's green); the goal card became an actual orange-tinted/bordered
+  container instead of gradient-clipped text. Re-verified live: all 5 tabs
+  render and navigate correctly, Memory reachable from You, `tsc`/`eslint`/
+  `vitest` (281 passed)/`next build` still clean.
+- **Second fidelity pass (same day)**: founder flagged that onboarding,
+  landing, and other pages still read as "neon" — flat solid `--accent`
+  fills on large surfaces (CTA buttons, avatars, active nav pill, selected
+  day-pill, selected sport chips). Root cause: `--accent` was still the
+  pre-M26 brand lime (`#d7fa4e`), and it was reused as a flat block fill in
+  ~20 places the mockup never fills solid that way. Fixed by (a) changing
+  `--accent`/`--accent-text` to the mockup's actual green
+  (`#7cff3b`/`#0f2406`); (b) primary buttons/avatars (`.cta`,
+  `.onboard-avatar`, `.home-avatar`, `.profile-head-avatar`, `.composer
+  button`, `.edit-save`, `.day-pill.on`, `.week-day.is-today`,
+  `.icon-btn.accent`) now use `var(--grad-recovery)` (the green gradient)
+  with a soft glow instead of a flat fill; (c) the active bottom-nav tab now
+  matches the mockup exactly — a subtle `rgba(255,255,255,0.08)` glass
+  highlight with an accent-colored icon/label, not a solid pill; (d)
+  selection toggles (`.chip.on`, `.choice.on`, `.scale button.on`, `.opts
+  button.on` — sport chips, check-in feel picker, chat quick-replies) now
+  use a tinted translucent background + accent border/text instead of a
+  solid block. Small badges that genuinely are solid in the mockup (Today
+  dot, pattern-card dot, timeline dot) were left alone. Re-verified live —
+  including on a real signed-in account, not just the in-memory dev
+  fallback — Home, Profile (avatar, sport chips, Save-changes button), and
+  the nav all confirmed matching the restrained mockup treatment.
+  `tsc`/`eslint`/`vitest`/`next build` still clean.
+- **Third fidelity pass — nav order was wrong (same day)**: founder caught
+  that the bottom nav didn't match the mockup's own stated order. Re-derived
+  it directly from the mockup's raw nav markup (which icon is highlighted on
+  which screen, across all 6 panel mockups) instead of guessing again:
+  **Home, Chat, Week, Memory ("What Kona knows"), You** — 5 persistent tabs.
+  Two things were backwards in the previous pass: (1) Memory had been merged
+  into the You tab; the mockup's own copy is explicit — *"A fifth bottom-nav
+  item, level with Home, Chat, Week and Memory... Home keeps its own small
+  avatar button, which still opens account settings"* — Memory is its own
+  tab, and (2) "Profile" was never supposed to be a tab at all; that same
+  sentence says account settings stay behind Home's avatar button. Fixed:
+  restored `app/ProfileOverlay.tsx` (deleted `app/ProfileTab.tsx`), added
+  Memory back as its own tab (`<KnowsView />`, no `onBack` needed — it's
+  self-contained), removed the "What Kona knows about you" link from
+  `app/YouTab.tsx` (redundant now), and swapped the nav icons — a person
+  icon for You (was a made-up chevron-in-circle), a new circle-with-a-dot
+  icon for Memory. Re-verified live end-to-end (onboarding → Home → avatar
+  opens Profile overlay → Memory and You both render as real tabs with
+  correct icons); `tsc`/`eslint`/`vitest`/`next build` still clean.
+- **Fourth fidelity pass — 6 detail fixes (same day)**: (1) Home's goal pill
+  (`.home-goal`) was green; switched to Performance Orange (`--grad-performance`),
+  matching the mockup's goal card exactly. (2)+(5) "Your week" day cards only
+  ever distinguished today (green) vs. everything else — `is_key_day` was
+  computed server-side (`buildDashboard`) but never reached the client. Threaded
+  it through `HomeWeekPreviewDay`/`WeekDayView` end-to-end; key/double days now
+  get the orange-tinted card + a "Key"/"Double" badge in `--grad-performance`,
+  separate from the green "Today" treatment (`app/HomeTab.tsx`, `app/WeekView.tsx`,
+  `src/agent/home.ts`). (3) "Kona remembers" was hidden entirely with no
+  evidence yet; now always shown with an honest "Still getting to know you"
+  fallback, matching the mockup's always-present card. (4) Chat's user message
+  bubble (`--user-bubble`) was a plain white tint; now a green tint with a
+  green border, matching the mockup's user bubble exactly. (6) The bottom nav
+  no longer ever shows label text (removed the dead `.nav-item.on span` rule
+  and the `<span>` itself, replaced with a plain `aria-label` for
+  accessibility) — the active tab's icon switches outline → filled via
+  `.nav-item.on svg { fill: currentColor }` instead. Verified live: set up a
+  real weekly plan via chat (a hard Wednesday long run, a weekend brick) and
+  confirmed the key-day orange styling, the "Key" badge, the orange goal pill,
+  the green user bubble, and label-free filled nav icons all render correctly
+  together. `tsc`/`eslint`/`vitest` (281 passed)/`next build` still clean.
+- **Fifth fidelity pass — 7 detail fixes (same day)**: founder review of the
+  fourth pass caught that "Today" had become an opaque green *fill*
+  (`--grad-recovery`) instead of the mockup's translucent light-green tint
+  (`rgba(124,255,59,0.08)` + a matching border) — fixed, with today's title
+  now the only bold one (non-today `.week-day-title` dropped from 700 to
+  500 weight). Also: key/double days no longer get a background tint at all
+  per review — just the orange label + badge, background removed entirely.
+  Day-strip pills (`.day-pill`) went from an 18px radius to a full 999px —
+  genuinely pill-shaped now. Added breathing room between the date line and
+  the goal pill on Home (`.home-goal` margin-top 5px → 12px). Day titles
+  (`titleFor()` in `src/agent/home.ts`) now prefer the athlete's own short
+  session description (`notes`, when ≤60 chars) over a generic sport label
+  — "Morning interval run" instead of "Morning run" when Kona captured that
+  detail. The You tab's goal card was one combined sentence ("11 weeks to
+  your Olympic triathlon.") where the mockup shows three separate lines —
+  added `short_text`/`countdown` to `GoalContext` (`src/domain/goal.ts`) and
+  `goal_name`/`goal_countdown` to `YouView` (replacing `goal_line`) so the
+  card now renders "CURRENT GOAL" / "Olympic triathlon" / "11 weeks away" as
+  the mockup does. Verified live end-to-end again (fresh onboarding, a real
+  weekly plan through chat) — translucent today row, background-free key
+  row with its badge, pill-shaped day-strip, and the 3-line goal card all
+  confirmed. `tsc`/`eslint`/`vitest` (281 passed)/`next build` still clean.
+- **Root-caused the "notes" gap (same day)**: founder tested the fifth pass's
+  title-detail fix live and it didn't fire — "Morning run" / "Morning gym" /
+  "Gym and ride" instead of the detail they'd actually typed ("interval
+  run", "cardio core + lower body strength"). Traced it: `titleFor()`
+  preferring `notes` was correct, but there was nowhere for the real LLM to
+  put that detail — `save_weekly_plan`'s per-session schema and
+  `update_planned_sessions` had no `notes` parameter at all (only the
+  single-session `save_planned_session` tool did), and a whole week is
+  always saved through `save_weekly_plan`. Fixed at the root: added `notes`
+  to both tool schemas *and* their `run()` handlers
+  (`src/agent/tools.ts`), plus an explicit line in the interpret system
+  prompt (`src/agent/anthropic-llm.ts`) telling the model to use it whenever
+  the athlete describes a session as more than a sport. Also fixed
+  `dayTitle()`'s multi-session (brick/double-day) branch, which previously
+  joined bare sport labels regardless of notes — it now joins each
+  session's own `titleFor()` output, so a Friday double reads "Morning
+  cardio core + upper body strength and Evening ride" instead of "Gym and
+  ride". 4 new unit tests (`tests/agent/home.test.ts`). Re-verified live:
+  resent the exact plan from the failed test and confirmed every title
+  (including the Friday double) now matches word-for-word what the athlete
+  typed. `tsc`/`eslint`/`vitest` (285 passed)/`next build` clean. Note:
+  this doesn't retroactively fix sessions saved before the schema change —
+  editing server code resets the in-memory dev store anyway, so there was
+  nothing to migrate this time, but a production week saved before this fix
+  would keep its generic titles until re-described.
+- **Time-of-day always leads the title, and a 4th bucket ("night") (same
+  day)**: `titleFor()` put the time-of-day word first only in some branches
+  ("Morning interval run") but not others — the distance-based and
+  `is_long` branches put the detail first instead ("13-14 km morning run",
+  "Long morning run"). Made the ordering consistent everywhere: time of day
+  is always the first word, so it reads the same regardless of which detail
+  follows, and — since `titleFor()` is recomputed fresh from the stored
+  session each time rather than cached — a later edit to just the time
+  updates the title automatically with no extra code. Also added `'night'`
+  as a fourth `TimeOfDay` value end-to-end (`src/domain/types.ts`,
+  `src/agent/tools.ts`'s enum/HHMM map, `src/agent/parse.ts`'s hour-bucket
+  fallback — evening 17–20, night 21–3 — and word-extraction, the "Night"
+  option in the chat's time-of-day quick-picks in `src/engine/week.ts`,
+  and `home.ts`'s pre-fuel note). 5 new unit tests. Verified live: a
+  "night session" chat message correctly saved and displayed as `night`.
+- **Simulated the evening check-in live**: walked the full loop in the
+  browser — a plan for today with nothing logged yet correctly showed the
+  "Evening check-in" nudge (`checkin.today_due` requires a *planned*
+  session for today with no recovery log yet, confirmed by reading
+  `buildHome()`'s `todayDue` logic — an unplanned/spontaneous actual-only
+  log doesn't trigger it, which is correct: that already gets its own
+  reflection in the chat reply), opened `CheckinDialog`, filled it in
+  (Feeling great! / As planned: Yes / Pains: No), submitted, got Kona's
+  reflection ("Recovery looks on track"), and confirmed the nudge
+  correctly disappeared afterward. No code changes — this was a live
+  walkthrough to answer "can we see this flow," not a bug fix.
+- **Not in this milestone** (flagged, not silently dropped): a spendable XP
+  currency or purchasable/unlockable cosmetics — `PRODUCT_VISION.md` still
+  marks those out of scope. Arc-stage thresholds are a first defensible
+  pass, explicitly tunable after alpha feedback.
+
+### M25.1 — Kona's judgment as the primary product experience (2026-09-14) ✅
+*(Retroactively documented — built and verified live in the prior session,
+but the entry was lost before it reached this file.)* Audit found M24's
+`buildKonaBriefing` only ever spoke on days building up to something big
+(long/hard/race/double session within 7 days) — a flat "nothing meaningful"
+on most ordinary days, failing the "what does Kona think matters today?"
+5-second test. Rebuilt `src/agent/briefing.ts` around a 5-tier signal
+cascade (`recentOutcomeSignal ?? unacknowledgedSignal ?? patternSignal ??
+upcomingSessionSignal ?? HONEST_DEFAULT`), reusing existing evidence
+machinery (`recentSessionRead`, `deriveInsights`, planned/actual linkage) —
+no new analytics engine. `KonaBriefing.headline` became the verdict itself
+("Keep today easy") rather than a plain session name; new `session_label`/
+`deviation` fields; `has_target` dropped. `app/HomeTab.tsx`'s Kona's Call
+card restructured around the dominant headline. Found and fixed a live
+regex gap (`TROUBLE_RE` didn't match "gassed") during testing. 21 new tests
+in `tests/agent/briefing.test.ts` proving cascade priority order.
+
+### M25.0 — Mobile UX hardening (2026-09-14) ✅
+Founder reported the bottom nav "feels too insensitive" after several days of
+real phone use. Audit before any change found the nav was only one symptom of
+a broader gap — this was a UX pass, not a redesign; no visual identity change.
+- **Root cause of the nav complaint:** `app/layout.tsx` had no `viewport`
+  export, so no `viewport-fit=cover` — every `env(safe-area-inset-*)` in the
+  CSS (8 call sites: bottom nav, composer, dialogs) silently resolved to
+  `0px` on iPhone. Fixed with one `viewport` export; reactivates all of them.
+- **Bottom nav** (`app/globals.css`, `app/AppShell.tsx`): `.nav-item` was a
+  48×48px circle floating in dead bar space with no `:active` feedback
+  anywhere in the stylesheet. Restructured so each tab is a `flex:1` column
+  spanning its full share of the bar (~170px wide at 375px, verified by
+  tapping the tab's edge, not its icon) — same icon/label size, just a much
+  larger real hit area — capped at max-width 420px so it doesn't stretch
+  absurdly wide on desktop (verified both).
+- **Touch-target sweep:** `.choice` (check-in picks), `.opts button` (chat's
+  intensity/size/time chips), `.profile-close`, `.menu-btn`/`.icon-btn`,
+  `.back-btn`, `.home-link`, `.edit-cancel`/`.edit-save` were all below the
+  ~44px guideline — raised via padding/min-height (not font-size), several
+  using a padding+negative-margin trick to grow the tap zone without
+  shifting the visible text. Added `:active` states throughout (there were
+  none at all before) plus a global tap-highlight reset.
+- **Chat's "Edit" button was undiscoverable on touch** — `opacity:0` revealed
+  only via `:hover`, which doesn't meaningfully exist on a touchscreen. Now
+  always visible on touch, hover-reveal preserved behind
+  `@media (hover: hover) and (pointer: fine)` for mouse users.
+- Verified live at 375/390/430px and desktop: no horizontal overflow found
+  anywhere (including a deliberately long unbroken word in a chat bubble),
+  chat composer/keyboard layout already correctly flex-based (not
+  `position:fixed`) so it wasn't restructured. Real iOS safe-area insets
+  can't be verified in the Chromium-based preview tool — the fix is
+  standard/correct but wants a real-device or Safari-simulator check.
+- No new tabs, no gamification, no dashboard sections, no color changes —
+  scope stayed to interaction quality, as directed.
 
 ### M24 — The Kona Briefing (2026-09-14) ✅
 Product Thesis 2.0 audit (same day) found Kona's judgment layer

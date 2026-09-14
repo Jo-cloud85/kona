@@ -32,7 +32,7 @@ function dateFromWeekStart(weekStart: string, dayIndex: number): string {
 /** Deterministic default start time per same-day sequence position. */
 const SEQUENCE_TIMES = ['07:00', '17:00', '18:30', '20:00'];
 
-const TIMES_OF_DAY: TimeOfDay[] = ['morning', 'afternoon', 'evening'];
+const TIMES_OF_DAY: TimeOfDay[] = ['morning', 'afternoon', 'evening', 'night'];
 
 /** Canonical clock time we store for a session given only its time-of-day
  *  bucket, so downstream views (Home, dashboard) show a consistent hour. */
@@ -40,6 +40,7 @@ const TIME_OF_DAY_HHMM: Record<TimeOfDay, string> = {
   morning: '07:00',
   afternoon: '13:00',
   evening: '18:30',
+  night: '21:30',
 };
 
 function isoHour(iso: string): number | undefined {
@@ -267,6 +268,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
           const distance_km = num(s, 'distance_km');
           const distance_label = str(s, 'distance_label', false);
           const duration_minutes = num(s, 'duration_minutes');
+          const notes = str(s, 'notes', false);
           const isLong = s.is_long === true;
           const needs_detail = computeNeedsDetail({
             intensity_stated: intensityStated,
@@ -285,6 +287,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
               distance_km,
               distance_label,
               duration_minutes,
+              notes,
               intensity: intensity_,
               session_group_id: groupId,
               sequence_index: day.sessions.length > 1 ? i : undefined,
@@ -377,21 +380,24 @@ export const TOOLS: Record<string, ToolDefinition> = {
       const newDistance = num(args, 'distance_km');
       const newDistanceLabel = str(args, 'distance_label', false);
       const newTime = timeOfDay(args, 'time_of_day');
+      const newNotes = str(args, 'notes', false);
       if (
         newIntensity === undefined &&
         newDuration === undefined &&
         newDistance === undefined &&
         newDistanceLabel === undefined &&
-        newTime === undefined
+        newTime === undefined &&
+        newNotes === undefined
       ) {
-        throw new ToolError('update_planned_sessions needs an intensity, duration_minutes, distance_km, or time_of_day');
+        throw new ToolError('update_planned_sessions needs an intensity, duration_minutes, distance_km, time_of_day, or notes');
       }
 
-      const applied_fields: ('intensity' | 'duration_minutes' | 'distance_km' | 'time_of_day')[] = [];
+      const applied_fields: ('intensity' | 'duration_minutes' | 'distance_km' | 'time_of_day' | 'notes')[] = [];
       if (newIntensity !== undefined) applied_fields.push('intensity');
       if (newDuration !== undefined) applied_fields.push('duration_minutes');
       if (newDistance !== undefined || newDistanceLabel !== undefined) applied_fields.push('distance_km');
       if (newTime !== undefined) applied_fields.push('time_of_day');
+      if (newNotes !== undefined) applied_fields.push('notes');
 
       const updated = [];
       for (const s of targets) {
@@ -419,6 +425,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
           patch.start_at = `${s.start_at.slice(0, 10)}T${TIME_OF_DAY_HHMM[newTime]}:00`;
           remaining.delete('time_of_day');
         }
+        if (newNotes !== undefined) patch.notes = newNotes;
         patch.needs_detail = [...remaining];
         updated.push(await ctx.repo.updatePlannedSession(s.id, patch));
       }
@@ -713,7 +720,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       time_of_day: {
         type: 'string',
         enum: TIME_OF_DAY_ENUM,
-        description: 'morning / afternoon / evening. Derived from start_at if omitted.',
+        description: 'morning / afternoon / evening / night. Derived from start_at if omitted.',
       },
       distance_km: {
         type: 'number',
@@ -760,8 +767,13 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
                   },
                   duration_minutes: { type: 'number' },
                   intensity: { type: 'string', enum: INTENSITY_ENUM },
-                  time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening.' },
+                  time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening / night.' },
                   is_long: { type: 'boolean', description: 'The athlete called it a "long" session.' },
+                  notes: {
+                    type: 'string',
+                    description:
+                      'A short (few words) description of what this session actually is, whenever the athlete said more than sport/intensity/duration — e.g. "interval run", "cardio core + lower body strength", "hill repeats". Shown to the athlete as the session title, so keep it brief and in their own words rather than a full sentence.',
+                  },
                 },
                 required: ['sport'],
               },
@@ -798,7 +810,12 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
         type: 'string',
         description: 'Only when distance_km alone would misrepresent what they said (a range like "13-14 km", "~10k"). Their own words, shown instead of the number.',
       },
-      time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening.' },
+      time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening / night.' },
+      notes: {
+        type: 'string',
+        description:
+          'A short (few words) description of what the session actually is, when the athlete adds that detail now — e.g. "interval run", "cardio core + lower body strength". Shown as the session title.',
+      },
     },
     required: [],
   },

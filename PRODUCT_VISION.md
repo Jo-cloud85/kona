@@ -39,10 +39,15 @@ visually plain; the work is Kona *initiating* useful context, not being a blank
 chatbot. **Never fabricate insights, examples or "Kona remembers" content when
 the real data isn't there — show an honest empty state.**
 
-No major visual redesign in this cycle: keep the dark theme, layout, restrained
-palette, bottom nav, cards and typography direction. Polish (transitions, type
-hierarchy, contextual icons, richer cards, learn-feedback cues, better empty
-states, Kona personality) is explicitly later.
+**M26 update (2026-09-14):** the founder commissioned a redesign
+("Direction B — Companion/Identity") and approved rolling it out app-wide —
+a single dark, gradient-accented, frosted-glass theme (Urbanist type,
+replacing the prior light/dark-media-query palette and Manrope), plus a new
+"You" tab for progression/identity content (see below). This supersedes the
+"no major visual redesign" stance that governed M17–M25: the visual identity
+is now Direction B, not a placeholder. The UX distinction above (a daily
+briefing that speaks, not a stats dashboard) is unchanged — only the surface
+it's rendered in changed.
 
 ## Target customer
 The self-coached, moderately serious multi-sport recreational athlete. Typically:
@@ -330,26 +335,31 @@ Do not optimise pricing before validating repeat usage.
 - Native mobile app
 - Autonomous notifications
 - Persistence backend (still in-memory during the reset)
-- Gamification / XP / avatar cosmetics (see the future direction below)
+- Points/XP currency, spendable cosmetics, unlockable gear (see the
+  progression system below — M26 built the *Arc* stage/milestone read of
+  real history; a spendable XP economy is still explicitly out of scope)
 
-## Future direction — Kona progression system (NOT in scope; do not build)
-An eventual **retention layer**: users earn points/XP for healthy *engagement
-with the training & fuelling process* and spend it on cosmetics for an athlete
-avatar (clothing, shoes, bike/swim gear, accessories, home/environment items,
-race memorabilia). Future milestones could unlock cosmetics.
+## Kona's progression system ("You" tab, M26)
+The founder approved reversing the earlier "do not build" stance on
+progression. What shipped: a 5-stage **Arc** (Foundation → Rhythm →
+Judgment → Composure → Command) computed from real behaviour counts —
+consistent weeks trained, check-ins logged, recommendations adapted — plus
+milestone cards (first 5K, first triathlon, ...) computed from the athlete's
+actual session history. See `src/agent/progression.ts`.
 
 Reward **behaviours and engagement** only — e.g. completing planned sessions,
 preparing fuelling, checking in after workouts, recording how a session felt,
 adapting sensibly when a plan changes, consistent training, giving Kona useful
-information.
+information. This guardrail was NOT reversed and still governs every stage
+threshold in `progression.ts`.
 
 **Guardrail:** never reward "being pain-free" or imply that pain/injury is a
 failure. Reward behaviours, never health outcomes outside the user's control.
 
-For now: keep the data model clean enough that XP could be layered on later
-without a rewrite. Concretely, M19 ("make the feedback loop visible") introduces
-a typed activity/event log, which a future XP system would consume. Do not build
-XP UI or mechanics.
+**Still not in scope**: a spendable XP currency, purchasable/unlockable
+avatar cosmetics, or gear collection. The M19 typed activity/event log
+(`activity_events`) is what `progression.ts` reads from — the same seam
+this document originally earmarked for "a future XP layer."
 
 ## MVP success signal
 The strongest early signal is repeated use:

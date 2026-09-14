@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveInsights, similarSessionFlag, type InsightInput } from '../../src/agent/index';
+import { deriveInsights, recentSessionRead, similarSessionFlag, type InsightInput } from '../../src/agent/index';
 import type { ActualSession, FuelLog, PersistedMemory, RecoveryLog } from '../../src/domain/types';
 
 let n = 0;
@@ -221,5 +221,55 @@ describe('similarSessionFlag (M24.2 — single comparable session)', () => {
     );
     expect(flag).not.toBeNull();
     expect(flag?.category).toBe('thirst');
+  });
+});
+
+describe('recentSessionRead (M25.1 — the most recent session within a lookback window)', () => {
+  const TODAY = '2026-09-14';
+
+  it('returns null with no sessions at all', () => {
+    expect(recentSessionRead(TODAY, 2, { actualSessions: [], recoveryLogs: [] })).toBeNull();
+  });
+
+  it('returns null when the only session is outside the lookback window', () => {
+    const sessions = [actual({ start_at: '2026-09-10T07:00:00' })]; // 4 days back
+    expect(recentSessionRead(TODAY, 2, { actualSessions: sessions, recoveryLogs: [] })).toBeNull();
+  });
+
+  it('reads a stopped_early session as negative, from the record alone', () => {
+    const sessions = [actual({ start_at: '2026-09-13T07:00:00', status: 'stopped_early' })];
+    const read = recentSessionRead(TODAY, 2, { actualSessions: sessions, recoveryLogs: [] });
+    expect(read?.outcome).toBe('negative');
+    expect(read?.date).toBe('2026-09-13');
+  });
+
+  it('reads a positive recovery note as positive', () => {
+    const sessions = [actual({ start_at: '2026-09-13T07:00:00' })];
+    const recs = [recovery({ logged_at: '2026-09-13T20:00:00Z', free_text: 'felt great, no issues' })];
+    const read = recentSessionRead(TODAY, 2, { actualSessions: sessions, recoveryLogs: recs });
+    expect(read?.outcome).toBe('positive');
+  });
+
+  it('with no outcome signal at all, outcome is null — NOT read as fine', () => {
+    const sessions = [actual({ start_at: '2026-09-13T07:00:00' })];
+    const read = recentSessionRead(TODAY, 2, { actualSessions: sessions, recoveryLogs: [] });
+    expect(read?.outcome).toBeNull();
+  });
+
+  it('reads "gassed" as trouble — real alpha phrasing, 2026-09-14', () => {
+    const sessions = [actual({ start_at: '2026-09-13T18:00:00', status: 'completed' })];
+    const recs = [recovery({ logged_at: '2026-09-13T21:00:00Z', free_text: 'legs completely gassed by the end' })];
+    const read = recentSessionRead(TODAY, 2, { actualSessions: sessions, recoveryLogs: recs });
+    expect(read?.outcome).toBe('negative');
+  });
+
+  it('picks the single most recent session within the window, not an older one', () => {
+    const sessions = [
+      actual({ start_at: '2026-09-12T07:00:00', status: 'stopped_early' }),
+      actual({ start_at: '2026-09-13T07:00:00', status: 'completed' }),
+    ];
+    const read = recentSessionRead(TODAY, 2, { actualSessions: sessions, recoveryLogs: [] });
+    expect(read?.date).toBe('2026-09-13');
+    expect(read?.outcome).toBeNull(); // the more recent one has no trouble signal
   });
 });

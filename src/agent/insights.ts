@@ -120,7 +120,7 @@ function positiveFeel(text: string): boolean {
 
 /** Words the athlete uses when a session went badly — GI, bonk, "rough". Never a diagnosis. */
 const TROUBLE_RE =
-  /\b(gi|stomach|gut|nausea|nauseous|the runs|cramp\w*|bonk\w*|hit the wall|blew up|blow up|fell apart|struggl\w*|rough|awful|terrible|dizzy|light[- ]?headed|no energy|ran out of (?:gas|energy|steam))\b/i;
+  /\b(gi|stomach|gut|nausea|nauseous|the runs|cramp\w*|bonk\w*|gassed|hit the wall|blew up|blow up|fell apart|struggl\w*|rough|awful|terrible|dizzy|light[- ]?headed|no energy|ran out of (?:gas|energy|steam))\b/i;
 
 function describeSession(s: ActualSession): string {
   const dist = s.distance_km ? `${s.distance_km} km ` : '';
@@ -128,7 +128,7 @@ function describeSession(s: ActualSession): string {
   return `${human(s.start_at)} · ${dist}${dur}${s.intensity} ${s.sport}`.replace(/\s+/g, ' ').trim();
 }
 
-function snippet(text: string, max = 70): string {
+export function snippet(text: string, max = 70): string {
   const t = text.trim().replace(/\s+/g, ' ');
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
@@ -598,6 +598,48 @@ export function similarSessionFlag(
         : `${human(date)} · ${match.status.replace('_', ' ')}${match.reason ? ` (${snippet(match.reason, 40)})` : ''}`,
     ],
   };
+}
+
+// --- recent-outcome evidence (M25.1) ---------------------------------------
+
+export interface RecentSessionRead {
+  session: ActualSession;
+  outcome: Outcome;
+  date: string;
+  /** A quoted or described reason, when one exists — for the briefing's "why". */
+  note: string | null;
+}
+
+/**
+ * The single most recent actual session within `withinDays` of `today`, and
+ * how it read — the evidence behind "maybe ease today off" (M25.1's first
+ * cascade tier). Reuses the exact same outcome logic every other detector in
+ * this file uses; a session with no outcome signal at all (the common case)
+ * correctly reads as `outcome: null`, not "fine".
+ */
+export function recentSessionRead(
+  today: string,
+  withinDays: number,
+  input: { actualSessions: ActualSession[]; recoveryLogs: RecoveryLog[] },
+): RecentSessionRead | null {
+  const idx = recoveryIndex(input.recoveryLogs);
+  const cutoff = new Date(`${today}T00:00:00`);
+  cutoff.setDate(cutoff.getDate() - withinDays);
+  const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
+
+  const candidate = [...input.actualSessions]
+    .filter((s) => {
+      const d = dateOf(s.start_at);
+      return d < today && d >= cutoffStr;
+    })
+    .sort((a, b) => b.start_at.localeCompare(a.start_at))[0];
+  if (!candidate) return null;
+
+  const date = dateOf(candidate.start_at);
+  const rec = idx.bySession.get(candidate.id) ?? idx.byDate.get(date);
+  const note = rec?.free_text || candidate.reason || null;
+
+  return { session: candidate, outcome: sessionOutcome(candidate, idx), date, note };
 }
 
 // --- entry point --------------------------------------------------------

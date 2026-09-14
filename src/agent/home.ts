@@ -77,6 +77,8 @@ export interface HomeWeekPreviewDay {
   is_today: boolean;
   is_rest: boolean;
   is_double: boolean;
+  /** A long/hard/race day worth calling out — see buildDashboard's is_key_day. */
+  is_key_day: boolean;
   title: string | null;
   duration_label: string | null;
 }
@@ -176,9 +178,19 @@ export function titleFor(s: SessionInputCore): string {
   const label = sportLabel(s.sport);
   const when = s.time_of_day ? `${s.time_of_day} ` : '';
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-  if (s.is_long) return cap(`long ${when}${label}`);
-  if (s.distance_label) return `${s.distance_label} ${when}${label}`;
-  if (s.distance_km) return `${s.distance_km} km ${when}${label}`;
+  // The athlete's own short description of what the session actually is
+  // ("interval run", "cardio core + lower body strength") reads as more
+  // useful than a generic sport label — use it when it's short enough to
+  // read as a title, not a full sentence.
+  const note = s.notes?.trim();
+  // The time of day always leads — "Morning long run", not "Long morning
+  // run" — so it reads the same way regardless of which detail follows it,
+  // and stays correct automatically if the athlete later changes just the
+  // time (titleFor is recomputed fresh from the stored fields, never cached).
+  if (note && note.length <= 60) return cap(`${when}${note}`);
+  if (s.is_long) return cap(`${when}long ${label}`);
+  if (s.distance_label) return cap(`${when}${s.distance_label} ${label}`);
+  if (s.distance_km) return cap(`${when}${s.distance_km} km ${label}`);
   return cap(`${when}${label}`);
 }
 
@@ -198,7 +210,7 @@ export function durationLabel(s: SessionInputCore): string {
  *  or null for an open day — nothing told to Kona yet. */
 export function dayTitle(sessions: PlannedSession[], isRest: boolean): string | null {
   if (sessions.length > 1) {
-    return joinList(sessions.map((s) => sportLabel(s.sport))).replace(/^\w/, (c) => c.toUpperCase());
+    return joinList(sessions.map((s) => titleFor(s)));
   }
   if (sessions.length === 1) return titleFor(sessions[0]!);
   if (isRest) return 'Rest';
@@ -226,7 +238,7 @@ function preFuelNote(sessions: HomeSession[]): string | null {
   if (times.has('morning')) {
     return 'Since it starts before a full breakfast, have something light 20–30 min before — a banana, a few dates, toast with jam — rather than a big meal.';
   }
-  if (times.has('evening')) {
+  if (times.has('evening') || times.has('night')) {
     return "You'll have eaten through the day; if it's been 3+ hours, a small carb snack about an hour before is plenty.";
   }
   return null;
@@ -423,24 +435,6 @@ export function buildHome(input: {
     };
   });
 
-  // Today first, then the next few days — a short forward-looking preview
-  // for the Home card (the full rolling window is "Your week").
-  const week_preview: HomeWeekPreviewDay[] = Array.from({ length: 4 }, (_, i) => {
-    const date = isoDate(addDays(now, i));
-    const sessions = byDate.get(date) ?? [];
-    const isRest = restSet.has(date);
-    return {
-      date,
-      weekday: weekdayLabel(date),
-      day_of_month: dayOfMonth(date),
-      is_today: date === today,
-      is_rest: isRest,
-      is_double: sessions.length > 1,
-      title: dayTitle(sessions, isRest),
-      duration_label: sessions.length === 1 ? durationLabel(sessions[0]!) : null,
-    };
-  });
-
   const dashboard = buildDashboard({
     profile: input.profile,
     weeklyPlan: input.weeklyPlan,
@@ -456,6 +450,25 @@ export function buildHome(input: {
   }));
   const dashDay = dashDays.find((d) => d.date === selected_date) ?? null;
 
+  // Today first, then the next few days — a short forward-looking preview
+  // for the Home card (the full rolling window is "Your week").
+  const week_preview: HomeWeekPreviewDay[] = Array.from({ length: 4 }, (_, i) => {
+    const date = isoDate(addDays(now, i));
+    const sessions = byDate.get(date) ?? [];
+    const isRest = restSet.has(date);
+    return {
+      date,
+      weekday: weekdayLabel(date),
+      day_of_month: dayOfMonth(date),
+      is_today: date === today,
+      is_rest: isRest,
+      is_double: sessions.length > 1,
+      is_key_day: dashDays.find((d) => d.date === date)?.is_key_day ?? false,
+      title: dayTitle(sessions, isRest),
+      duration_label: sessions.length === 1 ? durationLabel(sessions[0]!) : null,
+    };
+  });
+
   const weekStart = input.weeklyPlan?.week_start;
   const in_plan = weekStart
     ? selected_date >= weekStart && selected_date <= isoDate(addDays(new Date(`${weekStart}T00:00:00`), 6))
@@ -470,12 +483,13 @@ export function buildHome(input: {
     memories: input.memories ?? [],
   });
   const konaBriefing: KonaBriefing = input.konaBriefing ?? {
-    has_target: false,
     when: null,
     date: null,
-    headline: null,
+    session_label: null,
+    headline: 'All quiet',
     action: 'Nothing special to prepare — normal meals and fluids are fine.',
     why: null,
+    deviation: null,
     basis: null,
   };
   const usedTexts = new Set<string>();

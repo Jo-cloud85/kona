@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildHome, type KonaBriefing } from '../../src/agent/index';
+import { dayTitle, titleFor } from '../../src/agent/home';
 import type { PlannedSession, Profile, RecoveryLog, WeeklyPlan } from '../../src/domain/types';
 
 const profile: Profile = {
@@ -138,14 +139,15 @@ describe('buildHome', () => {
     expect(h.briefing.your_day.line).toMatch(/sort it in chat/i);
   });
 
-  it('KONA BRIEFING: buildHome threads a caller-computed briefing through untouched (M24 — buildKonaBriefing owns the judgment, see briefing.test.ts)', () => {
+  it('KONA BRIEFING: buildHome threads a caller-computed briefing through untouched (M24/M25.1 — buildKonaBriefing owns the judgment, see briefing.test.ts)', () => {
     const briefing: KonaBriefing = {
-      has_target: true,
       when: 'Tomorrow',
       date: '2026-09-10',
-      headline: 'Long ride',
+      session_label: 'Long ride',
+      headline: 'Bring extra fluid',
       action: 'Bring extra fluid — your second bottle if you have one.',
       why: 'Last time you did a similar long ride, you said: "got very thirsty".',
+      deviation: null,
       basis: 'reported',
     };
     const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW, konaBriefing: briefing });
@@ -154,7 +156,7 @@ describe('buildHome', () => {
 
   it('KONA BRIEFING defaults to an honest "nothing special" state when the caller omits it', () => {
     const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
-    expect(h.briefing.kona_briefing.has_target).toBe(false);
+    expect(h.briefing.kona_briefing.session_label).toBeNull();
     expect(h.briefing.kona_briefing.action).toMatch(/nothing special/i);
   });
 
@@ -188,12 +190,13 @@ describe('buildHome', () => {
         { id: 'r2', user_id: 'u', logged_at: '2026-09-05T20:00:00Z', free_text: 'calf sore again', overall_severity: 'moderate' } as RecoveryLog,
       ],
       konaBriefing: {
-        has_target: true,
         when: 'Tomorrow',
         date: '2026-09-10',
-        headline: 'Long run',
+        session_label: 'Long run',
+        headline: 'Ease into it',
         action: 'Ease into it.',
         why: "You've noted calf 2 times — most recently 5 Sep. Kona doesn't diagnose; this is just a flag.",
+        deviation: null,
         basis: 'reported',
       },
     });
@@ -301,5 +304,51 @@ describe('buildHome', () => {
     expect(h.week_preview[1]).toMatchObject({ date: '2026-09-10', is_today: false });
     expect(h.week_preview[1]!.title).toMatch(/10 km/);
     expect(h.week_preview[2]).toMatchObject({ date: '2026-09-11', title: null }); // open day — nothing told to Kona yet
+  });
+});
+
+describe('titleFor / dayTitle — the athlete\'s own session description', () => {
+  it('prefers a short notes descriptor over the generic sport label', () => {
+    const s = session({ sport: 'running', time_of_day: 'morning', notes: 'interval run' });
+    expect(titleFor(s)).toBe('Morning interval run');
+  });
+
+  it('falls back to the generic label when there are no notes', () => {
+    const s = session({ sport: 'running', time_of_day: 'morning' });
+    expect(titleFor(s)).toBe('Morning run');
+  });
+
+  it('ignores an overlong "notes" value — not a title, a paragraph', () => {
+    const s = session({
+      sport: 'running',
+      time_of_day: 'morning',
+      notes: 'a'.repeat(61),
+    });
+    expect(titleFor(s)).toBe('Morning run');
+  });
+
+  it('a double/brick day joins each session\'s own detailed title', () => {
+    const a = session({ sport: 'gym', time_of_day: 'morning', notes: 'core cardio + upper strength' });
+    const b = session({ sport: 'cycling', time_of_day: 'evening' });
+    expect(dayTitle([a, b], false)).toBe('Morning core cardio + upper strength and Evening ride');
+  });
+
+  it('the time of day always leads, regardless of which detail follows it', () => {
+    expect(titleFor(session({ sport: 'running', time_of_day: 'morning', is_long: true }))).toBe('Morning long run');
+    expect(titleFor(session({ sport: 'running', time_of_day: 'morning', distance_km: 6 }))).toBe('Morning 6 km run');
+    expect(titleFor(session({ sport: 'running', time_of_day: 'evening', distance_label: '13-14 km' }))).toBe(
+      'Evening 13-14 km run',
+    );
+  });
+
+  it('recognises "night" as a fourth time-of-day bucket', () => {
+    expect(titleFor(session({ sport: 'cycling', time_of_day: 'night' }))).toBe('Night ride');
+  });
+
+  it('titles recompute from current fields — updating just the time changes only that word', () => {
+    const original = session({ sport: 'running', time_of_day: 'morning', notes: 'interval run' });
+    expect(titleFor(original)).toBe('Morning interval run');
+    const retimed = { ...original, time_of_day: 'evening' as const };
+    expect(titleFor(retimed)).toBe('Evening interval run');
   });
 });

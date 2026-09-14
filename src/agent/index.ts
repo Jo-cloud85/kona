@@ -34,11 +34,14 @@ export { buildCheckinLog, checkinReflection, type CheckinInput, type CheckinLog 
 export {
   deriveInsights,
   effectiveIsLong,
+  recentSessionRead,
   similarSessionFlag,
+  snippet,
   type Insight,
   type InsightKind,
   type InsightBasis,
   type InsightInput,
+  type RecentSessionRead,
   type SessionFlag,
   type SessionFlagCategory,
   type SessionCandidate,
@@ -57,6 +60,14 @@ export {
   type KnowsRecentSession,
   type KnowsTimelineEntry,
 } from './knows';
+export {
+  computeMilestones,
+  computeArcProgress,
+  type Milestone,
+  type ArcProgress,
+  type ArcStage,
+  type ArcStageName,
+} from './progression';
 export { screenForEscalation, safetyMessage, type SafetyScreen } from './safety';
 export { TOOLS, TOOL_SCHEMAS, runTool, type ToolContext } from './tools';
 export type {

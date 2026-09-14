@@ -19,7 +19,7 @@ export default function CheckinDialog({
   /** M24.5 — closes the loop. Only passed for today's own check-in, and only
    *  produces the follow-up question when a real, evidence-backed action was
    *  actually given (not the honest "nothing special" default). */
-  konaBriefing?: { has_target: boolean; action: string; why: string | null };
+  konaBriefing?: { action: string; why: string | null };
 }) {
   const [feel, setFeel] = useState<string | null>(null);
   const [asPlanned, setAsPlanned] = useState<boolean | null>(null);
@@ -31,7 +31,7 @@ export default function CheckinDialog({
   const [reply, setReply] = useState<string | null>(null);
   const [err, setErr] = useState('');
 
-  const showLoop = Boolean(konaBriefing?.has_target && konaBriefing.why);
+  const showLoop = Boolean(konaBriefing?.why);
   const canSubmit = feel !== null && asPlanned !== null && pains !== null && !busy;
 
   const submit = async () => {

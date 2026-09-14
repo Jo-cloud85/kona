@@ -63,10 +63,12 @@ export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarte
   }
 
   const briefing = ctx?.briefing;
-  if (briefing?.has_target) {
-    lines.push('', `${briefing.when} · ${briefing.headline}`);
-    lines.push(briefing.why ? `${briefing.action} ${briefing.why}` : briefing.action);
-    const targetSessions = (ctx?.sessions ?? []).filter((s) => s.start_at.slice(0, 10) === briefing.date);
+  if (briefing) {
+    const lead = briefing.session_label ? `${briefing.when ?? 'Coming up'} · ${briefing.session_label}` : briefing.when;
+    lines.push('', lead ? `${lead} — ${briefing.headline}.` : `${briefing.headline}.`);
+    if (briefing.why) lines.push(briefing.why);
+    lines.push(briefing.action);
+    const targetSessions = briefing.date ? (ctx?.sessions ?? []).filter((s) => s.start_at.slice(0, 10) === briefing.date) : [];
     if (targetSessions.some((s) => (s.needs_detail ?? []).length > 0)) {
       lines.push('Fill in the rest of the details when you get a chance and I can sort the fuelling too.');
     }

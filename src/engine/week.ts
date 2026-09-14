@@ -124,6 +124,7 @@ const TIME_OPTIONS: SessionPromptOption[] = [
   { label: 'Morning', value: 'morning' },
   { label: 'Afternoon', value: 'afternoon' },
   { label: 'Evening', value: 'evening' },
+  { label: 'Night', value: 'night' },
 ];
 
 /** Easy-on-the-stomach carbohydrate for a session done before a proper meal. */
@@ -362,7 +363,7 @@ function questionText(sport: Sport, labels: string[], missing: MissingDetail[]):
   const parts: string[] = [];
   if (wantsEffort) parts.push(`how hard ${plural ? 'they feel' : 'it feels'} (easy, moderate or hard)`);
   if (wantsSize) parts.push(`roughly how long ${plural ? 'they are' : 'it is'} (or what distance)`);
-  if (wantsTime) parts.push(`what time of day (morning, afternoon or evening)`);
+  if (wantsTime) parts.push(`what time of day (morning, afternoon, evening or night)`);
 
   if (parts.length === 0) return `For the ${subject}, what's your typical distance or time?`;
   const joined = parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;

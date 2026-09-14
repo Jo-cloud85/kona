@@ -64,18 +64,20 @@ export function extractTime(text: string): { hh: number; mm: number } | undefine
   return undefined;
 }
 
-/** Coarse bucket from a 24h hour: morning 4–10, afternoon 11–16, evening 17–3. */
+/** Coarse bucket from a 24h hour: morning 4–10, afternoon 11–16, evening 17–20, night 21–3. */
 export function timeOfDayFromHour(hh: number): TimeOfDay {
   if (hh >= 4 && hh < 11) return 'morning';
   if (hh >= 11 && hh < 17) return 'afternoon';
-  return 'evening';
+  if (hh >= 17 && hh < 21) return 'evening';
+  return 'night';
 }
 
 /** Explicit time-of-day words, or the bucket implied by a clock time in `text`. */
 export function extractTimeOfDay(text: string): TimeOfDay | undefined {
   if (/\b(this\s+)?(morning|dawn|sunrise|am run|a\.?m\.?)\b/i.test(text) || /\bbefore work\b/i.test(text)) return 'morning';
   if (/\b(afternoon|midday|mid-day|lunch ?time|noon|arvo)\b/i.test(text)) return 'afternoon';
-  if (/\b(this\s+)?(evening|tonight|night|after work|pm session)\b/i.test(text)) return 'evening';
+  if (/\b(this\s+)?(night|late|midnight)\b/i.test(text)) return 'night';
+  if (/\b(this\s+)?(evening|tonight|after work|pm session)\b/i.test(text)) return 'evening';
   const t = extractTime(text);
   return t ? timeOfDayFromHour(t.hh) : undefined;
 }

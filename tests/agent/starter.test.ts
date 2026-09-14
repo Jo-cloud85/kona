@@ -28,12 +28,13 @@ function planned(over: Partial<PlannedSession>): PlannedSession {
 }
 
 const NO_TARGET: KonaBriefing = {
-  has_target: false,
   when: null,
   date: null,
-  headline: null,
+  session_label: null,
+  headline: 'All quiet',
   action: 'Nothing meaningful coming up in the next week — normal training and fuelling.',
   why: null,
+  deviation: null,
   basis: null,
 };
 
@@ -83,12 +84,13 @@ describe('buildStarter', () => {
 
   it('leads with the Kona Briefing when one is given — same judgment as Home (M24.4)', () => {
     const briefing: KonaBriefing = {
-      has_target: true,
       when: 'Tomorrow',
       date: '2026-09-10',
-      headline: 'Long run',
+      session_label: 'Long run',
+      headline: 'Bring extra fluid',
       action: 'Bring extra fluid — your second bottle if you have one.',
       why: 'Last time you did a similar long run (3 Sep), you said: "got very thirsty".',
+      deviation: null,
       basis: 'reported',
     };
     const s = buildStarter(profile, {
@@ -103,12 +105,13 @@ describe('buildStarter', () => {
 
   it('asks for missing detail when the target session still needs it', () => {
     const briefing: KonaBriefing = {
-      has_target: true,
       when: 'Tomorrow',
       date: '2026-09-10',
-      headline: 'Long run',
+      session_label: 'Long run',
+      headline: 'Nothing special needed',
       action: 'Nothing special to prepare — normal meals and fluids are fine.',
       why: null,
+      deviation: null,
       basis: null,
     };
     const s = buildStarter(profile, {

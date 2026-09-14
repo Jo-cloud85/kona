@@ -12,20 +12,25 @@ import {
   buildStarter,
   buildWeek,
   checkinReflection,
+  computeArcProgress,
+  computeMilestones,
   deriveInsights,
   handleMessage,
   recordTurnActivity,
   screenForEscalation,
   type AgentDeps,
   type AgentTurn,
+  type ArcProgress,
   type CheckinInput,
   type ChatStarter,
   type HomeView,
   type Insight,
   type KnowsView,
+  type Milestone,
   type SessionRecap,
   type WeekView,
 } from '../src/agent/index';
+import { goalContext } from '../src/domain/goal';
 import type { KonaContext } from './server-context';
 
 export { llmName } from './server-context';
@@ -189,6 +194,50 @@ export async function getHome(ctx: KonaContext, selectedDate?: string, tz: strin
     now,
     konaBriefing,
   });
+}
+
+export interface YouView {
+  greeting_name: string | null;
+  /** Goal name and countdown as separate lines, matching the goal card's
+   *  own layout — "Current goal" / name / countdown. Null fields render as
+   *  the honest "no goal set" empty state. */
+  goal_name: string | null;
+  goal_countdown: string | null;
+  arc: ArcProgress;
+  milestones: Milestone[];
+  /** Top pattern/fact insight, in Kona's own words — or null (an honest
+   *  empty state), never invented. */
+  learned: string | null;
+}
+
+/** The "You" screen (M26): progression/identity content only — account
+ *  settings stay on the Profile overlay. Needs full activity-event history
+ *  for the Arc metrics (unlike getKnows()'s capped fetch), so this is its
+ *  own fetch rather than folded into getHome(). */
+export async function getYou(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise<YouView | null> {
+  const profile = await ctx.repo.getProfile(ctx.userId);
+  if (!profile?.onboarded_at) return null;
+  const [actualSessions, recoveryLogs, fuelLogs, memories, events] = await Promise.all([
+    ctx.repo.listActualSessions(ctx.userId),
+    ctx.repo.listRecoveryLogs(ctx.userId),
+    ctx.repo.listFuelLogs(ctx.userId),
+    ctx.repo.listMemories(ctx.userId),
+    ctx.repo.listActivityEvents(ctx.userId),
+  ]);
+  const now = athleteNow(tz);
+  const arc = computeArcProgress({ actualSessions, activityEvents: events, now });
+  const milestones = computeMilestones(actualSessions);
+  const insights = deriveInsights({ actualSessions, recoveryLogs, fuelLogs, memories });
+  const learned = insights.find((i) => i.kind === 'pattern' || i.kind === 'fact')?.text ?? null;
+  const goal = goalContext(profile.goal, now);
+  return {
+    greeting_name: profile.username ?? null,
+    goal_name: goal.short_text,
+    goal_countdown: goal.countdown,
+    arc,
+    milestones,
+    learned,
+  };
 }
 
 export async function getWeek(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise<WeekView | null> {

@@ -329,7 +329,7 @@ describe('the Kona Briefing (M24) reaches Home and the chat starter identically'
     const home = await getHome(ctx, undefined, 'UTC');
     const starter = await getStarter(ctx, 'UTC');
 
-    expect(home!.briefing.kona_briefing.has_target).toBe(true);
+    expect(home!.briefing.kona_briefing.session_label).not.toBeNull();
     expect(home!.briefing.kona_briefing.why).toMatch(/thirsty/i);
     expect(starter!.greeting).toContain(home!.briefing.kona_briefing.action);
     expect(starter!.greeting).toContain(home!.briefing.kona_briefing.why);
