@@ -158,4 +158,10 @@ export interface Repository {
   listMemories(userId: string): Promise<PersistedMemory[]>;
 
   getRelevantHistory(userId: string, filter: { sport?: Sport; limit?: number }): Promise<RelevantHistory>;
+
+  /** Erases every record owned by this user (profile, plans, sessions, logs,
+   *  chat history, memories, activity events) so they can re-onboard from
+   *  scratch. Does not touch the auth account itself — the user keeps their
+   *  login. Irreversible. */
+  deleteAllUserData(userId: string): Promise<void>;
 }

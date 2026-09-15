@@ -24,6 +24,11 @@ interface SPOption {
   minutes?: number;
 }
 
+interface ChoiceOption {
+  label: string;
+  value: string;
+}
+
 interface SessionPrompt {
   date: string;
   weekday_label: string;
@@ -37,6 +42,9 @@ interface SessionPrompt {
   size_options: SPOption[];
   time_options: SPOption[];
 }
+
+/** ask_choice's sentinel for "let me type my own answer" — see src/agent/tools.ts. */
+const TYPE_OWN = '__type_own__';
 
 export default function Chat({
   conversationId,
@@ -58,6 +66,7 @@ export default function Chat({
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [starter, setStarter] = useState<Starter | null>(null);
   const [prompts, setPrompts] = useState<SessionPrompt[]>([]);
+  const [choice, setChoice] = useState<ChoiceOption[] | null>(null);
   const [picks, setPicks] = useState<Record<string, { intensity?: string; size?: string; time?: string }>>({});
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -98,6 +107,7 @@ export default function Chat({
       setStarter(null);
       setPrompts([]);
       setPicks({});
+      setChoice(null);
       // On an edit, drop the edited message and everything after it, then re-add
       // the (edited) user message.
       setEntries((prev) => {
@@ -148,6 +158,9 @@ export default function Chat({
         if (res.ok && Array.isArray(data.session_prompts) && data.session_prompts.length) {
           setPrompts(data.session_prompts as SessionPrompt[]);
         }
+        if (res.ok && Array.isArray(data.clarifying_options) && data.clarifying_options.length) {
+          setChoice(data.clarifying_options as ChoiceOption[]);
+        }
         onActivity?.();
       } catch {
         setEntries((prev) => [...prev, { role: 'assistant', content: 'Network error — try again.', intent: 'error' }]);
@@ -190,6 +203,15 @@ export default function Chat({
       onPrefillConsumed?.();
     }
   }, [initialPrefill, onPrefillConsumed, usePrompt]);
+
+  const tapChoice = (o: ChoiceOption) => {
+    setChoice(null);
+    if (o.value === TYPE_OWN) {
+      usePrompt('');
+      return;
+    }
+    void send(o.value);
+  };
 
   const key = (p: SessionPrompt) => `${p.date}#${p.session_index}`;
   const pick = (p: SessionPrompt, field: 'intensity' | 'size' | 'time', value: string) =>
@@ -305,6 +327,18 @@ export default function Chat({
             )}
           </div>
         ))}
+
+        {choice && !busy && (
+          <div className="row assistant">
+            <div className="choice-row">
+              {choice.map((o) => (
+                <button key={o.value} className="choice" onClick={() => tapChoice(o)}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {prompts.length > 0 && !busy && (
           <div className="row assistant">

@@ -3,7 +3,7 @@ import { localIsoString } from '../domain/time';
 import { deriveTurnEvents } from './activity';
 import { buildContext } from './context';
 import { deriveInsights } from './insights';
-import type { LlmClient, ToolResult } from './llm-client';
+import type { ChoiceOption, LlmClient, ToolResult } from './llm-client';
 import { safetyMessage, screenForEscalation, type SafetyScreen } from './safety';
 import { runTool, TOOL_SCHEMAS } from './tools';
 
@@ -74,6 +74,9 @@ export interface AgentTurn {
   tool_results: ToolResult[];
   safety: SafetyScreen;
   clarifying_question?: string;
+  /** Present alongside clarifying_question for a single-choice question — the
+   *  UI renders these as tappable chips instead of asking for free text. */
+  clarifying_options?: ChoiceOption[];
   /** Ids of the two messages this turn appended — used by the edit flow. */
   user_message_id: string;
   assistant_message_id: string;
@@ -95,6 +98,11 @@ function resolveArgs(
   return out;
 }
 
+/** How many prior turns of raw conversation ride along with interpret() — just
+ *  enough for a multi-step ask_choice exchange (sport -> style -> time -> ...)
+ *  to hold together, not "the whole history" (that stays CONTEXT's job). */
+const RECENT_MESSAGE_WINDOW = 8;
+
 export async function handleMessage(deps: AgentDeps, input: HandleMessageInput): Promise<AgentTurn> {
   const { repo, llm } = deps;
   // localIsoString, not .toISOString(): the latter always renders the Date's
@@ -102,6 +110,12 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
   // silently discard athleteNow()'s athlete-local reading (see
   // src/domain/time.ts) and reintroduce the wrong-day bug this is fixing.
   const nowIso = localIsoString(input.now ?? new Date());
+
+  // Fetched BEFORE appending the current message, so it never includes it.
+  const priorMessages = await repo.listMessages(input.userId, input.conversationId);
+  const recent_messages = priorMessages
+    .slice(-RECENT_MESSAGE_WINDOW)
+    .map((m) => ({ role: m.role, content: m.content }));
 
   const userMessage = await repo.appendMessage({
     user_id: input.userId,
@@ -133,7 +147,7 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
     };
   }
 
-  const interpretation = await llm.interpret({ message: input.message, context, tools: TOOL_SCHEMAS });
+  const interpretation = await llm.interpret({ message: input.message, context, tools: TOOL_SCHEMAS, recent_messages });
 
   if (interpretation.clarifying_question || interpretation.tool_calls.length === 0) {
     const reply =
@@ -152,6 +166,7 @@ export async function handleMessage(deps: AgentDeps, input: HandleMessageInput):
       tool_results: [],
       safety,
       clarifying_question: reply,
+      clarifying_options: interpretation.clarifying_options,
       user_message_id: userMessage.id,
       assistant_message_id: assistantMessage.id,
     };

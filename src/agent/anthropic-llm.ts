@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { goalContext } from '../domain/goal';
 import type {
+  ChoiceOption,
   ComposeRequest,
   ContextPackage,
   InterpretRequest,
@@ -43,7 +44,7 @@ const DEFAULT_MODEL = 'claude-opus-5';
 
 const INTERPRET_SYSTEM = `You are Kona's conversation router. Kona is a calm, practical AI endurance companion for a self-coached athlete.
 
-Read the athlete's message and call the tools that record what they said and fetch fueling numbers.
+Read the athlete's message and call the tools that record what they said and fetch fueling numbers. A short window of earlier turns in this same exchange may appear as real conversation history before the final message — use it, especially so a multi-step ask_choice exchange (sport, then style, then time, ...) never re-asks something the athlete already answered a turn or two ago.
 - If you call one or more tools: do NOT also write a reply — a second step composes it.
 - If NO tool is needed (they asked a question you can answer from CONTEXT — "what should I do today?", "what do you know about my long rides?", "how's my week looking?" — or the message is unclear): call no tools and write the reply itself, in Kona's voice — calm, concise, 2–6 sentences, plain language. That text is shown to the athlete verbatim, so do NOT narrate your reasoning or mention tools/context.
 Never state or compute fueling, hydration, sodium, carbohydrate or protein numbers yourself — those come only from calculate_fueling_targets or CONTEXT.history.
@@ -53,6 +54,8 @@ Guidance:
 - If CONTEXT.pending_plan_details is present and the athlete's message gives an effort level, duration, or distance for one of those sessions (e.g. "the gym sessions are hard, about an hour", "Saturday swim is usually 1.5km") -> update_planned_sessions with what they gave plus a sport and/or day filter. Do NOT create a new plan.
 - A single session they intend to do -> save_planned_session, then calculate_fueling_targets with phase "planning".
 - Whenever the athlete describes a session as more than just a sport ("interval run", "cardio core + lower body strength", "hill repeats", "tempo run"), put that short phrase in that session's "notes" (save_planned_session, each session inside save_weekly_plan's "days", or update_planned_sessions) — it's shown to them as the session's title, so a bare "gym" or "run" undersells what they actually told you.
+- When the athlete is describing a session (today's, tomorrow's, or the week's) and a clearly-scoped detail is still missing — which sport, a running session's style, time of day, duration, intensity, whether there's another session that day, or how conditions felt — use ask_choice instead of a plain-text question, one detail per turn, in the order and with the exact option sets its own description gives. Skip anything the message already answered; if what's still missing genuinely isn't one of those (or the athlete taps a "type it myself" option and answers in free text), fall back to a normal reply with no tool call. Don't use ask_choice for anything else — open questions, explanations, or "what should I do today" stay plain text.
+- If the athlete says a session felt hot (or "conditions were hot"), and gave no exact number, set environment.temperature_c to a representative 29 — never a more precise-looking figure than that. If they say it felt fine / normal / cool, leave environment.temperature_c unset rather than guessing a number for "not hot."
 - What actually happened (often different from the plan) -> save_actual_session (NEVER change the plan), then calculate_fueling_targets with phase "post_workout". Put their stated reason in "reason"; when the reason is pain or injury, also set context.injury_or_pain true and context.reason_for_modification.
 - The athlete asks to remove, delete, cancel, or "never mind" a planned or logged session -> delete_planned_session or delete_actual_session (match by date and, if given, sport). This is NOT the same as save_actual_session with status "skipped": skipped means the session was real and didn't happen as planned (worth remembering — it can inform later advice); delete means the record itself shouldn't exist (a mistake, plans changed before it happened, wrong entry) and Kona should stop referencing it entirely. When it's ambiguous which they mean, ask rather than guessing — deleting is not reversible from chat.
 - Food, drink or products consumed -> log_fuel_intake with each item and the quantity they stated. Never invent nutrition values. Do this even when it's mentioned alongside a session log ("rode 60k, had porridge and two gels").
@@ -185,11 +188,44 @@ const INTENT_BY_TOOL: Record<string, string> = {
   propose_memory_update: 'note_saved',
 };
 
+/** `ask_choice`'s raw args, defensively validated (untrusted model output). */
+function parseChoiceOptions(input: unknown): ChoiceOption[] | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const raw = (input as { options?: unknown }).options;
+  if (!Array.isArray(raw)) return undefined;
+  const options = raw
+    .filter((o): o is { label: unknown; value: unknown } => Boolean(o) && typeof o === 'object')
+    .map((o) => ({ label: String(o.label ?? ''), value: String(o.value ?? '') }))
+    .filter((o) => o.label && o.value);
+  return options.length ? options : undefined;
+}
+
 /** Convert an Anthropic response into an InterpretResult. Pure — unit tested. */
 export function toInterpretResult(message: Anthropic.Message): InterpretResult {
   const toolUses = message.content.filter(
     (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
   );
+
+  // ask_choice never mutates state — intercept it here so the orchestrator's
+  // tool-execution loop never sees it, and it becomes a structured clarifying
+  // question the UI renders as tappable chips instead of a save/log tool call.
+  const askChoice = toolUses.find((b) => b.name === 'ask_choice');
+  if (askChoice) {
+    const input = askChoice.input as { question?: unknown } | undefined;
+    const options = parseChoiceOptions(askChoice.input);
+    const question = typeof input?.question === 'string' && input.question.trim() ? input.question.trim() : undefined;
+    if (question && options) {
+      return { intent: 'clarify', tool_calls: [], clarifying_question: question, clarifying_options: options };
+    }
+    // Malformed args from the model — fall back to a plain clarifying question
+    // rather than surfacing broken chips.
+    return {
+      intent: 'clarify',
+      tool_calls: [],
+      clarifying_question: question ?? "Could you say a bit more about that?",
+    };
+  }
+
   const tool_calls: PlannedToolCall[] = toolUses.map((b) => ({
     tool: b.name,
     args: (b.input ?? {}) as Record<string, unknown>,
@@ -225,6 +261,11 @@ export class AnthropicLlmClient implements LlmClient {
   }
 
   async interpret(req: InterpretRequest): Promise<InterpretResult> {
+    // recent_messages is a short window of prior turns, always strictly
+    // user/assistant-alternating starting on 'user' (orchestrator.ts appends
+    // exactly one of each per turn) — safe to prepend as real conversation
+    // turns ahead of the final CONTEXT + new message turn below.
+    const priorTurns = (req.recent_messages ?? []).map((m) => ({ role: m.role, content: m.content }));
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: this.maxTokens.interpret,
@@ -236,6 +277,7 @@ export class AnthropicLlmClient implements LlmClient {
       })),
       tool_choice: { type: 'auto' },
       messages: [
+        ...priorTurns,
         {
           role: 'user',
           content: `CONTEXT:\n${contextForPrompt(req.context)}\n\nATHLETE MESSAGE:\n${req.message}`,

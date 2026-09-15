@@ -73,6 +73,7 @@ export async function POST(req: Request): Promise<Response> {
       intent: turn.intent,
       safety_escalated: turn.safety.escalate,
       clarifying_question: turn.clarifying_question ?? null,
+      clarifying_options: turn.clarifying_options ?? null,
       session_prompts,
       user_message_id: turn.user_message_id,
       assistant_message_id: turn.assistant_message_id,

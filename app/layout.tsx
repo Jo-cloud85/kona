@@ -8,6 +8,10 @@ const urbanist = Urbanist({ subsets: ['latin'], variable: '--font-sans', display
 export const metadata: Metadata = {
   title: 'Kona',
   description: 'Your AI endurance companion.',
+  appleWebApp: {
+    title: 'Kona',
+    statusBarStyle: 'black-translucent',
+  },
 };
 
 // viewportFit: 'cover' is what makes env(safe-area-inset-*) resolve to real

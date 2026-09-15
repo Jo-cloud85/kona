@@ -119,6 +119,8 @@ const SPORTS: Sport[] = [
   'cycling',
   'swimming',
   'gym',
+  'cardio',
+  'crossfit',
   'climbing',
   'skating',
   'combat_sports',
@@ -933,13 +935,56 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
     },
     required: [],
   },
+
+  ask_choice: {
+    type: 'object',
+    properties: {
+      question: { type: 'string', description: 'Short question shown above the options, e.g. "Which sport?"' },
+      options: {
+        type: 'array',
+        description: 'Tappable quick replies, in display order. Each value is sent as the athlete\'s next message verbatim — phrase it as a short, natural reply.',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', description: 'Text on the chip.' },
+            value: {
+              type: 'string',
+              description:
+                'What gets sent when tapped, OR the exact literal "__type_own__" for a chip that just lets the athlete type their own answer instead of sending anything.',
+            },
+          },
+          required: ['label', 'value'],
+        },
+      },
+    },
+    required: ['question', 'options'],
+  },
 };
 
-export const TOOL_SCHEMAS: ToolSchema[] = Object.entries(TOOLS).map(([name, def]) => ({
-  name,
-  description: def.description,
-  input_schema: TOOL_INPUT_SCHEMAS[name] ?? { type: 'object', properties: {}, required: [] },
-}));
+/** Not a repo-mutating action — the orchestrator intercepts this tool call
+ *  before it ever reaches runTool() and turns it into a clarifying question
+ *  with tappable options, so it has no entry (and no `run()`) in TOOLS. */
+const ASK_CHOICE_DESCRIPTION = `Ask ONE missing detail about a session the athlete is describing, as tappable quick-reply options instead of an open-ended question. Only for a single, clearly-scoped detail — never for open-ended or exploratory questions (use plain text, no tool call, for those). Never call this in the same turn as another tool. Never ask about something the athlete's message already told you.
+
+When several details are missing, ask in this order, one per turn, skipping any already given: sport -> (running only) session style -> time of day -> duration -> intensity -> whether there's another session that day -> how the conditions felt. Use these EXACT option sets (label/value) for each, always as the literal values given, in this order, every "type it myself" option using the value "__type_own__":
+- Sport: Running/running, Cycling/cycling, Swimming/swimming, Strength/gym, Cardio/cardio, CrossFit/crossfit, then a "Something else" / "__type_own__" option.
+- Running style (only when sport is running and no style is stated yet): Interval/interval run, Tempo/tempo run, Easy/easy run, Long/long run, then "Other" / "__type_own__".
+- Time of day: Morning/morning, Afternoon/afternoon, Evening/evening, Night/night.
+- Duration: ~30 min/30 min, ~45 min/45 min, ~1 hr/60 min, ~1.5 hr/90 min, ~2 hr/120 min, then "Other" / "__type_own__".
+- Intensity: Easy/easy, Moderate/moderate, Hard/hard, Race/race.
+- Another session that day: "Yes, another session"/yes another session today, "No, that's it"/no that's it for today.
+- Conditions (only for a session that already happened, or same-day): "It felt hot"/it felt hot, "Felt fine"/felt fine, not hot.
+
+For anything outside this list where options would still help, write your own short question/options instead of forcing it into these.`;
+
+export const TOOL_SCHEMAS: ToolSchema[] = [
+  ...Object.entries(TOOLS).map(([name, def]) => ({
+    name,
+    description: def.description,
+    input_schema: TOOL_INPUT_SCHEMAS[name] ?? { type: 'object', properties: {}, required: [] },
+  })),
+  { name: 'ask_choice', description: ASK_CHOICE_DESCRIPTION, input_schema: TOOL_INPUT_SCHEMAS.ask_choice! },
+];
 
 export async function runTool(
   tool: string,

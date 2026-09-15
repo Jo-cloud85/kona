@@ -27,6 +27,8 @@ export type Sport =
   | 'cycling'
   | 'swimming'
   | 'gym'
+  | 'cardio'
+  | 'crossfit'
   | 'climbing'
   | 'skating'
   | 'combat_sports'

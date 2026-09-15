@@ -10,6 +10,134 @@ built under those constraints. Don't fabricate insights, stop for a product
 review after each milestone. See the reset milestone plan below +
 `PRODUCT_VISION.md`.
 
+### Chat quick-reply chips (`ask_choice`) + cardio/crossfit (2026-09-15) ✅
+Founder wanted chat to offer tappable options (sport, then a running-specific
+style, then time of day, duration, intensity, another session that day,
+conditions) instead of always requiring free text — matching what the
+existing weekly-plan `SessionPrompt` chips already do, but for the very start
+of describing a session, not just gap-filling after a plan is saved. Also:
+add `cardio` and `crossfit` to the sport list. Confirmed cardio/crossfit are
+low-risk — like `gym`/`hyrox`, neither has a pace-estimate table in
+`src/rules/v0_1_0.ts`, so they're duration-based only, no calc-engine changes
+needed. Added to `Sport` (`src/domain/types.ts`), `SPORTS` (`tools.ts`),
+`extractSport()` word patterns (`parse.ts`), and every `SPORT_LABEL` map
+(`home.ts`, `starter.ts`, `ProfileOverlay.tsx`) plus the onboarding/profile
+sport picker (`ProfileForm.tsx`).
+
+**Design**: the existing `SessionPrompt` system only ever fires after
+`save_weekly_plan` — sport is required before a session object exists, so a
+missing sport can't be a "gap" on an already-saved record. Solved with a new
+tool, `ask_choice` (`src/agent/tools.ts`) — not a repo-mutating action (no
+entry in the `TOOLS` registry, so `runTool()` never touches it): the LLM
+calls it instead of writing a plain-text question when exactly one clearly-
+scoped detail is missing. `toInterpretResult()` (`anthropic-llm.ts`)
+intercepts it before it ever reaches the tool-execution loop and turns it
+into `clarifying_question` + `clarifying_options` on `InterpretResult` /
+`AgentTurn` — threaded through `SentMessage`, `/api/chat`'s response, and a
+new `.choice-row` block in `Chat.tsx` (reusing `CheckinDialog`'s existing
+`.choice` pill styling). Tapping an option sends its `value` as the next chat
+message verbatim — same mechanism `SessionPrompt`'s `submitPicks()` already
+uses, so no new mutation path was needed. A `value` of the literal
+`"__type_own__"` is the "let me type it myself" chip: the frontend treats it
+specially — dismiss the chips and focus the composer, send nothing.
+
+The tool's own description carries the exact canonical option sets and
+asking order the founder specified (sport → running style → time of day →
+duration → intensity → another session → conditions), each ending in a
+`__type_own__` chip where free text might not be covered, and tells the
+model never to re-ask something the athlete's message already answered.
+"Felt hot" maps to a representative `environment.temperature_c: 29` (just
+over `hot_humid.min_temp_c`) only when no exact figure was given — matching
+the existing `distance_label`/`distance_km` precedent (preserve their words,
+derive one workable number) rather than inventing a precise-looking figure;
+"felt fine" leaves `temperature_c` unset rather than guessing a number for
+"not hot."
+
+**Bug found and fixed while building this**: `interpret()` sends the model
+only the current message + structured `CONTEXT` (a deliberate design rule —
+"never pass the whole history to the LLM"), with no memory of the raw
+conversation at all. Fine for a single free-text message, but it broke a
+multi-step chip exchange: by the 3rd or 4th tap, Claude had already lost
+"tomorrow morning" from the 1st message and started re-asking for time of
+day. Fixed with a bounded window (`RECENT_MESSAGE_WINDOW = 8`, so ~4 turns —
+not "the whole history," just enough for one guided exchange to hold
+together): `orchestrator.ts` fetches it via `repo.listMessages()` *before*
+appending the new message (so it never includes the message being
+interpreted), threads it through `InterpretRequest.recent_messages`, and
+`anthropic-llm.ts` prepends it as real `user`/`assistant` turns ahead of the
+final CONTEXT+message turn — letting Claude's native conversational memory
+do the work instead of trying to cram it into the JSON context blob. Safe by
+construction: `orchestrator.ts` is the only code that ever calls
+`repo.appendMessage()`, always exactly one user then one assistant per turn,
+so the window is always strictly alternating and starts on `user`.
+
+Tests: `tests/agent/anthropic-llm.test.ts` gained cases for `ask_choice`
+interception (well-formed, malformed args, ignored-alongside-another-tool)
+and for the memory-window fix (a 2nd `interpret()` call carries the 1st
+turn's exchange as real messages; a fresh conversation sends none). Verified
+live against real Claude (`claude-sonnet-5`, not the deterministic test
+client): sent a deliberately vague "I'm training tomorrow morning," tapped
+through Running → Interval → 60 min → Hard via the actual rendered chips in
+`Chat.tsx` (not just the API), confirmed it skipped re-asking time of day,
+and confirmed the resulting planned session saved as "Morning interval run,"
+hard, 60 min, morning — exactly right. Also confirmed the `"__type_own__"`
+chip dismisses the options and focuses the composer without sending
+anything.
+
+### App icon (home-screen shortcut) (2026-09-15) ✅
+Founder wanted the icon shown when the app is added to a phone's home screen
+to be a "triangular multicolor" mark — nothing like it existed in the repo
+(no `public/`, no manifest, no icon files at all; the app had no explicit
+favicon/apple-touch-icon before this). Built it from the app's own palette
+rather than inventing new colors: `app/brand-icon.tsx` draws a triangle split
+into 3 facets from its centroid, one per existing gradient token
+(`--grad-performance/recovery/vital`) — a multicolor mark grounded in the
+same identity system as the You tab's progression ring, not a new logo.
+`app/icon.tsx` (32×32 favicon) and `app/apple-icon.tsx` (180×180, full-bleed
+square — iOS applies its own rounded-square mask) both render it via Next's
+file-convention icon routes (`next/og`'s `ImageResponse`, Satori — no manual
+asset export/rasterizing needed). Added `app/manifest.ts` for Android/Chrome
+"Add to Home Screen" parity (name, theme_color, icons) and `appleWebApp`
+metadata in `layout.tsx` for the iOS home-screen label. Verified live:
+`/icon`, `/apple-icon`, `/manifest.webmanifest` all render correctly, and
+`<link rel="apple-touch-icon">` / `rel="icon"` / `rel="manifest"` are
+auto-injected into `<head>` — confirmed via `next build`'s route list too
+(`○ /apple-icon`, `○ /icon`, `○ /manifest.webmanifest` all static).
+
+### Full account data reset ("start over") (2026-09-15) ✅
+Founder wants to wipe all saved data for their account and re-add the last
+few days manually. Root investigation: no Supabase service-role key exists
+in this environment (only the anon key, RLS-scoped) — deliberately, so
+Claude never holds standing access to bypass Row Level Security. The right,
+reusable fix is a real in-app capability that runs under the founder's own
+authenticated session, not a one-off script run with elevated credentials.
+
+Added `Repository.deleteAllUserData(userId)`, implemented in both
+`InMemoryRepository` (filters every Map/array by `user_id`) and
+`SupabaseRepository` (deletes from every user-owned table under RLS — no
+service key needed since `auth.uid() = user_id` already scopes it). Wired to
+`DELETE /api/profile` (`lib/kona-server.ts`'s new `resetAccount()`) and a
+"Danger zone" section in `ProfileOverlay.tsx` — a confirm-dialog-gated "Reset
+all data" button. On success the profile row is gone, so the app naturally
+falls back to onboarding on next load (same `onboarded_at` check `page.tsx`
+already had) — no separate "reset" screen needed.
+
+One deliberate schema change: `activity_events` (the "how Kona's been
+learning" timeline) was append-only at the DB level on purpose (0001_init.sql:
+"No update/delete policy => immutable"), so a reset couldn't clear it without
+relaxing that. Confirmed with the founder to relax it —
+`supabase/migrations/0004_activity_events_deletable.sql` adds a delete policy.
+**This migration needs to be run in the Supabase SQL editor before the reset
+button will fully clear that table on the live account** — everything else
+(profile, plans, sessions, logs, chat, memories) resets without it.
+
+Added a `deleteAllUserData` case to the shared repository contract suite
+(`tests/data/repository-contract.ts`) — proves every table is cleared for the
+target user and nothing leaks to/from another user. Verified live end-to-end
+against the dev-fallback repo: onboarded, sent a chat message, called
+`DELETE /api/profile`, confirmed `/api/home` and `/api/knows` both return
+`null` afterward and a reload lands back on Onboarding.
+
 ### Consistent 32px left/right/top offset across all tabs (2026-09-15) ✅
 Founder noticed the Week tab's title and its day-cards didn't line up — measured
 it: "Week" sat 16px from the screen edge, but the day-cards below sat 32px in.

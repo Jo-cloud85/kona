@@ -112,7 +112,9 @@ export function extractSport(text: string): Sport | undefined {
   if (/\b(run|running|jog|jogging|ran)\b/i.test(text)) return 'running';
   if (/\b(ride|rode|cycl\w*|bike|biking|spin)\b/i.test(text)) return 'cycling';
   if (/\b(swim|swam|swimming)\b/i.test(text)) return 'swimming';
+  if (/\bcross[\s-]?fit\b/i.test(text)) return 'crossfit';
   if (/\b(gym|weights|strength|lifting|core)\b/i.test(text)) return 'gym';
+  if (/\bcardio\b/i.test(text)) return 'cardio';
   if (/\b(climb|climbing|bouldering|boulder)\b/i.test(text)) return 'climbing';
   return undefined;
 }

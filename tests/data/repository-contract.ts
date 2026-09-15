@@ -285,4 +285,57 @@ export function repositoryContract(
     expect((await repo.deleteRecordsForMessages(userA, [mB.id])).sessions).toBe(0);
     expect(await repo.listActualSessions(userB)).toHaveLength(1);
   });
+
+  it('deleteAllUserData erases every record for that user and leaves other users untouched', async () => {
+    const repo = await makeRepo();
+
+    for (const user of [userA, userB]) {
+      await repo.upsertProfile({ user_id: user, usual_sports: ['running'], onboarded_at: '2026-01-01T00:00:00Z' });
+      const plan = await repo.saveWeeklyPlan({ user_id: user, week_start: '2026-08-03' });
+      const planned = await repo.savePlannedSession({
+        ...base,
+        user_id: user,
+        start_at: '2026-08-04T06:00:00',
+        weekly_plan_id: plan.id,
+      });
+      const actual = await repo.saveActualSession({ ...base, user_id: user, start_at: '2026-08-04T06:00:00', status: 'completed' });
+      await repo.saveFuelLog({ user_id: user, session_id: actual.id, items: [] });
+      await repo.saveRecoveryLog({ user_id: user, session_id: actual.id, free_text: 'fine' });
+      const msg = await repo.appendMessage({ user_id: user, conversation_id: 'c', role: 'user', content: 'hi' });
+      await repo.proposeMemory({
+        user_id: user,
+        key: 'usual_long_ride_fuel',
+        value: 'oats',
+        certainty: 'user_reported',
+        source: 'conversation',
+        proposed_at: '2026-01-01T00:00:00Z',
+      });
+      await repo.appendActivityEvent({ user_id: user, type: 'session_logged', summary: 'logged' });
+      void planned;
+      void msg;
+    }
+
+    await repo.deleteAllUserData(userA);
+
+    expect(await repo.getProfile(userA)).toBeUndefined();
+    expect(await repo.listWeeklyPlans(userA)).toHaveLength(0);
+    expect(await repo.listPlannedSessions(userA)).toHaveLength(0);
+    expect(await repo.listActualSessions(userA)).toHaveLength(0);
+    expect(await repo.listFuelLogs(userA)).toHaveLength(0);
+    expect(await repo.listRecoveryLogs(userA)).toHaveLength(0);
+    expect(await repo.listConversations(userA)).toHaveLength(0);
+    expect(await repo.listMemories(userA)).toHaveLength(0);
+    expect(await repo.listActivityEvents(userA)).toHaveLength(0);
+
+    // userB's identical records survive untouched
+    expect(await repo.getProfile(userB)).toBeDefined();
+    expect(await repo.listWeeklyPlans(userB)).toHaveLength(1);
+    expect(await repo.listPlannedSessions(userB)).toHaveLength(1);
+    expect(await repo.listActualSessions(userB)).toHaveLength(1);
+    expect(await repo.listFuelLogs(userB)).toHaveLength(1);
+    expect(await repo.listRecoveryLogs(userB)).toHaveLength(1);
+    expect(await repo.listConversations(userB)).toHaveLength(1);
+    expect(await repo.listMemories(userB)).toHaveLength(1);
+    expect(await repo.listActivityEvents(userB)).toHaveLength(1);
+  });
 }

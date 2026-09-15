@@ -8,6 +8,8 @@ const SPORTS: { value: string; label: string }[] = [
   { value: 'swimming', label: 'Swimming' },
   { value: 'triathlon', label: 'Triathlon' },
   { value: 'gym', label: 'Strength' },
+  { value: 'cardio', label: 'Cardio' },
+  { value: 'crossfit', label: 'CrossFit' },
 ];
 
 const GENDERS: { value: string; label: string }[] = [

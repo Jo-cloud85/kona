@@ -382,4 +382,16 @@ export class InMemoryRepository implements Repository {
     const fuel = (await this.listFuelLogs(userId)).slice(-limit).reverse();
     return { recent_actual_sessions: sessions, recent_recovery_logs: recovery, recent_fuel_logs: fuel };
   }
+
+  async deleteAllUserData(userId: string): Promise<void> {
+    this.profiles.delete(userId);
+    for (const [id, s] of this.planned) if (s.user_id === userId) this.planned.delete(id);
+    for (const [id, s] of this.actual) if (s.user_id === userId) this.actual.delete(id);
+    this.fuelLogs = this.fuelLogs.filter((r) => r.user_id !== userId);
+    this.recoveryLogs = this.recoveryLogs.filter((r) => r.user_id !== userId);
+    this.messages = this.messages.filter((r) => r.user_id !== userId);
+    this.memories = this.memories.filter((r) => r.user_id !== userId);
+    this.weeklyPlans = this.weeklyPlans.filter((r) => r.user_id !== userId);
+    this.activity = this.activity.filter((r) => r.user_id !== userId);
+  }
 }

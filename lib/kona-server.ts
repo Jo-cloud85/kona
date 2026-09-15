@@ -59,6 +59,12 @@ export async function saveProfile(ctx: KonaContext, data: ProfileFormData): Prom
   });
 }
 
+/** Erases every record this user owns so they can re-onboard from scratch.
+ *  Keeps the login itself (auth account) intact — irreversible otherwise. */
+export async function resetAccount(ctx: KonaContext): Promise<void> {
+  await ctx.repo.deleteAllUserData(ctx.userId);
+}
+
 export interface SentMessage {
   turn: AgentTurn;
   /** Structured per-session prompts from a weekly-plan / clarify turn, if any. */

@@ -698,4 +698,22 @@ export class SupabaseRepository implements Repository {
       recent_fuel_logs: (fuel.data as Row[]).map(rowToFuelLog),
     };
   }
+
+  async deleteAllUserData(userId: string): Promise<void> {
+    const tables = [
+      'fuel_logs',
+      'recovery_logs',
+      'sessions',
+      'planned_sessions',
+      'weekly_plans',
+      'messages',
+      'personal_memories',
+      'activity_events',
+      'profiles',
+    ];
+    for (const t of tables) {
+      const { error } = await this.sb.from(t).delete().eq('user_id', userId);
+      if (error) fail(`deleteAllUserData(${t})`, error);
+    }
+  }
 }

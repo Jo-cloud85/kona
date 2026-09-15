@@ -9,6 +9,8 @@ const SPORT_LABEL: Record<string, string> = {
   cycling: 'Cycling',
   swimming: 'Swimming',
   gym: 'Strength',
+  cardio: 'Cardio',
+  crossfit: 'CrossFit',
   climbing: 'Climbing',
   skating: 'Skating',
   combat_sports: 'Combat sports',
@@ -23,6 +25,39 @@ const SPORT_LABEL: Record<string, string> = {
  * full-screen overlay, not a settings sub-screen given equal billing with
  * Home/Chat/Week/Memory/You.
  */
+function ResetAccountButton() {
+  const [busy, setBusy] = useState(false);
+
+  const reset = async () => {
+    if (
+      !window.confirm(
+        'Delete everything Kona has saved for you — profile, plans, sessions, logs, chat history and memories? This cannot be undone.',
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/profile', { method: 'DELETE' });
+      if (!res.ok) throw new Error('reset failed');
+      window.location.assign('/');
+    } catch {
+      setBusy(false);
+      window.alert('Could not reset your account — please try again.');
+    }
+  };
+
+  return (
+    <div className="profile-danger-zone">
+      <p className="profile-danger-label">Danger zone</p>
+      <button type="button" className="profile-danger-btn" onClick={() => void reset()} disabled={busy}>
+        {busy ? 'Resetting…' : 'Reset all data'}
+      </button>
+      <p className="profile-danger-note">Erases everything Kona knows about you so you can start over. Keeps your login.</p>
+    </div>
+  );
+}
+
 export default function ProfileOverlay({
   open,
   name,
@@ -102,6 +137,8 @@ export default function ProfileOverlay({
         <div className="profile-signout">
           <SignOutButton />
         </div>
+
+        <ResetAccountButton />
       </div>
     </div>
   );
