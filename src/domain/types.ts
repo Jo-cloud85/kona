@@ -90,8 +90,11 @@ export interface Profile {
 
   // Onboarding background — helps the companion, not the numbers.
   username?: string;
-  /** What they're working towards. The organizing principle for a self-coached athlete. */
-  goal?: TrainingGoal;
+  /** What they're working towards. The organizing principle for a self-coached
+   *  athlete. Up to 3 — most athletes track at most a race plus a couple of
+   *  secondary aims; a goal with no `event_date` is a deliberate "no target
+   *  date, just staying consistent" entry, not a missing field. */
+  goals?: TrainingGoal[];
   gender?: Gender;
   age?: number;
   /** Free text: injuries or cramps in the last month, or empty. */
@@ -244,6 +247,14 @@ export interface RecoveryLog {
   /** Named symptoms the user reported (e.g. "left hip discomfort"). No diagnosis. */
   reported_symptoms?: string[];
   sleep_quality?: 'poor' | 'ok' | 'good' | 'unknown';
+  mood?: 'low' | 'ok' | 'good';
+  /** Mirrors src/agent/insights.ts's SessionFlagCategory — kept as a plain
+   *  string here since domain/types.ts must not import from src/agent.
+   *  Which advice category (if any) this check-in's "followed it" answer
+   *  was about, so the pattern layer can count outcomes per category
+   *  without re-parsing free_text. */
+  followed_category?: string;
+  followed_outcome?: 'better' | 'worse' | 'same';
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +293,8 @@ export type ActivityEventType =
   | 'checkin_done'
   | 'fact_learned' // a durable memory or profile fact was captured
   | 'insight_formed' // a pattern/fact crossed the evidence threshold
-  | 'recommendation_adapted'; // Kona will now factor a new insight into future advice
+  | 'recommendation_adapted' // Kona will now factor a new insight into future advice
+  | 'recommendation_declined'; // athlete kept a session as planned instead of accepting a proposed swap
 
 export interface ActivityEvent {
   id: string;

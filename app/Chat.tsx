@@ -70,7 +70,6 @@ export default function Chat({
   const [picks, setPicks] = useState<Record<string, { intensity?: string; size?: string; time?: string }>>({});
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const [llm, setLlm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const threadRef = useRef<HTMLDivElement>(null);
@@ -84,8 +83,7 @@ export default function Chat({
     setEditingId(null);
     fetch(`/api/chat?conversationId=${encodeURIComponent(conversationId)}`, { headers: tzHeaders() })
       .then((r) => r.json())
-      .then((data: { llm?: string; messages?: ChatEntry[]; starter?: Starter | null }) => {
-        if (data.llm) setLlm(data.llm);
+      .then((data: { messages?: ChatEntry[]; starter?: Starter | null }) => {
         if (data.messages?.length) {
           setEntries(data.messages.map((m) => ({ id: m.id, role: m.role, content: m.content })));
         } else if (data.starter) {
@@ -247,10 +245,7 @@ export default function Chat({
         )}
         <div className="header-title">
           <h1>Kona</h1>
-          <p>
-            {greetingName ? `Hi ${greetingName} — ` : ''}your AI endurance companion
-            {llm ? ` · ${llm}` : ''}
-          </p>
+          <p>{greetingName ? `Hi ${greetingName} — ` : ''}usually replies in a few seconds</p>
         </div>
         {onNewChat && (
           <div className="header-actions">
@@ -318,10 +313,8 @@ export default function Chat({
                   </button>
                 )}
                 {e.role === 'assistant' && e.detail && <div className="detail">{e.detail}</div>}
-                {e.role === 'assistant' && (e.intent || e.safety) && (
-                  <div className={`meta${e.safety ? ' safety' : ''}`}>
-                    {e.safety ? 'safety escalation' : e.intent}
-                  </div>
+                {e.role === 'assistant' && e.safety && (
+                  <div className="meta safety">safety escalation</div>
                 )}
               </>
             )}

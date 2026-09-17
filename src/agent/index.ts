@@ -22,11 +22,11 @@ export {
   type DashboardDaySession,
 } from './dashboard';
 export {
-  buildHome,
-  type HomeView,
-  type HomeSession,
-  type HomeWeekDay,
-  type HomeBriefing,
+  buildToday,
+  type TodayView,
+  type TodaySession,
+  type TodayWeekDay,
+  type TodayBriefing,
 } from './home';
 export { buildWeek, type WeekView, type WeekDayView } from './week';
 export { buildSessionRecap, type SessionRecap } from './recap';
@@ -34,6 +34,7 @@ export { buildCheckinLog, checkinReflection, type CheckinInput, type CheckinLog 
 export {
   deriveInsights,
   effectiveIsLong,
+  learnedCategoryInsights,
   recentSessionRead,
   similarSessionFlag,
   snippet,
@@ -41,6 +42,7 @@ export {
   type InsightKind,
   type InsightBasis,
   type InsightInput,
+  type LearnedInsight,
   type RecentSessionRead,
   type SessionFlag,
   type SessionFlagCategory,
@@ -48,9 +50,21 @@ export {
 } from './insights';
 export {
   buildKonaBriefing,
+  describeRecentDay,
   findNextMeaningfulSession,
+  recentHardSessions,
+  CLUSTER_WINDOW_DAYS,
+  CLUSTER_SOFTEN_MIN,
   type KonaBriefing,
+  type PendingRecommendation,
 } from './briefing';
+export {
+  buildConsistencyDays,
+  describeConsistency,
+  type ConsistencyRead,
+  type RhythmDay,
+  type RhythmDayState,
+} from './rhythm';
 export {
   buildKnows,
   type KnowsView,

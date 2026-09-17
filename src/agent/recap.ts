@@ -58,7 +58,7 @@ interface ParsedCheckin {
  *  chat free text) — nothing to parse out of that reliably. */
 function parseCheckin(free_text: string): ParsedCheckin | null {
   if (!free_text.startsWith('End-of-day check-in')) return null;
-  const feel = /workout felt: "(.+?)"/.exec(free_text)?.[1];
+  const feel = /legs felt (\w+)/.exec(free_text)?.[1];
   const plannedMatch = /Went as planned: (yes|no)/.exec(free_text)?.[1];
   const painsMatch = /Injuries \/ cramps \/ pains: (yes|no)/.exec(free_text)?.[1];
   if (!feel || !plannedMatch || !painsMatch) return null;
@@ -130,7 +130,7 @@ export function buildSessionRecap(input: {
     date: input.date,
     weekday_full: weekdayFull(input.date),
     title: titleFor(actual),
-    feel_label: checkin?.feel ?? null,
+    feel_label: checkin ? checkin.feel.charAt(0).toUpperCase() + checkin.feel.slice(1) : null,
     logged_at_time: actual.created_at
       ? localTimeOf(actual.created_at, tz)
       : checkinLog

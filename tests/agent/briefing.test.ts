@@ -82,7 +82,7 @@ describe('findNextMeaningfulSession', () => {
   });
 });
 
-describe('buildKonaBriefing — tier 5: honest default', () => {
+describe('buildKonaBriefing — tier 6: honest default', () => {
   it('nothing meaningful coming up — honest, explicit "nothing to prepare" (quality bar 4)', () => {
     const b = buildKonaBriefing({ today: TODAY, sessions: [], actualSessions: [], recoveryLogs: [] });
     expect(b.action).toMatch(/nothing meaningful/i);
@@ -93,7 +93,7 @@ describe('buildKonaBriefing — tier 5: honest default', () => {
   });
 });
 
-describe('buildKonaBriefing — tier 4: upcoming meaningful session (M24, unchanged in substance)', () => {
+describe('buildKonaBriefing — tier 5: upcoming meaningful session (M24, unchanged in substance)', () => {
   it('a meaningful session with no comparable history — honest default action, no fabricated "why"', () => {
     const s = session({ start_at: `${TODAY}T18:00:00`, is_long: true, sport: 'running' });
     const b = buildKonaBriefing({ today: TODAY, sessions: [s], actualSessions: [], recoveryLogs: [] });
@@ -160,10 +160,15 @@ describe('buildKonaBriefing — tier 1: a recent bad outcome, and today trains (
     expect(b.deviation).toEqual({ planned: '40 km', actual: '22 km', reason: 'legs felt heavy' });
   });
 
-  it('does not fire when today has nothing planned, even after a bad session', () => {
-    const yesterday = actual({ start_at: '2026-09-13T18:00:00', status: 'stopped_early' });
+  it('fires even when today has nothing planned — "given everything going on with you", not just pre-workout (M27)', () => {
+    const yesterday = actual({ start_at: '2026-09-13T18:00:00', status: 'stopped_early', reason: 'left hip discomfort' });
     const b = buildKonaBriefing({ today: TODAY, sessions: [], actualSessions: [yesterday], recoveryLogs: [] });
-    expect(b.headline).not.toMatch(/keep today easy/i);
+    expect(b.headline).not.toMatch(/keep today easy/i); // that copy is specific to "today trains"
+    expect(b.headline).toMatch(/keeping an eye on/i);
+    expect(b.when).toBeNull(); // not about a specific session today
+    expect(b.session_label).toBeNull();
+    expect(b.action).toMatch(/no need to change anything today/i);
+    expect(b.pending_recommendation).toBeNull();
   });
 
   it('does not fire when the recent session has no outcome signal at all — silence, not a guess', () => {
@@ -182,7 +187,7 @@ describe('buildKonaBriefing — tier 1: a recent bad outcome, and today trains (
   });
 });
 
-describe('buildKonaBriefing — tier 2: an unacknowledged planned session (M25.1)', () => {
+describe('buildKonaBriefing — tier 3: an unacknowledged planned session (M25.1)', () => {
   it('a planned session 2 days back with no actual record -> "don\'t chase" it, not the recent-outcome tier', () => {
     const missed = session({ start_at: '2026-09-12T06:00:00', sport: 'running', distance_km: 8 });
     const b = buildKonaBriefing({ today: TODAY, sessions: [missed], actualSessions: [], recoveryLogs: [] });
@@ -205,7 +210,164 @@ describe('buildKonaBriefing — tier 2: an unacknowledged planned session (M25.1
   });
 });
 
-describe('buildKonaBriefing — tier 3: an emerging pattern (M25.1)', () => {
+describe('buildKonaBriefing — tier 2: load clustering (M27)', () => {
+  function hardDay(dateIso: string): ActualSession {
+    return actual({ start_at: `${dateIso}T18:00:00`, intensity: 'hard', status: 'completed' });
+  }
+
+  it('2 hard days in the last 4, today extends it -> soften to maintenance, no swap proposed', () => {
+    const today = session({ start_at: `${TODAY}T18:00:00`, intensity: 'hard' });
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [today],
+      actualSessions: [hardDay('2026-09-12'), hardDay('2026-09-13')],
+      recoveryLogs: [],
+    });
+    expect(b.headline).toMatch(/treat today as maintenance/i);
+    expect(b.why).toMatch(/2 hard sessions/i);
+    expect(b.basis).toBe('repeated');
+    expect(b.pending_recommendation).toBeNull();
+  });
+
+  it('only 1 recent hard day -> does not fire (2 is the minimum)', () => {
+    const today = session({ start_at: `${TODAY}T18:00:00`, intensity: 'hard' });
+    const b = buildKonaBriefing({ today: TODAY, sessions: [today], actualSessions: [hardDay('2026-09-13')], recoveryLogs: [] });
+    expect(b.headline).not.toMatch(/maintenance/i);
+  });
+
+  it("today's own session isn't hard/long -> does not fire even with a recent cluster", () => {
+    const today = session({ start_at: `${TODAY}T18:00:00`, intensity: 'easy', is_long: false });
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [today],
+      actualSessions: [hardDay('2026-09-12'), hardDay('2026-09-13')],
+      recoveryLogs: [],
+    });
+    expect(b.headline).not.toMatch(/maintenance/i);
+  });
+
+  it('4+ days ago is outside the clustering window', () => {
+    const today = session({ start_at: `${TODAY}T18:00:00`, intensity: 'hard' });
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [today],
+      actualSessions: [hardDay('2026-09-08'), hardDay('2026-09-09')], // 5-6 days back
+      recoveryLogs: [],
+    });
+    expect(b.headline).not.toMatch(/maintenance/i);
+  });
+
+  it('3+ hard days + a saved-plan rest day ahead -> proposes an actual swap, not just advice', () => {
+    const today = session({ start_at: `${TODAY}T18:00:00`, sport: 'running', intensity: 'hard' });
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [today],
+      actualSessions: [hardDay('2026-09-11'), hardDay('2026-09-12'), hardDay('2026-09-13')],
+      recoveryLogs: [],
+      restDays: ['2026-09-16'], // Wednesday this week
+    });
+    expect(b.headline).toMatch(/move today's run/i);
+    expect(b.pending_recommendation).not.toBeNull();
+    expect(b.pending_recommendation).toMatchObject({
+      accept_label: 'Accept swap',
+      decline_label: 'Keep as planned',
+      session_id: today.id,
+      from_date: TODAY,
+      to_date: '2026-09-16',
+    });
+    expect(b.action).toMatch(/shift it to wednesday/i);
+  });
+
+  it('3+ hard days but no rest day in the saved plan -> falls back to the softer maintenance call', () => {
+    const today = session({ start_at: `${TODAY}T18:00:00`, intensity: 'hard' });
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [today],
+      actualSessions: [hardDay('2026-09-11'), hardDay('2026-09-12'), hardDay('2026-09-13')],
+      recoveryLogs: [],
+      restDays: [],
+    });
+    expect(b.headline).toMatch(/treat today as maintenance/i);
+    expect(b.pending_recommendation).toBeNull();
+  });
+
+  it('a previously-declined swap is never re-proposed — falls back to the softer call instead', () => {
+    const today = session({ start_at: `${TODAY}T18:00:00`, sport: 'running', intensity: 'hard' });
+    const declinedId = `${today.id}:${TODAY}:2026-09-16`;
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [today],
+      actualSessions: [hardDay('2026-09-11'), hardDay('2026-09-12'), hardDay('2026-09-13')],
+      recoveryLogs: [],
+      restDays: ['2026-09-16'],
+      declinedRecommendationKeys: new Set([declinedId]),
+    });
+    expect(b.pending_recommendation).toBeNull();
+    expect(b.headline).toMatch(/treat today as maintenance/i);
+  });
+
+  it('outranks unacknowledged/pattern/upcoming tiers but loses to a recent bad outcome', () => {
+    const yesterday = actual({ start_at: '2026-09-13T18:00:00', status: 'stopped_early' });
+    const today = session({ start_at: `${TODAY}T18:00:00`, intensity: 'hard' });
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [today],
+      actualSessions: [yesterday, hardDay('2026-09-11'), hardDay('2026-09-12')],
+      recoveryLogs: [],
+    });
+    expect(b.headline).toMatch(/keep today easy/i); // tier 1 still wins
+  });
+});
+
+describe('buildKonaBriefing — tier 5: upcoming session, day-before prep wiring (M27)', () => {
+  it('prefers a saved-plan day-before prep line over the generic "nothing special" default', () => {
+    const target = session({ start_at: '2026-09-16T18:00:00', is_long: true, sport: 'cycling' });
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [target],
+      actualSessions: [],
+      recoveryLogs: [],
+      recommendationInputs: [
+        {
+          date: '2026-09-16',
+          weekday_label: 'Wed',
+          priority: 'high',
+          timing: 'day_before',
+          category: 'preparation',
+          action: "Wednesday's long ride is a big fueling day. Hydrate steadily through the day before.",
+          reason_codes: ['long_session'],
+        },
+      ],
+    });
+    expect(b.action).toMatch(/^Nothing needed today\./);
+    expect(b.action).toMatch(/big fueling day/i);
+  });
+
+  it('a flag from genuine history still outranks the generic day-before prep line', () => {
+    const target = session({ start_at: '2026-09-16T18:00:00', is_long: true, sport: 'running' });
+    const past = actual({ sport: 'running', is_long: true, intensity: 'easy', start_at: '2026-09-07T18:00:00' });
+    const rec = recovery({ logged_at: '2026-09-07T21:00:00Z', free_text: 'got very thirsty in the final third' });
+    const b = buildKonaBriefing({
+      today: TODAY,
+      sessions: [target],
+      actualSessions: [past],
+      recoveryLogs: [rec],
+      recommendationInputs: [
+        { date: '2026-09-16', weekday_label: 'Wed', priority: 'high', timing: 'day_before', category: 'preparation', action: 'generic prep', reason_codes: [] },
+      ],
+    });
+    expect(b.action).toMatch(/bring extra fluid/i);
+    expect(b.category).toBe('thirst');
+  });
+
+  it('the target session IS today -> no "nothing needed today" prefix', () => {
+    const target = session({ start_at: `${TODAY}T18:00:00`, is_long: true, sport: 'running' });
+    const b = buildKonaBriefing({ today: TODAY, sessions: [target], actualSessions: [], recoveryLogs: [] });
+    expect(b.action).not.toMatch(/nothing needed today/i);
+  });
+});
+
+describe('buildKonaBriefing — tier 4: an emerging pattern (M25.1)', () => {
   it('surfaces the top pattern insight verbatim when nothing more immediate applies', () => {
     const dates = ['2026-08-24', '2026-08-28', '2026-09-01'];
     const sessions = dates.map((d) => actual({ sport: 'running', start_at: `${d}T06:00:00`, status: 'completed' }));

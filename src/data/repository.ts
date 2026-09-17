@@ -52,6 +52,9 @@ export interface NewRecoveryLog {
   overall_severity?: RecoveryLog['overall_severity'];
   reported_symptoms?: string[];
   sleep_quality?: RecoveryLog['sleep_quality'];
+  mood?: RecoveryLog['mood'];
+  followed_category?: RecoveryLog['followed_category'];
+  followed_outcome?: RecoveryLog['followed_outcome'];
   origin_message_id?: string;
 }
 

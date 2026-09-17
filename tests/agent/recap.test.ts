@@ -40,7 +40,7 @@ describe('buildSessionRecap', () => {
 
   it('reads back the real check-in fields — feel, pains, went-as-planned — from free_text (not fabricated)', () => {
     const log = buildCheckinLog({
-      workout_feel: 'Solid grind',
+      legs: 'normal',
       went_as_planned: true,
       pains: true,
       elaborate: 'right calf, mild',
@@ -65,7 +65,7 @@ describe('buildSessionRecap', () => {
     });
 
     expect(r).not.toBeNull();
-    expect(r!.feel_label).toBe('Solid grind');
+    expect(r!.feel_label).toBe('Normal');
     expect(r!.logged.went_as_planned).toBe(true);
     expect(r!.logged.pains).toBe('right calf, mild');
     expect(r!.duration_label).toBe('1:44');

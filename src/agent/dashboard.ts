@@ -1,5 +1,5 @@
 import type { DurationClass, PlannedSession, Profile, Range, Sport, WeeklyPlan } from '../domain/types';
-import { analyzeWeek, profileDailyBaseline } from '../engine/index';
+import { analyzeWeek, profileDailyBaseline, type WeekRecommendation } from '../engine/index';
 
 /**
  * Per-day fueling summary for the dashboard. Numbers come only from the engine
@@ -42,6 +42,11 @@ export interface Dashboard {
   };
   days: DashboardDay[];
   methodology_version: string;
+  /** Day-before preparation lines from the engine (double/long/key-day
+   *  specific), one per day with a session — reused by `briefing.ts` so
+   *  Today's card can lead with this instead of a generic evidence-only
+   *  line when a saved weekly plan covers the target day. */
+  recommendation_inputs: WeekRecommendation[];
 }
 
 function widest(ranges: (Range | undefined | null)[]): Range | null {
@@ -79,6 +84,7 @@ export function buildDashboard(input: {
       baseline: base,
       days: [],
       methodology_version: baseline.methodology_version,
+      recommendation_inputs: [],
     };
   }
 
@@ -157,5 +163,6 @@ export function buildDashboard(input: {
     baseline: base,
     days,
     methodology_version: analysis.methodology_version,
+    recommendation_inputs: analysis.recommendation_inputs,
   };
 }

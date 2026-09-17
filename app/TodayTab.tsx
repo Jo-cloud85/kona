@@ -9,7 +9,7 @@ interface Range {
   min: number;
   max: number;
 }
-interface HomeSession {
+interface TodaySession {
   sport: string;
   title: string;
   intensity: string | null;
@@ -19,7 +19,7 @@ interface HomeSession {
   duration_label: string;
   is_long: boolean;
 }
-interface HomeWeekDay {
+interface TodayWeekDay {
   date: string;
   weekday: string;
   day_of_month: number;
@@ -28,7 +28,7 @@ interface HomeWeekDay {
   is_rest: boolean;
   has_session: boolean;
 }
-interface HomeWeekPreviewDay {
+interface TodayWeekPreviewDay {
   date: string;
   weekday: string;
   day_of_month: number;
@@ -39,6 +39,15 @@ interface HomeWeekPreviewDay {
   title: string | null;
   duration_label: string | null;
 }
+export interface PendingRecommendation {
+  id: string;
+  reason_line: string;
+  accept_label: string;
+  decline_label: string;
+  session_id: string;
+  from_date: string;
+  to_date: string;
+}
 export interface KonaBriefing {
   when: string | null;
   date: string | null;
@@ -48,13 +57,15 @@ export interface KonaBriefing {
   why: string | null;
   deviation: { planned: string; actual: string; reason: string | null } | null;
   basis: 'reported' | 'repeated' | 'outcome' | 'adaptation' | null;
+  category: string | null;
+  pending_recommendation: PendingRecommendation | null;
 }
-interface HomeView {
+interface TodayView {
   greeting_name: string | null;
   today: string;
   selected_date: string;
-  week: HomeWeekDay[];
-  week_preview: HomeWeekPreviewDay[];
+  week: TodayWeekDay[];
+  week_preview: TodayWeekPreviewDay[];
   has_plan: boolean;
   goal_line: string | null;
   checkin: { due: boolean; done: boolean; today_due: boolean; missed_date: string | null };
@@ -64,7 +75,7 @@ interface HomeView {
     is_today: boolean;
     in_plan: boolean;
     is_rest: boolean;
-    sessions: HomeSession[];
+    sessions: TodaySession[];
   };
   briefing: {
     your_day: {
@@ -109,7 +120,7 @@ function longDate(iso: string): string {
 }
 
 /** Marks a missed check-in day as handled so its reminder stops reappearing —
- *  see where HomeTab computes `missedDate` for why this can't just be "a
+ *  see where TodayTab computes `missedDate` for why this can't just be "a
  *  recovery log now exists for that date" (a late check-in always logs
  *  against today, not the day it's catching up on). */
 function markMissedResolved(date: string) {
@@ -120,7 +131,7 @@ function markMissedResolved(date: string) {
   }
 }
 
-export default function HomeTab({
+export default function TodayTab({
   greetingName,
   onOpenChat,
   onOpenProfile,
@@ -129,13 +140,13 @@ export default function HomeTab({
 }: {
   greetingName?: string;
   onOpenChat: (prefill: string) => void;
-  /** Opens the shared Profile overlay (Home's own avatar button per the
+  /** Opens the shared Profile overlay (Today's own avatar button per the
    *  mockup's own stated intent — Profile is deliberately not a tab). Pass
    *  a check-in nudge when one is due so Profile can surface it too. */
   onOpenProfile: (checkin?: { label: string; onOpen: () => void }) => void;
   /** Navigates to the Week tab. */
   onOpenWeek: () => void;
-  /** Bumped by AppShell whenever Profile is saved, so Home reloads (the
+  /** Bumped by AppShell whenever Profile is saved, so Today reloads (the
    *  greeting name / goal line may have changed). */
   profileVersion: number;
 }) {
@@ -143,26 +154,31 @@ export default function HomeTab({
   // back on today's default view, so only that default is worth caching for
   // an instant repaint; a day-pill tap already updates in place without a
   // spinner, see `load` below).
-  const cacheKey = `home:${profileVersion}`;
-  const cached = readCache<HomeView | null>(cacheKey);
-  const [data, setData] = useState<HomeView | null>(cached ? cached.value : null);
+  const cacheKey = `today:${profileVersion}`;
+  const cached = readCache<TodayView | null>(cacheKey);
+  const [data, setData] = useState<TodayView | null>(cached ? cached.value : null);
   const [loaded, setLoaded] = useState(cached !== null);
   const [checkinOpen, setCheckinOpen] = useState(false);
   // Which date the open CheckinDialog is about — today, or a missed past day
   // caught up on late. Drives the dialog's copy and which local dismiss/
   // resolved key gets touched.
   const [checkinFor, setCheckinFor] = useState<string | null>(null);
+  const [recommendationBusy, setRecommendationBusy] = useState(false);
+  // "Kona learned: X" — set by CheckinDialog's onDone when a category just
+  // crossed the evidence threshold for the first time. A one-shot toast; it
+  // also becomes permanent in Rhythm's feed, no separate tracking needed here.
+  const [learnedToast, setLearnedToast] = useState<string | null>(null);
   const dayStripRef = useRef<HTMLDivElement>(null);
   const scrolledToTodayRef = useRef(false);
 
   const load = useCallback(
     (date?: string) => {
       const qs = date ? `?date=${encodeURIComponent(date)}` : '';
-      return fetch(`/api/home${qs}`, { headers: tzHeaders() })
+      return fetch(`/api/today${qs}`, { headers: tzHeaders() })
         .then((r) => r.json())
-        .then((d: { home: HomeView | null }) => {
-          setData(d.home);
-          if (!date) writeCache(cacheKey, d.home);
+        .then((d: { today: TodayView | null }) => {
+          setData(d.today);
+          if (!date) writeCache(cacheKey, d.today);
         })
         .catch(() => undefined)
         .finally(() => setLoaded(true));
@@ -174,7 +190,7 @@ export default function HomeTab({
     void load();
   }, [load, profileVersion]);
 
-  // Opening Home should always land with today as the first visible day —
+  // Opening Today should always land with today as the first visible day —
   // scroll it into view once per mount, not on every subsequent day-pill tap.
   useEffect(() => {
     if (!data || scrolledToTodayRef.current) return;
@@ -243,7 +259,22 @@ export default function HomeTab({
   const checkinNudgeLabel = (): string =>
     missedDate
       ? `You missed checking in on ${weekdayFullFor(missedDate)} — tap to update →`
-      : 'Evening check-in — log how today went →';
+      : 'How did today go? →';
+
+  const respond = async (rec: PendingRecommendation, action: 'accept' | 'decline') => {
+    if (recommendationBusy) return;
+    setRecommendationBusy(true);
+    try {
+      await fetch('/api/today/recommendation', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action, recommendation_id: rec.id, session_id: rec.session_id, to_date: rec.to_date }),
+      });
+      await load();
+    } finally {
+      setRecommendationBusy(false);
+    }
+  };
 
   if (!loaded) {
     return (
@@ -255,7 +286,7 @@ export default function HomeTab({
   if (!data) {
     return (
       <div className="home">
-        <p className="dash-msg">Finish onboarding first — Home is built from your profile.</p>
+        <p className="dash-msg">Finish onboarding first — Today is built from your profile.</p>
       </div>
     );
   }
@@ -266,6 +297,7 @@ export default function HomeTab({
   const b = data.briefing;
   const yd = b.your_day;
   const kb = b.kona_briefing;
+  const rec = kb.pending_recommendation;
   const dayLabel = sel.is_today ? 'Your day' : `${WEEKDAY_FULL[sel.weekday] ?? sel.weekday} · ${longDate(sel.date)}`;
   const chatPrefill = sel.sessions.length
     ? `Change my ${WEEKDAY_FULL[sel.weekday] ?? sel.weekday} session to `
@@ -309,35 +341,75 @@ export default function HomeTab({
         ))}
       </div>
 
-      {effectiveDue && !checkinOpen && (
-        <button className="checkin-nudge" onClick={() => openCheckin(missedDate)}>
-          {checkinNudgeLabel()}
-        </button>
-      )}
-
-      {/* KONA'S CALL (M24 + M25.1) — "given everything Kona knows, what
-          matters today?" The one dominant judgment block: WHAT (headline) →
-          WHY (evidence, when real) → WHAT TO DO (the recommendation). This is
-          the top card; "Your day" below is the plain factual/fueling-numbers
-          display for whichever day is selected. */}
+      {/* KONA'S CALL — "given everything going on with you, what matters
+          right now?" One card, four states: an evidence-backed recommendation
+          (with Accept/Decline when it's an actual plan-change proposal, M27),
+          the honest "nothing needed" default, or — once a session's time has
+          passed and nothing's logged — the check-in prompt itself, so closing
+          the loop is part of this same card, not a separate banner. */}
       <section className="home-card kona-card brief-card kona-call">
-        <p className="kona-eyebrow">
-          <span className="dot" aria-hidden />
-          {kb.session_label ? `${kb.when} · ${kb.session_label}` : "Kona's call"}
-        </p>
-        <p className="kona-call-headline">{kb.headline}</p>
-        {kb.why && <p className="brief-line brief-why">{kb.why}</p>}
-        {kb.deviation && (
-          <p className="kona-deviation">
-            Planned {kb.deviation.planned} · Actual {kb.deviation.actual}
-            {kb.deviation.reason ? ` · ${kb.deviation.reason}` : ''}
-          </p>
+        {learnedToast ? (
+          <>
+            <p className="kona-eyebrow">
+              <span className="dot" aria-hidden />
+              Kona learned
+            </p>
+            <p className="kona-learned-text">&ldquo;{learnedToast}&rdquo;</p>
+            <button className="cta" onClick={() => setLearnedToast(null)}>
+              Got it
+            </button>
+          </>
+        ) : rec ? (
+          <>
+            <p className="kona-eyebrow">
+              <span className="dot" aria-hidden />
+              Recommendation
+            </p>
+            <p className="kona-call-headline">{kb.headline}</p>
+            <p className="brief-line brief-why">{kb.action}</p>
+            <p className="kona-reason-line">{rec.reason_line}</p>
+            <div className="kona-rec-actions">
+              <button className="cta" disabled={recommendationBusy} onClick={() => void respond(rec, 'accept')}>
+                {rec.accept_label}
+              </button>
+              <button className="ghost-btn" disabled={recommendationBusy} onClick={() => void respond(rec, 'decline')}>
+                {rec.decline_label}
+              </button>
+            </div>
+          </>
+        ) : effectiveDue ? (
+          <>
+            <p className="kona-eyebrow">
+              <span className="dot" aria-hidden />
+              Check-in
+            </p>
+            <p className="kona-call-headline">{checkinNudgeLabel()}</p>
+            <p className="brief-line">A quick tap — nothing gets diagnosed, and it's what shapes tomorrow's call.</p>
+            <button className="cta" onClick={() => openCheckin(missedDate)}>
+              Log it →
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="kona-eyebrow">
+              <span className="dot" aria-hidden />
+              {kb.session_label ? `${kb.when} · ${kb.session_label}` : "Kona's call"}
+            </p>
+            <p className="kona-call-headline">{kb.headline}</p>
+            {kb.why && <p className="brief-line brief-why">{kb.why}</p>}
+            {kb.deviation && (
+              <p className="kona-deviation">
+                Planned {kb.deviation.planned} · Actual {kb.deviation.actual}
+                {kb.deviation.reason ? ` · ${kb.deviation.reason}` : ''}
+              </p>
+            )}
+            <p className="kona-call-label">Recommendation</p>
+            <p className="brief-line">{kb.action}</p>
+            <button className="home-link" onClick={() => onOpenChat("Tell me more about today's call — ")}>
+              Ask Kona about this →
+            </button>
+          </>
         )}
-        <p className="kona-call-label">Recommendation</p>
-        <p className="brief-line">{kb.action}</p>
-        <button className="home-link" onClick={() => onOpenChat("Tell me more about today's call — ")}>
-          Ask Kona about this →
-        </button>
       </section>
 
       {/* YOUR DAY */}
@@ -441,17 +513,17 @@ export default function HomeTab({
           contextLabel={checkinFor && checkinFor !== data.today ? weekdayFullFor(checkinFor) : undefined}
           // Only today's own check-in closes the loop (M24.5) — a missed-day
           // catch-up isn't about today's briefing.
-          konaBriefing={checkinFor === data.today ? kb : undefined}
+          konaBriefing={checkinFor === data.today && !rec ? { action: kb.action, why: kb.why, category: kb.category } : undefined}
           onClose={dismissCheckin}
-          onDone={() => {
+          onDone={(learned) => {
             if (checkinFor && checkinFor !== data.today) markMissedResolved(checkinFor);
             setCheckinOpen(false);
             setCheckinFor(null);
+            if (learned) setLearnedToast(learned);
             void load(data.selected_date === data.today ? undefined : data.selected_date);
           }}
         />
       )}
-
     </div>
   );
 }

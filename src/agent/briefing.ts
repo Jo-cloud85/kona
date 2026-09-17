@@ -1,4 +1,5 @@
 import type { ActualSession, PlannedSession, RecoveryLog } from '../domain/types';
+import type { WeekRecommendation } from '../engine/week';
 import { addDays, describeWhen, durationLabel, isoDate, joinList, sportLabel, titleFor, weekdayFull } from './home';
 import {
   deriveInsights,
@@ -26,11 +27,17 @@ import {
  * prevents a likely mistake > an emerging pattern), falling through to
  * M24's original forward-looking logic, then the honest default:
  *
- *   1. recentOutcomeSignal  — a recent session read badly, and today trains
- *   2. unacknowledgedSignal — a recent planned session with no actual record
- *   3. patternSignal        — the single highest-priority emerging pattern
- *   4. upcomingSessionSignal — M24's original logic, unchanged
- *   5. honest default
+ *   1. recentOutcomeSignal  — a recent session read badly (fires whether or
+ *      not today trains — "given everything going on with you", not just
+ *      pre-workout advice, M27)
+ *   2. loadClusterSignal    — today would extend a recent run of hard days;
+ *      severe enough + a swap target exists -> a real plan-change proposal
+ *      (accept/decline), not just softened advice (M27)
+ *   3. unacknowledgedSignal — a recent planned session with no actual record
+ *   4. patternSignal        — the single highest-priority emerging pattern
+ *   5. upcomingSessionSignal — M24's original logic, now also citing
+ *      `src/engine/week.ts`'s day-before prep when a saved plan covers it
+ *   6. honest default
  *
  * Deliberately does NOT go through `buildDashboard`'s `is_key_day` (which
  * requires a saved weekly plan and returns nothing for standalone sessions —
@@ -62,6 +69,27 @@ export interface KonaBriefing {
   /** The planned-vs-actual comparison behind `why`, when relevant. */
   deviation: { planned: string; actual: string; reason: string | null } | null;
   basis: InsightBasis | null;
+  /** Which advice category this call is — set only by the evidence-based
+   *  upcoming-session tier. Threaded back through the check-in loop (M24.5)
+   *  so the "Kona learned" detector can count outcomes per category instead
+   *  of re-parsing free_text. */
+  category: SessionFlagCategory | null;
+  /** Present only when this call is an actual plan-change proposal (move a
+   *  session), not just advice — the Today card renders Accept/Decline
+   *  instead of a single "Got it" in this state. */
+  pending_recommendation: PendingRecommendation | null;
+}
+
+export interface PendingRecommendation {
+  /** Deterministic key identifying this exact proposal (session + from/to
+   *  date) — recorded on decline so the same swap isn't re-proposed. */
+  id: string;
+  reason_line: string;
+  accept_label: string;
+  decline_label: string;
+  session_id: string;
+  from_date: string;
+  to_date: string;
 }
 
 const ACTION_BY_CATEGORY: Record<SessionFlagCategory, string> = {
@@ -116,8 +144,10 @@ function sessionLabelFor(sessions: PlannedSession[]): string {
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
-/** "Yesterday" / a weekday name for a date a few days before `today`. */
-function describeRecentDay(today: string, dateIso: string): string {
+/** "Yesterday" / a weekday name for a date a few days before `today`. Exported
+ *  for reuse by Rhythm's consistency-read detail line (rhythm.ts) — same
+ *  phrasing convention, not reimplemented. */
+export function describeRecentDay(today: string, dateIso: string): string {
   const t = new Date(`${today}T00:00:00`);
   const d = new Date(`${dateIso}T00:00:00`);
   const days = Math.round((t.getTime() - d.getTime()) / 86_400_000);
@@ -164,20 +194,43 @@ interface CascadeInput {
   actualSessions: ActualSession[];
   recoveryLogs: RecoveryLog[];
   plannedByDate: Map<string, PlannedSession[]>;
+  /** From the saved weekly plan, if any — used to find a swap target for a
+   *  proposed reschedule. */
+  restDays: string[];
+  /** Day-before prep lines from `src/engine/week.ts`'s `prepAction`, already
+   *  computed by `buildDashboard` — reused here rather than recomputed. */
+  recommendationInputs: WeekRecommendation[];
+  /** `PendingRecommendation.id` values the athlete has already declined —
+   *  never re-propose the identical swap. */
+  declinedRecommendationKeys: Set<string>;
 }
 
-/** Tier 1 — a recent session read badly, and today has something planned. */
+/** Tier 1 — a recent session read badly. Fires whether or not today trains —
+ *  an unsettled recent event is current-state information either way. */
 function recentOutcomeSignal(input: CascadeInput): KonaBriefing | null {
-  const todaySessions = input.plannedByDate.get(input.today) ?? [];
-  if (todaySessions.length === 0) return null;
-
   const recent = recentSessionRead(input.today, 2, input);
   if (!recent || recent.outcome !== 'negative') return null;
 
+  const todaySessions = input.plannedByDate.get(input.today) ?? [];
   const dayLabel = describeRecentDay(input.today, recent.date);
   const said = recent.note ? `you said: "${snippet(recent.note)}"` : "it didn't go entirely to plan";
   const why = `${dayLabel}'s ${sportLabel(recent.session.sport)} — ${said}.`;
   const deviation = deviationFor(recent.session, input.sessions);
+
+  if (todaySessions.length === 0) {
+    return {
+      when: null,
+      date: null,
+      session_label: null,
+      headline: `Keeping an eye on ${dayLabel === 'Yesterday' ? "yesterday's session" : `${dayLabel.toLowerCase()}'s session`}`,
+      action: 'I want to see how that settles before the next session — no need to change anything today.',
+      why,
+      deviation,
+      basis: 'reported',
+      category: null,
+      pending_recommendation: null,
+    };
+  }
 
   return {
     when: 'Today',
@@ -188,6 +241,97 @@ function recentOutcomeSignal(input: CascadeInput): KonaBriefing | null {
     why,
     deviation,
     basis: 'reported',
+    category: null,
+    pending_recommendation: null,
+  };
+}
+
+export const CLUSTER_WINDOW_DAYS = 4;
+export const CLUSTER_SOFTEN_MIN = 2;
+const CLUSTER_SWAP_MIN = 3;
+
+function isHardCompleted(s: ActualSession): boolean {
+  return s.status === 'completed' && (s.intensity === 'hard' || s.intensity === 'race');
+}
+
+/** Hard/race COMPLETED actual sessions in the trailing window before `today`
+ *  (never including today itself), oldest first. Exported — Rhythm's
+ *  consistency-grid headline (kona-server.ts) reuses this exact threshold
+ *  rather than duplicating it, so the two screens never disagree about what
+ *  counts as "clustered". */
+export function recentHardSessions(actualSessions: ActualSession[], today: string, days: number): ActualSession[] {
+  const cutoff = isoDate(addDays(new Date(`${today}T00:00:00`), -days));
+  return actualSessions
+    .filter(isHardCompleted)
+    .filter((s) => {
+      const d = s.start_at.slice(0, 10);
+      return d < today && d >= cutoff;
+    })
+    .sort((a, b) => a.start_at.localeCompare(b.start_at));
+}
+
+/** The nearest rest day from the saved plan strictly after `today`. */
+function nextRestDay(today: string, restDays: string[]): string | null {
+  return restDays.filter((d) => d > today).sort()[0] ?? null;
+}
+
+/** Tier 2 — today's session would extend a run of recent hard days. Not a
+ *  score, not stored "load" — recomputed fresh from actualSessions every
+ *  call, same discipline as everything else in this cascade. Severe enough
+ *  (3+) and a swap target exists → propose moving the session; otherwise
+ *  just downgrade today's intensity expectation. */
+function loadClusterSignal(input: CascadeInput): KonaBriefing | null {
+  const todaySessions = input.plannedByDate.get(input.today) ?? [];
+  if (todaySessions.length === 0 || !todaySessions.some(isSessionMeaningful)) return null;
+
+  const recentHard = recentHardSessions(input.actualSessions, input.today, CLUSTER_WINDOW_DAYS);
+  if (recentHard.length < CLUSTER_SOFTEN_MIN) return null;
+
+  const key = keySessionOf(todaySessions);
+  const session_label = sessionLabelFor(todaySessions);
+  const dayLabels = recentHard.map((s) => describeRecentDay(input.today, s.start_at.slice(0, 10)));
+  const why = `You've had ${recentHard.length} hard sessions in the last few days (${joinList(dayLabels)}).`;
+
+  if (recentHard.length >= CLUSTER_SWAP_MIN) {
+    const swapTarget = nextRestDay(input.today, input.restDays);
+    if (swapTarget) {
+      const id = `${key.id}:${input.today}:${swapTarget}`;
+      if (!input.declinedRecommendationKeys.has(id)) {
+        return {
+          when: 'Today',
+          date: input.today,
+          session_label,
+          headline: `Move today's ${sportLabel(key.sport)}`,
+          action: `${why} Shift it to ${weekdayFull(swapTarget)}?`,
+          why: null,
+          deviation: null,
+          basis: 'repeated',
+          category: null,
+          pending_recommendation: {
+            id,
+            reason_line: `Based on your last ${CLUSTER_WINDOW_DAYS} days of training`,
+            accept_label: 'Accept swap',
+            decline_label: 'Keep as planned',
+            session_id: key.id,
+            from_date: input.today,
+            to_date: swapTarget,
+          },
+        };
+      }
+    }
+  }
+
+  return {
+    when: 'Today',
+    date: input.today,
+    session_label,
+    headline: 'Treat today as maintenance',
+    action: "Keep today's session light rather than another hard day — go by feel, not the plan's original intensity.",
+    why,
+    deviation: null,
+    basis: 'repeated',
+    category: null,
+    pending_recommendation: null,
   };
 }
 
@@ -211,6 +355,8 @@ function unacknowledgedSignal(input: CascadeInput): KonaBriefing | null {
       why: `${dayLabel} had ${sessionLabelFor(dayOf).toLowerCase()} on the plan, but there's no record it happened.`,
       deviation: null,
       basis: null,
+      category: null,
+      pending_recommendation: null,
     };
   }
   return null;
@@ -237,10 +383,18 @@ function patternSignal(input: CascadeInput): KonaBriefing | null {
     why: pattern.text,
     deviation: null,
     basis: pattern.basis,
+    category: null,
+    pending_recommendation: null,
   };
 }
 
-/** Tier 4 — M24's original forward-looking logic, unchanged in substance. */
+/** Tier 5 — M24's original forward-looking logic. Widened (M27) to prefer
+ *  `src/engine/week.ts`'s richer day-before prep (double/long/key-day
+ *  specific — previously only reachable through a saved-weekly-plan chat
+ *  reply, never through Today) when a saved plan covers the target day and
+ *  there's no more specific evidence-based flag; always states plainly when
+ *  the call isn't about today, so the athlete isn't left guessing why today
+ *  wasn't mentioned. */
 function upcomingSessionSignal(input: CascadeInput): KonaBriefing | null {
   const target = findNextMeaningfulSession(input.sessions, input.today);
   if (!target) return null;
@@ -252,16 +406,20 @@ function upcomingSessionSignal(input: CascadeInput): KonaBriefing | null {
   );
   const when = describeWhen(input.today, target.date);
   const session_label = sessionLabelFor(target.sessions);
+  const dayPrep = input.recommendationInputs.find((r) => r.date === target.date);
+  const leadIn = target.date === input.today ? '' : 'Nothing needed today. ';
 
   return {
     when,
     date: target.date,
     session_label,
-    headline: flag ? HEADLINE_BY_CATEGORY[flag.category] : 'Nothing special needed',
-    action: flag ? ACTION_BY_CATEGORY[flag.category] : NOTHING_SPECIAL,
+    headline: flag ? HEADLINE_BY_CATEGORY[flag.category] : dayPrep ? 'Get ready' : 'Nothing special needed',
+    action: `${leadIn}${flag ? ACTION_BY_CATEGORY[flag.category] : (dayPrep?.action ?? NOTHING_SPECIAL)}`,
     why: flag ? flag.text : null,
     deviation: null,
     basis: flag ? flag.basis : null,
+    category: flag ? flag.category : null,
+    pending_recommendation: null,
   };
 }
 
@@ -274,6 +432,8 @@ const HONEST_DEFAULT: KonaBriefing = {
   why: null,
   deviation: null,
   basis: null,
+  category: null,
+  pending_recommendation: null,
 };
 
 export function buildKonaBriefing(input: {
@@ -281,10 +441,24 @@ export function buildKonaBriefing(input: {
   sessions: PlannedSession[];
   actualSessions: ActualSession[];
   recoveryLogs: RecoveryLog[];
+  /** From the saved weekly plan, if any. */
+  restDays?: string[];
+  /** `Dashboard.recommendation_inputs` — already computed by `buildDashboard`
+   *  for the same weekly plan; pass it through rather than recomputing. */
+  recommendationInputs?: WeekRecommendation[];
+  /** `PendingRecommendation.id`s already declined — from activity_events. */
+  declinedRecommendationKeys?: Set<string>;
 }): KonaBriefing {
-  const cascadeInput: CascadeInput = { ...input, plannedByDate: groupByDate(input.sessions) };
+  const cascadeInput: CascadeInput = {
+    ...input,
+    plannedByDate: groupByDate(input.sessions),
+    restDays: input.restDays ?? [],
+    recommendationInputs: input.recommendationInputs ?? [],
+    declinedRecommendationKeys: input.declinedRecommendationKeys ?? new Set(),
+  };
   return (
     recentOutcomeSignal(cascadeInput) ??
+    loadClusterSignal(cascadeInput) ??
     unacknowledgedSignal(cascadeInput) ??
     patternSignal(cascadeInput) ??
     upcomingSessionSignal(cascadeInput) ??

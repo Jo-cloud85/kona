@@ -38,13 +38,14 @@ function session(over: Partial<PlannedSession>): PlannedSession {
 }
 
 describe('buildWeek', () => {
-  it('is a rolling today-anchored window (today - 6 .. today + 7), not a fixed Monday-Sunday', () => {
+  it('is a two-calendar-week window always starting on Monday (M27.1)', () => {
     const w = buildWeek({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
     expect(w.days).toHaveLength(14);
-    expect(w.days[0]!.date).toBe('2026-09-03');
-    expect(w.days.at(-1)!.date).toBe('2026-09-16');
+    expect(w.days[0]!.date).toBe('2026-09-07'); // Monday of NOW's week
+    expect(w.days[0]!.weekday).toBe('Mon');
+    expect(w.days.at(-1)!.date).toBe('2026-09-20');
     expect(w.days.find((d) => d.is_today)?.date).toBe('2026-09-09');
-    expect(w.range_label).toBe('3 – 16 Sep');
+    expect(w.range_label).toBe('7 – 20 Sep');
   });
 
   it('has_plan is true from a standalone session alone, with no weekly plan on record', () => {

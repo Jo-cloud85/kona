@@ -1,29 +1,37 @@
 /* M26 — Direction B: a single dark, gradient-accented, frosted-glass theme
    (no light variant — the mockup has none, and the glass effect has no
    designed light equivalent; PRODUCT_VISION.md's original intent was a dark
-   theme anyway). --accent stays the app's existing lime — nav/CTAs/day-pill
-   are untouched; only the identity/progression surface (avatar ring, Arc
-   bars, milestone icons) uses the new gradients below. */
+   theme anyway).
+   M27.2 — founder review: the neon-green accent is replaced with a
+   blue-violet pair (dark #3B33C7, light #7C8CF0); the orange-red accent
+   (grad-performance) is unchanged — it already matched the founder's given
+   codes (dark #F62B0A, light #FF9A44). */
 :root {
-  --bg: #0b0b10;
-  --bg-gradient: radial-gradient(circle at 12% -10%, rgba(168, 85, 247, 0.28), transparent 55%),
-    radial-gradient(circle at 90% 105%, rgba(255, 122, 24, 0.22), transparent 55%);
+  --bg: #0a0a0c;
+  /* Founder review (M27.3): exact spec — two soft elliptical corner glows,
+     purple top-left, orange-red bottom-right, over a near-black base. */
+  --bg-gradient: radial-gradient(120% 55% at 12% -8%, rgba(110, 70, 225, 0.5) 0%, transparent 62%),
+    radial-gradient(95% 55% at 100% 100%, rgba(246, 60, 10, 0.4) 0%, transparent 60%);
   --panel: rgba(255, 255, 255, 0.05);
   --panel-border: rgba(255, 255, 255, 0.1);
-  --panel-kona: rgba(215, 250, 78, 0.07);
+  --panel-kona: rgba(124, 140, 240, 0.08);
   --text: #f5f5f7;
   --muted: #9c9ca8;
   --border: rgba(255, 255, 255, 0.1);
-  --accent: #7cff3b;
-  --accent-text: #0f2406;
-  --user-bubble: rgba(124, 255, 59, 0.14);
+  --accent: #7c8cf0;
+  --accent-dark: #3b33c7;
+  --accent-text: #ffffff;
+  --user-bubble: rgba(124, 140, 240, 0.16);
   --assistant-bubble: rgba(255, 255, 255, 0.04);
   --danger: #e2796a;
   --glass-blur: 22px;
   --grad-performance: linear-gradient(135deg, #ff9a44, #f62b0a);
-  --grad-recovery: linear-gradient(135deg, #11970c, #7cff3b);
+  /* Buttons/pills — a brighter violet pair than the Rhythm-dot blue-violet
+     (#3B33C7/#7C8CF0, still used directly on .rhythm-dot), per founder
+     spec (M27.3). */
+  --grad-recovery: linear-gradient(135deg, #5b4fe8, #9c6bff);
   --grad-vital: linear-gradient(135deg, #6388d1, #ff4bd8);
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: 'Helvetica Neue', Helvetica, Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Frosted-glass utility for new (M26) markup. Existing panel-background
@@ -65,8 +73,9 @@ body {
   background: var(--bg-gradient), var(--bg);
   background-attachment: fixed;
   color: var(--text);
-  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  font-size: 15px;
+  font-family: var(--font-sans);
+  /* Paragraph/chat copy, 10% down from the original 15px (M27.2 review). */
+  font-size: 13.5px;
   line-height: 1.55;
 }
 
@@ -445,7 +454,7 @@ h3 {
   border-radius: 22px;
   padding: 12px 18px;
   font: inherit;
-  font-size: 15px;
+  font-size: 13.5px;
   background: var(--panel);
   color: var(--text);
   min-height: 46px;
@@ -464,7 +473,6 @@ h3 {
   height: 46px;
   border-radius: 999px;
   background: var(--grad-recovery);
-  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--accent) 45%, transparent));
   color: var(--accent-text);
   font: inherit;
   font-weight: 700;
@@ -536,7 +544,6 @@ button.cta {
   border-radius: 999px;
   padding: 14px 24px;
   background: var(--grad-recovery);
-  filter: drop-shadow(0 2px 10px color-mix(in srgb, var(--accent) 40%, transparent));
   color: var(--accent-text);
   font: inherit;
   font-size: 15px;
@@ -653,6 +660,43 @@ button.cta:disabled {
   opacity: 0;
   width: 0;
   height: 0;
+}
+
+/* ---- Profile: up to 3 goals, each with an explicit date-or-not (M27.1) -- */
+
+.goal-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.goal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+}
+
+.goal-row-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.goal-row-main input {
+  flex: 1;
+}
+
+.goal-row input[type='date'] {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 14px;
+  background: var(--panel);
+  color: var(--text);
 }
 
 .scale-row {
@@ -1251,7 +1295,6 @@ button.cta:disabled {
   border-radius: 999px;
   border: 0;
   background: var(--grad-recovery);
-  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 30%, transparent));
   color: var(--accent-text);
   font: inherit;
   font-weight: 800;
@@ -1740,9 +1783,9 @@ button.cta:disabled {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: color-mix(in srgb, #000 55%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: color-mix(in srgb, #000 72%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   overflow-y: auto;
 }
 
@@ -1756,9 +1799,12 @@ button.cta:disabled {
 .dialog {
   width: 100%;
   max-width: 460px;
-  background: var(--panel);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  /* .panel's 5% white was too transparent for a sheet meant to sit ON TOP of
+     the page — it read as "see-through to the background" (founder report,
+     M27.2). A translucent bluish-purple gradient wash over a near-opaque
+     dark base (M27.3) — tinted, but still legible, not the shared neutral
+     panel tone. */
+  background: linear-gradient(160deg, rgba(91, 79, 232, 0.32), rgba(156, 107, 255, 0.14)), rgba(10, 10, 12, 0.94);
   border: 1px solid var(--border);
   border-bottom: 0;
   border-radius: 26px 26px 0 0;
@@ -1848,6 +1894,9 @@ button.cta:disabled {
 .choice-pair-row .field {
   flex: 1;
   margin-bottom: 0;
+}
+.choice-pair-row + .choice-pair-row {
+  margin-top: 16px;
 }
 
 .dialog textarea {
@@ -2143,7 +2192,7 @@ button.cta:disabled {
 
 .brief-line {
   margin: 0;
-  font-size: 14.5px;
+  font-size: 13.5px;
   line-height: 1.6;
   color: var(--text);
 }
@@ -2194,6 +2243,35 @@ button.cta:disabled {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* Kona's Call, "recommendation pending" state (M27) — an actual plan-change
+   proposal, not just advice, so it gets real Accept/Decline actions rather
+   than the single "Got it" the advice state uses. */
+.kona-reason-line {
+  margin: 2px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.kona-rec-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.kona-rec-actions .cta,
+.kona-rec-actions .ghost-btn {
+  flex: 1;
+}
+
+/* Kona's Call, "Kona learned" toast state (M27) — the specific consequence,
+   not a self-graded track record (see progress.md). Archives permanently
+   into Rhythm's feed; this card view is a one-time acknowledgement. */
+.kona-learned-text {
+  margin: 2px 0 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--text);
 }
 
 .brief-fuel {
@@ -2411,7 +2489,10 @@ button.cta:disabled {
   align-items: center;
   gap: 12px;
   border: 1px solid var(--border);
-  background: var(--panel);
+  /* Translucent purplish-blue, not the neutral panel tone (M27.2 review) —
+     covers both Today's "Your week" preview and the Week tab itself, since
+     both render the same .week-day row. */
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: 18px;
@@ -2476,11 +2557,11 @@ button.cta:disabled {
   white-space: nowrap;
 }
 
-/* Today — a translucent light-green tint, not a solid fill, matching the
-   mockup's own "Today" row exactly. */
+/* Today — a stronger translucent accent tint than the other rows, not a
+   solid fill. */
 .week-day.is-today {
-  background: rgba(124, 255, 59, 0.08);
-  border-color: rgba(124, 255, 59, 0.35);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .week-day.is-today .week-day-dow {
   color: var(--accent);
@@ -2534,109 +2615,85 @@ button.cta:disabled {
   line-height: 1.5;
 }
 
-/* ---- "You": Arc progression + identity (M26 — Direction B) ------------ */
+/* ---- "Rhythm": consistency grid + Arc progression + identity ----------
+   (M26 — Direction B; M27 — merged with the old "Memory" tab and gained the
+   consistency grid below.) */
 
 .week-tab .home-top,
+.rhythm-tab .home-top,
 .profile-tab .home-top {
   margin-bottom: 2px;
 }
 
-.you-avatar-wrap {
+/* A plain-language read first, the grid second — never a number alone (see
+   RhythmView.consistency in lib/kona-server.ts for why this is a deliberate,
+   considered exception to "not a metrics dashboard"). */
+.rhythm-headline {
+  margin: 2px 0 12px;
+  font-size: 17px;
+  font-weight: 750;
+}
+.rhythm-consistency {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin: 4px 0 18px;
+  gap: 14px;
 }
 
-/* The ring shows progress within the current Arc stage (a real, computed
-   number — never a fabricated "training mix" breakdown we don't have data
-   for) as a thin ARC traced around the rim — not a filled pie. A radial
-   "starburst" texture plus a frosted-glass faceplate and a glowing chevron
-   core read as an instrument, not a chart. --ring-deg is set inline. */
-.you-ring {
-  --ring-deg: 0deg;
-  position: relative;
-  width: 112px;
-  height: 112px;
-  border-radius: 999px;
-  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--accent) 30%, transparent));
-}
-
-.you-ring::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: repeating-conic-gradient(rgba(255, 255, 255, 0.1) 0deg 1.5deg, transparent 1.5deg 8deg);
-}
-
-.you-ring::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: conic-gradient(var(--accent) var(--ring-deg), transparent var(--ring-deg) 360deg);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
-}
-
-.you-ring-inner {
-  position: absolute;
-  inset: 13px;
-  border-radius: 999px;
-  background: var(--panel);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--panel-border);
+/* No card chrome around the grid itself (founder review, M27.2) — it sits
+   directly on the page background; the reading (headline) is its own card
+   further down. */
+.rhythm-grid {
   display: grid;
-  place-items: center;
+  grid-template-columns: repeat(24, 1fr);
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column;
+  gap: 6px;
 }
 
-.you-ring-chevron {
-  width: 0;
-  height: 0;
-  border-left: 13px solid transparent;
-  border-right: 13px solid transparent;
-  border-bottom: 21px solid var(--accent);
-  filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--accent) 55%, transparent));
+/* Four states, not a plain trained/not (M27.1 — see buildConsistencyDays,
+   src/agent/rhythm.ts, for exactly what each means). Gradient fills, not
+   flat colors (M27.3 — flat read as missing the app's gradient language) —
+   the founder's blue-violet pair (dark #3B33C7, light #7C8CF0), distinct
+   from the brighter --grad-recovery now used for buttons/pills. */
+.rhythm-dot {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+.rhythm-dot.easy {
+  background: linear-gradient(135deg, #3b33c7, #7c8cf0);
+  opacity: 0.45;
+  border: none;
+}
+.rhythm-dot.normal {
+  background: linear-gradient(135deg, #3b33c7, #7c8cf0);
+  border: none;
+}
+.rhythm-dot.flag {
+  background: var(--grad-performance);
+  border: none;
+}
+.rhythm-dot.is-today {
+  border: 2px solid var(--text);
 }
 
-.you-badge {
-  margin: 0;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  padding: 5px 13px;
-  border-radius: 999px;
-}
-
-.you-arc-bar {
+.rhythm-legend {
   display: flex;
-  gap: 4px;
-  margin: 4px 0 12px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
 }
-
-.you-arc-seg {
-  --seg-fill: 0%;
-  position: relative;
-  flex: 1;
-  height: 5px;
-  border-radius: 3px;
-  background: var(--panel-border);
-  overflow: hidden;
+.rhythm-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
 }
-.you-arc-seg.done {
-  background: var(--grad-recovery);
-}
-.you-arc-seg.current::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  width: var(--seg-fill);
-  background: var(--grad-recovery);
-  border-radius: inherit;
+.rhythm-legend-item .rhythm-dot {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
 }
 
 /* Goal — an actual tinted/bordered card (Performance Orange), not just

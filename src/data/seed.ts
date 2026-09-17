@@ -12,7 +12,7 @@ export function demoProfile(): Profile {
   return {
     user_id: DEMO_USER_ID,
     username: 'demo',
-    goal: { text: 'Stay consistent across run, bike and swim' },
+    goals: [{ text: 'Stay consistent across run, bike and swim' }],
     body_weight_kg: 64,
     usual_sports: ['running', 'cycling', 'swimming', 'gym'],
     usual_bottle_ml: 750,

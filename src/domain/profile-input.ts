@@ -1,4 +1,4 @@
-import { parseGoalDate } from './goal';
+import { MAX_GOALS } from './goal';
 import type { Gender, Profile, Sport, TrainingGoal } from './types';
 
 /**
@@ -42,25 +42,24 @@ function numInRange(v: unknown, min: number, max: number): number | undefined {
   return n >= min && n <= max ? Math.round(n * 10) / 10 : undefined;
 }
 
-function parseGoal(v: unknown): TrainingGoal | undefined {
-  if (typeof v === 'string') {
-    const text = v.trim().slice(0, 200);
-    if (!text) return undefined;
-    const event_date = parseGoalDate(text);
-    return event_date ? { text, event_date } : { text };
+/** One goal entry from the form. `event_date` is only ever set when the form
+ *  explicitly supplied one (the form asks "is there a race/target date?" —
+ *  no more guessing a date out of free text; a goal with no date is a
+ *  deliberate "just staying consistent", not an unfinished field). */
+function parseOneGoal(v: unknown): TrainingGoal | undefined {
+  if (!isRecord(v) || typeof v.text !== 'string' || !v.text.trim()) return undefined;
+  const text = v.text.trim().slice(0, 200);
+  const goal: TrainingGoal = { text };
+  if (typeof v.event_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.event_date)) {
+    goal.event_date = v.event_date;
   }
-  if (isRecord(v) && typeof v.text === 'string' && v.text.trim()) {
-    const text = v.text.trim().slice(0, 200);
-    const goal: TrainingGoal = { text };
-    if (typeof v.event_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.event_date)) {
-      goal.event_date = v.event_date;
-    } else {
-      const parsed = parseGoalDate(text);
-      if (parsed) goal.event_date = parsed;
-    }
-    return goal;
-  }
-  return undefined;
+  return goal;
+}
+
+function parseGoals(v: unknown): TrainingGoal[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const goals = v.map(parseOneGoal).filter((g): g is TrainingGoal => g !== undefined).slice(0, MAX_GOALS);
+  return goals.length ? goals : undefined;
 }
 
 export function validateProfileInput(input: unknown): ProfileValidation {
@@ -79,8 +78,8 @@ export function validateProfileInput(input: unknown): ProfileValidation {
 
   const data: ProfileFormData = { username, usual_sports };
 
-  const goal = parseGoal(input.goal);
-  if (goal) data.goal = goal;
+  const goals = parseGoals(input.goals);
+  if (goals) data.goals = goals;
 
   // Everything below is optional — only validated when present.
   if (input.gender !== undefined && input.gender !== '') {

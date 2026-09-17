@@ -36,6 +36,8 @@ const NO_TARGET: KonaBriefing = {
   why: null,
   deviation: null,
   basis: null,
+  category: null,
+  pending_recommendation: null,
 };
 
 describe('buildStarter', () => {
@@ -62,19 +64,34 @@ describe('buildStarter', () => {
   });
 
   it('acknowledges an existing goal instead of asking', () => {
-    const s = buildStarter({ ...profile, goal: { text: 'First half-marathon in March' } });
+    const s = buildStarter({ ...profile, goals: [{ text: 'First half-marathon in March' }] });
     expect(s.greeting).toMatch(/working towards: First half-marathon in March/);
     expect(s.greeting).not.toMatch(/What are you working towards/i);
   });
 
-  it('offers three conversation starters that prefill a parseable stub', () => {
+  it('with nothing context-specific, falls back to the generic pair (M27 — deterministic, not a fixed list)', () => {
     const s = buildStarter(profile);
-    expect(s.prompts.map((p) => p.label)).toEqual([
-      'My training plan',
-      "What I'm doing today or tomorrow",
-      'My next race',
-    ]);
+    expect(s.prompts.map((p) => p.label)).toEqual(['My training plan', "What I'm doing today or tomorrow"]);
     expect(s.prompts[1]!.prefill).toMatch(/^Tomorrow I'm doing /);
+  });
+
+  it('suggests a taper chip when the goal event is within 8 weeks (M27)', () => {
+    const near = new Date(2026, 8, 9);
+    const s = buildStarter({ ...profile, goals: [{ text: 'Race', event_date: '2026-10-01' }] }, { now: near, sessions: [] });
+    expect(s.prompts.map((p) => p.label)).toContain("How's my taper looking?");
+  });
+
+  it('does not suggest a taper chip when the goal is months away', () => {
+    const s = buildStarter({ ...profile, goals: [{ text: 'Race', event_date: '2027-06-01' }] }, { now: NOW, sessions: [] });
+    expect(s.prompts.map((p) => p.label)).not.toContain("How's my taper looking?");
+  });
+
+  it('suggests a nutrition chip naming the actual upcoming session when a briefing is given (M27)', () => {
+    const briefing: KonaBriefing = { ...NO_TARGET, when: 'Tomorrow', session_label: 'Long run', headline: 'Bring extra fluid' };
+    const s = buildStarter(profile, { now: NOW, sessions: [], briefing });
+    const chip = s.prompts.find((p) => p.label.startsWith('What should I eat'));
+    expect(chip).toBeDefined();
+    expect(chip!.prefill.toLowerCase()).toContain('long run');
   });
 
   it('falls back to "there" when there is no username', () => {
@@ -92,6 +109,8 @@ describe('buildStarter', () => {
       why: 'Last time you did a similar long run (3 Sep), you said: "got very thirsty".',
       deviation: null,
       basis: 'reported',
+      category: 'thirst',
+      pending_recommendation: null,
     };
     const s = buildStarter(profile, {
       now: NOW,
@@ -113,6 +132,8 @@ describe('buildStarter', () => {
       why: null,
       deviation: null,
       basis: null,
+      category: null,
+      pending_recommendation: null,
     };
     const s = buildStarter(profile, {
       now: NOW,

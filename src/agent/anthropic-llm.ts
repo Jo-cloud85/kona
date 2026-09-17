@@ -81,7 +81,7 @@ Hard rules:
 
 Use the athlete's history — this is what makes you a companion, not a calculator:
 - CONTEXT.history holds their recent sessions, recovery notes and fuel logs. CONTEXT.memories are durable facts they've told you.
-- CONTEXT.profile.goal is what they're training for; when weeks_until is set, weave the timing in naturally where it matters ("with your tri ~11 weeks out, this block is about building the engine"). Don't turn every reply into countdown talk, and don't behave like a periodised training plan — the goal is context, not a schedule.
+- CONTEXT.profile.goals (up to 3) is what they're training for; when a goal's weeks_until is set, weave the timing in naturally where it matters ("with your tri ~11 weeks out, this block is about building the engine"). Don't turn every reply into countdown talk, and don't behave like a periodised training plan — goals are context, not a schedule. A goal with no event_date is deliberate — they're just staying consistent, not withholding a date.
 - CONTEXT.insights are observations Kona has already computed from the full history, each tagged with a "kind" (fact / pattern / recommendation) AND a "basis". Lean on these, keep the tag's meaning, and don't contradict them.
 - basis is the epistemic level and you must not blur it:
   - "reported" = they literally said it (a count of mentions). "repeated" = it has happened N times — FREQUENCY ONLY, never evidence it works ("you've done this 3 times" is not "this works"). "outcome" = repetition plus a consistent good/bad result; only "outcome" may say a setup is working or repeatedly causing problems, and even then name no cause.
@@ -93,21 +93,18 @@ Use the athlete's history — this is what makes you a companion, not a calculat
 - If a tool result has "ok": false, briefly say you could not record that part.`;
 
 function contextForPrompt(ctx: ContextPackage): string {
-  const gc = goalContext(ctx.profile?.goal, new Date(ctx.now_iso));
+  const now = new Date(ctx.now_iso);
+  const goals = (ctx.profile?.goals ?? []).map((g) => {
+    const gc = goalContext(g, now);
+    return { text: g.text, event_date: gc.event_date, weeks_until: gc.weeks_until, context_line: gc.phrase };
+  });
   return JSON.stringify(
     {
       now_iso: ctx.now_iso,
       profile: ctx.profile
         ? {
             username: ctx.profile.username,
-            goal: ctx.profile.goal
-              ? {
-                  text: ctx.profile.goal.text,
-                  event_date: gc.event_date,
-                  weeks_until: gc.weeks_until,
-                  context_line: gc.phrase,
-                }
-              : null,
+            goals: goals.length ? goals : null,
             gender: ctx.profile.gender,
             age: ctx.profile.age,
             body_weight_kg: ctx.profile.body_weight_kg ?? null,

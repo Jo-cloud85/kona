@@ -126,7 +126,7 @@ describe('InMemoryRepository', () => {
     const saved = await repo.upsertProfile({
       user_id: DEMO_USER_ID,
       username: 'joan',
-      goal: { text: 'First half-marathon in March' },
+      goals: [{ text: 'First half-marathon in March' }],
       usual_sports: ['running', 'cycling'],
       recent_injuries_note: 'calf cramp on a hot day',
       onboarded_at: '2026-09-06T00:00:00Z',
@@ -135,7 +135,7 @@ describe('InMemoryRepository', () => {
     const back = await repo.getProfile(DEMO_USER_ID);
     expect(back).toMatchObject({
       usual_sports: ['running', 'cycling'],
-      goal: { text: 'First half-marathon in March' },
+      goals: [{ text: 'First half-marathon in March' }],
       onboarded_at: '2026-09-06T00:00:00Z',
     });
     // weight is optional now — not part of onboarding

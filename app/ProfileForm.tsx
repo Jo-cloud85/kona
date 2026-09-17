@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { MAX_GOALS } from '../src/domain/goal';
 
 const SPORTS: { value: string; label: string }[] = [
   { value: 'running', label: 'Running' },
@@ -22,7 +23,10 @@ const GENDERS: { value: string; label: string }[] = [
 
 export interface ProfileValues {
   username?: string;
-  goal?: { text: string; event_date?: string };
+  /** Up to MAX_GOALS (3). A goal with no `event_date` is a deliberate "just
+   *  staying consistent" — the form always asks explicitly, never guesses
+   *  a date out of the goal text. */
+  goals?: { text: string; event_date?: string }[];
   gender?: string;
   age?: number;
   body_weight_kg?: number;
@@ -32,9 +36,15 @@ export interface ProfileValues {
   recent_injuries_note?: string;
 }
 
+interface GoalRow {
+  text: string;
+  has_date: boolean;
+  event_date: string;
+}
+
 interface FormState {
   username: string;
-  goal_text: string;
+  goals: GoalRow[];
   gender: string;
   age: string;
   body_weight_kg: string;
@@ -44,10 +54,17 @@ interface FormState {
   recent_injuries_note: string;
 }
 
+const EMPTY_GOAL: GoalRow = { text: '', has_date: false, event_date: '' };
+
 function toState(v: ProfileValues): FormState {
+  const goals: GoalRow[] = (v.goals ?? []).map((g) => ({
+    text: g.text,
+    has_date: Boolean(g.event_date),
+    event_date: g.event_date ?? '',
+  }));
   return {
     username: v.username ?? '',
-    goal_text: v.goal?.text ?? '',
+    goals: goals.length ? goals : [EMPTY_GOAL],
     gender: v.gender ?? '',
     age: v.age?.toString() ?? '',
     body_weight_kg: v.body_weight_kg?.toString() ?? '',
@@ -85,16 +102,29 @@ export default function ProfileForm({
         : [...f.usual_sports, value],
     }));
 
+  const setGoal = (i: number, patch: Partial<GoalRow>) =>
+    setForm((f) => ({ ...f, goals: f.goals.map((g, n) => (n === i ? { ...g, ...patch } : g)) }));
+  const addGoal = () => setForm((f) => ({ ...f, goals: [...f.goals, { ...EMPTY_GOAL }] }));
+  const removeGoal = (i: number) => setForm((f) => ({ ...f, goals: f.goals.filter((_, n) => n !== i) }));
+
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
     setError('');
     setSavedMsg('');
     setSaving(true);
 
+    const goals = form.goals
+      .filter((g) => g.text.trim())
+      .slice(0, MAX_GOALS)
+      .map((g) => ({
+        text: g.text.trim(),
+        ...(g.has_date && g.event_date ? { event_date: g.event_date } : {}),
+      }));
+
     const body: Record<string, unknown> = {
       username: form.username,
       usual_sports: form.usual_sports,
-      goal: form.goal_text.trim() || undefined,
+      goals: goals.length ? goals : undefined,
     };
     if (mode === 'settings') {
       body.gender = form.gender || undefined;
@@ -158,17 +188,60 @@ export default function ProfileForm({
       </div>
 
       <div className="field">
-        <label htmlFor="goal">
-          What are you working towards? <span className="hint">a race, an event, or just staying consistent</span>
+        <label>
+          What are you working towards? <span className="hint">up to {MAX_GOALS} — a race, an event, or just staying consistent</span>
         </label>
-        <input
-          id="goal"
-          value={form.goal_text}
-          onChange={(e) => set('goal_text', e.target.value)}
-          maxLength={200}
-          placeholder="e.g. First half-marathon in March — or just keeping the habit"
-          autoComplete="off"
-        />
+        <div className="goal-rows">
+          {form.goals.map((g, i) => (
+            <div key={i} className="goal-row">
+              <div className="goal-row-main">
+                <input
+                  value={g.text}
+                  onChange={(e) => setGoal(i, { text: e.target.value })}
+                  maxLength={200}
+                  placeholder="e.g. First half-marathon — or just keeping the habit"
+                  autoComplete="off"
+                />
+                {form.goals.length > 1 && (
+                  <button type="button" className="ghost-btn" onClick={() => removeGoal(i)} aria-label="Remove this goal">
+                    Remove
+                  </button>
+                )}
+              </div>
+              <div className="scale-row">
+                <span className="scale-label">Is there a race or target date?</span>
+                <div className="choice-row">
+                  <button
+                    type="button"
+                    className={`choice${g.has_date ? ' on' : ''}`}
+                    onClick={() => setGoal(i, { has_date: true })}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    className={`choice${!g.has_date ? ' on' : ''}`}
+                    onClick={() => setGoal(i, { has_date: false, event_date: '' })}
+                  >
+                    No target date
+                  </button>
+                </div>
+              </div>
+              {g.has_date && (
+                <input
+                  type="date"
+                  value={g.event_date}
+                  onChange={(e) => setGoal(i, { event_date: e.target.value })}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        {form.goals.length < MAX_GOALS && (
+          <button type="button" className="link-btn" onClick={addGoal}>
+            + Add another goal
+          </button>
+        )}
       </div>
 
       {mode === 'settings' && (

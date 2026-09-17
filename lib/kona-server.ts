@@ -5,17 +5,23 @@ import type { ProfileFormData } from '../src/domain/profile-input';
 import { athleteNow, localDateOf, DEFAULT_TZ } from '../src/domain/time';
 import {
   buildCheckinLog,
-  buildHome,
+  buildDashboard,
+  buildConsistencyDays,
+  buildToday,
   buildKnows,
   buildKonaBriefing,
   buildSessionRecap,
   buildStarter,
   buildWeek,
   checkinReflection,
+  CLUSTER_WINDOW_DAYS,
   computeArcProgress,
   computeMilestones,
   deriveInsights,
+  describeConsistency,
   handleMessage,
+  learnedCategoryInsights,
+  recentHardSessions,
   recordTurnActivity,
   screenForEscalation,
   type AgentDeps,
@@ -23,10 +29,14 @@ import {
   type ArcProgress,
   type CheckinInput,
   type ChatStarter,
-  type HomeView,
+  type TodayView,
   type Insight,
-  type KnowsView,
+  type KnowsInsight,
+  type KnowsRecentSession,
+  type KnowsTimelineEntry,
+  type KnowsToldLine,
   type Milestone,
+  type RhythmDay,
   type SessionRecap,
   type WeekView,
 } from '../src/agent/index';
@@ -151,42 +161,52 @@ export async function getInsights(ctx: KonaContext): Promise<Insight[]> {
   return deriveInsights({ actualSessions, recoveryLogs, fuelLogs, memories });
 }
 
-export async function getKnows(ctx: KonaContext): Promise<KnowsView | null> {
-  const profile = await ctx.repo.getProfile(ctx.userId);
-  if (!profile?.onboarded_at) return null;
-  const [memories, actualSessions, recoveryLogs, fuelLogs, events] = await Promise.all([
-    ctx.repo.listMemories(ctx.userId),
-    ctx.repo.listActualSessions(ctx.userId),
-    ctx.repo.listRecoveryLogs(ctx.userId),
-    ctx.repo.listFuelLogs(ctx.userId),
-    ctx.repo.listActivityEvents(ctx.userId, 40),
-  ]);
-  return buildKnows({ profile, memories, actualSessions, recoveryLogs, fuelLogs, events });
+/** `recommendation_declined` activity events name the exact proposal they
+ *  turned down in `meta.recommendation_id` — see `PendingRecommendation.id`. */
+function declinedRecommendationKeys(events: { type: string; meta?: Record<string, unknown> | null }[]): Set<string> {
+  const ids = events
+    .filter((e) => e.type === 'recommendation_declined')
+    .map((e) => e.meta?.recommendation_id)
+    .filter((id): id is string => typeof id === 'string');
+  return new Set(ids);
 }
 
-export async function getHome(ctx: KonaContext, selectedDate?: string, tz: string = DEFAULT_TZ): Promise<HomeView | null> {
+export async function getToday(ctx: KonaContext, selectedDate?: string, tz: string = DEFAULT_TZ): Promise<TodayView | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
-  const [weeklyPlans, actualSessions, recoveryLogs, fuelLogs, memories] = await Promise.all([
+  const [weeklyPlans, actualSessions, recoveryLogs, fuelLogs, memories, activityEvents] = await Promise.all([
     ctx.repo.listWeeklyPlans(ctx.userId),
     ctx.repo.listActualSessions(ctx.userId),
     ctx.repo.listRecoveryLogs(ctx.userId),
     ctx.repo.listFuelLogs(ctx.userId),
     ctx.repo.listMemories(ctx.userId),
+    ctx.repo.listActivityEvents(ctx.userId),
   ]);
   const weeklyPlan = weeklyPlans.at(-1);
   // All of the athlete's planned sessions, not just ones attached to the latest
   // weekly plan — a standalone "tomorrow I'm running 14km" (save_planned_session)
   // never gets a weekly_plan_id, so scoping to the plan silently hid it (found
-  // during alpha testing, 2026-09-12). buildHome indexes sessions by date, so
+  // during alpha testing, 2026-09-12). buildToday indexes sessions by date, so
   // anything outside the displayed week is naturally ignored anyway.
   const sessions = await ctx.repo.listPlannedSessions(ctx.userId);
   const now = athleteNow(tz);
   const today = ymdLocal(now);
   const recoveryDates = new Set(recoveryLogs.map((l) => localDateOf(l.logged_at, tz)));
   const checkinDoneToday = recoveryDates.has(today);
-  const konaBriefing = buildKonaBriefing({ today, sessions, actualSessions, recoveryLogs });
-  return buildHome({
+  // Reused rather than recomputed — buildDashboard already runs analyzeWeek()
+  // for the same weekly plan; recommendation_inputs is its day-before prep
+  // text, previously only reachable through a saved-plan chat reply.
+  const dashboard = buildDashboard({ profile, weeklyPlan, sessions });
+  const konaBriefing = buildKonaBriefing({
+    today,
+    sessions,
+    actualSessions,
+    recoveryLogs,
+    restDays: weeklyPlan?.rest_days,
+    recommendationInputs: dashboard.recommendation_inputs,
+    declinedRecommendationKeys: declinedRecommendationKeys(activityEvents),
+  });
+  return buildToday({
     profile,
     weeklyPlan,
     sessions,
@@ -202,25 +222,80 @@ export async function getHome(ctx: KonaContext, selectedDate?: string, tz: strin
   });
 }
 
-export interface YouView {
-  greeting_name: string | null;
-  /** Goal name and countdown as separate lines, matching the goal card's
-   *  own layout — "Current goal" / name / countdown. Null fields render as
-   *  the honest "no goal set" empty state. */
-  goal_name: string | null;
-  goal_countdown: string | null;
-  arc: ArcProgress;
-  milestones: Milestone[];
-  /** Top pattern/fact insight, in Kona's own words — or null (an honest
-   *  empty state), never invented. */
-  learned: string | null;
+export interface RespondToRecommendationInput {
+  action: 'accept' | 'decline';
+  /** `PendingRecommendation.id` — recorded on decline so the cascade never
+   *  re-proposes the identical swap. */
+  recommendation_id: string;
+  session_id: string;
+  /** YYYY-MM-DD. Only meaningful for `action: 'accept'`. */
+  to_date: string;
 }
 
-/** The "You" screen (M26): progression/identity content only — account
- *  settings stay on the Profile overlay. Needs full activity-event history
- *  for the Arc metrics (unlike getKnows()'s capped fetch), so this is its
- *  own fetch rather than folded into getHome(). */
-export async function getYou(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise<YouView | null> {
+/** Accept moves the planned session's calendar date (keeping its time of
+ *  day) and logs it like any other plan edit; decline just records that the
+ *  swap was turned down, so `loadClusterSignal` (briefing.ts) skips it next
+ *  time instead of nagging. */
+export async function respondToRecommendation(
+  ctx: KonaContext,
+  input: RespondToRecommendationInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (input.action === 'decline') {
+    await ctx.repo.appendActivityEvent({
+      user_id: ctx.userId,
+      type: 'recommendation_declined',
+      summary: 'Kept a session as planned instead of accepting a proposed swap.',
+      meta: { recommendation_id: input.recommendation_id },
+    });
+    return { ok: true };
+  }
+
+  const session = await ctx.repo.getPlannedSession(input.session_id);
+  if (!session || session.user_id !== ctx.userId) return { ok: false, error: 'Session not found.' };
+  const time = session.start_at.slice(11); // preserve HH:MM:SS, just move the date
+  await ctx.repo.updatePlannedSession(input.session_id, { start_at: `${input.to_date}T${time}` });
+  await ctx.repo.appendActivityEvent({
+    user_id: ctx.userId,
+    type: 'plan_updated',
+    summary: `Moved a session to ${input.to_date} to space out a run of hard training days.`,
+    meta: { recommendation_id: input.recommendation_id },
+  });
+  return { ok: true };
+}
+
+export interface RhythmView {
+  greeting_name: string | null;
+  /** Last 24 weeks, oldest first — a plain-language read, not a score
+   *  (PRODUCT_VISION.md "not a metrics dashboard"; a deliberate, considered
+   *  exception for this one visual, per founder direction, M27). "Worth
+   *  watching" reuses the exact same trailing-window threshold as Today's
+   *  own load-clustering tier (briefing.ts) — the two screens never
+   *  disagree about what counts as clustered. */
+  consistency: { days: RhythmDay[]; headline: string; detail: string };
+  /** Up to 3 goals (M27.1) — each with a name and either a countdown or
+   *  `null` when the athlete deliberately said there's no target date, not
+   *  a missing field. Empty array renders the honest "no goal set" state. */
+  goals: { name: string; countdown: string | null }[];
+  arc: ArcProgress;
+  milestones: Milestone[];
+  has_anything: boolean;
+  /** "What Kona has learned" — deriveInsights()'s usual feed, with the
+   *  category-based "Kona learned: X" entries (insights.ts,
+   *  learnedCategoryInsights) merged in as high-priority `pattern`/`outcome`
+   *  entries so they read as one feed, not two competing lists. */
+  insights: KnowsInsight[];
+  told: KnowsToldLine[];
+  recent: KnowsRecentSession[];
+  timeline: KnowsTimelineEntry[];
+}
+
+/** "Rhythm" (M27): merges the old "You" (progression/identity) and "Memory"
+ *  ("What Kona knows about you") tabs into one screen — the founder's call
+ *  after reviewing the Claude Design redesign. Needs full activity-event
+ *  history for the Arc metrics, unlike the old getKnows()'s capped fetch;
+ *  buildKnows()'s own timeline already caps itself to 14, so fetching the
+ *  full list here (shared with Arc) is safe. */
+export async function getRhythm(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise<RhythmView | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
   const [actualSessions, recoveryLogs, fuelLogs, memories, events] = await Promise.all([
@@ -233,16 +308,43 @@ export async function getYou(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise
   const now = athleteNow(tz);
   const arc = computeArcProgress({ actualSessions, activityEvents: events, now });
   const milestones = computeMilestones(actualSessions);
-  const insights = deriveInsights({ actualSessions, recoveryLogs, fuelLogs, memories });
-  const learned = insights.find((i) => i.kind === 'pattern' || i.kind === 'fact')?.text ?? null;
-  const goal = goalContext(profile.goal, now);
+  const goals = (profile.goals ?? []).map((g) => {
+    const gc = goalContext(g, now);
+    return { name: gc.short_text ?? g.text, countdown: gc.countdown };
+  });
+
+  const painDates = new Set(
+    recoveryLogs.filter((l) => (l.reported_symptoms?.length ?? 0) > 0).map((l) => localDateOf(l.logged_at, tz)),
+  );
+  const consistencyDays = buildConsistencyDays(actualSessions, painDates, now);
+  const recentHard = recentHardSessions(actualSessions, ymdLocal(now), CLUSTER_WINDOW_DAYS);
+  const consistency = { days: consistencyDays, ...describeConsistency(recentHard, ymdLocal(now)) };
+
+  const known = buildKnows({ profile, memories, actualSessions, recoveryLogs, fuelLogs, events });
+  const learned = learnedCategoryInsights(recoveryLogs).map(
+    (l): KnowsInsight => ({
+      kind: 'pattern',
+      basis: 'outcome',
+      text: l.text,
+      certainty: 'moderate',
+      evidence_count: l.count,
+      topic: 'training',
+      evidence: [],
+      tier: 'acting_on',
+    }),
+  );
+
   return {
     greeting_name: profile.username ?? null,
-    goal_name: goal.short_text,
-    goal_countdown: goal.countdown,
+    consistency,
+    goals,
     arc,
     milestones,
-    learned,
+    has_anything: known.has_anything || learned.length > 0,
+    insights: [...learned, ...known.insights],
+    told: known.told,
+    recent: known.recent,
+    timeline: known.timeline,
   };
 }
 
@@ -278,11 +380,17 @@ export interface CheckinResult {
   ok: true;
   escalated: boolean;
   reflection: string;
+  /** "Kona learned: X" — set only the check-in that first crosses the
+   *  evidence threshold for a category (see learnedCategoryInsights). Show
+   *  it once as a toast; it also becomes permanent in Rhythm's feed. */
+  learned: string | null;
 }
 
 export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Promise<CheckinResult | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
+
+  const beforeLearned = new Set(learnedCategoryInsights(await ctx.repo.listRecoveryLogs(ctx.userId)).map((l) => l.category));
 
   const log = buildCheckinLog(input);
   const screen = screenForEscalation(log.free_text);
@@ -291,6 +399,10 @@ export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Prom
     free_text: log.free_text,
     overall_severity: log.overall_severity,
     reported_symptoms: log.reported_symptoms,
+    sleep_quality: log.sleep_quality,
+    mood: log.mood,
+    followed_category: log.followed_category,
+    followed_outcome: log.followed_outcome,
   });
   await ctx.repo.appendActivityEvent({
     user_id: ctx.userId,
@@ -298,7 +410,11 @@ export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Prom
     summary: 'You did an end-of-day check-in',
   });
   await recordTurnActivity(ctx.repo, ctx.userId, []); // insight-detection pass only
-  return { ok: true, escalated: screen.escalate, reflection: checkinReflection(input, screen) };
+
+  const afterLearned = learnedCategoryInsights(await ctx.repo.listRecoveryLogs(ctx.userId));
+  const newlyLearned = afterLearned.find((l) => !beforeLearned.has(l.category));
+
+  return { ok: true, escalated: screen.escalate, reflection: checkinReflection(input, screen), learned: newlyLearned?.text ?? null };
 }
 
 /** The opening message + conversation starters. Null until the user has onboarded. */

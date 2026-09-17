@@ -2,7 +2,21 @@
 
 import { useState } from 'react';
 
-const FEELS = ['Feeling great!', 'Breezed it', 'Solid grind', 'Survived', 'Dying...', "Didn't happen"];
+const LEGS: { value: 'fresh' | 'normal' | 'heavy'; label: string }[] = [
+  { value: 'fresh', label: 'Fresh' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'heavy', label: 'Heavy' },
+];
+const SLEEP: { value: 'poor' | 'ok' | 'good'; label: string }[] = [
+  { value: 'poor', label: 'Poor' },
+  { value: 'ok', label: 'OK' },
+  { value: 'good', label: 'Good' },
+];
+const MOOD: { value: 'low' | 'ok' | 'good'; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'ok', label: 'OK' },
+  { value: 'good', label: 'Good' },
+];
 
 export default function CheckinDialog({
   onClose,
@@ -11,28 +25,34 @@ export default function CheckinDialog({
   konaBriefing,
 }: {
   onClose: () => void;
-  onDone: () => void;
+  /** `learned` is set only when this exact check-in first crossed the
+   *  evidence threshold for a category — see submitCheckin (kona-server.ts). */
+  onDone: (learned: string | null) => void;
   /** e.g. "Tuesday" when this is catching up on a missed day's check-in — the
    *  log itself still saves against today (see /api/checkin), but the copy
    *  should be honest about which day it's asking about. */
   contextLabel?: string;
   /** M24.5 — closes the loop. Only passed for today's own check-in, and only
    *  produces the follow-up question when a real, evidence-backed action was
-   *  actually given (not the honest "nothing special" default). */
-  konaBriefing?: { action: string; why: string | null };
+   *  actually given (not the honest "nothing special" default, and not a
+   *  plan-change proposal — that closes its own loop via Accept/Decline). */
+  konaBriefing?: { action: string; why: string | null; category: string | null };
 }) {
-  const [feel, setFeel] = useState<string | null>(null);
+  const [legs, setLegs] = useState<'fresh' | 'normal' | 'heavy' | null>(null);
   const [asPlanned, setAsPlanned] = useState<boolean | null>(null);
   const [pains, setPains] = useState<boolean | null>(null);
+  const [sleep, setSleep] = useState<'poor' | 'ok' | 'good' | null>(null);
+  const [mood, setMood] = useState<'low' | 'ok' | 'good' | null>(null);
   const [elaborate, setElaborate] = useState('');
   const [followed, setFollowed] = useState<boolean | null>(null);
   const [outcome, setOutcome] = useState<'better' | 'worse' | 'same' | null>(null);
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState<string | null>(null);
+  const [learned, setLearned] = useState<string | null>(null);
   const [err, setErr] = useState('');
 
   const showLoop = Boolean(konaBriefing?.why);
-  const canSubmit = feel !== null && asPlanned !== null && pains !== null && !busy;
+  const canSubmit = legs !== null && asPlanned !== null && pains !== null && !busy;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -43,12 +63,15 @@ export default function CheckinDialog({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          workout_feel: feel,
+          legs,
           went_as_planned: asPlanned,
           pains,
+          sleep_quality: sleep ?? undefined,
+          mood: mood ?? undefined,
           elaborate: elaborate.trim() || undefined,
           followed_recommendation: showLoop && followed !== null ? followed : undefined,
           recommendation_outcome: showLoop && followed === true && outcome !== null ? outcome : undefined,
+          category: showLoop ? (konaBriefing!.category ?? undefined) : undefined,
         }),
       });
       const data = await res.json();
@@ -57,6 +80,7 @@ export default function CheckinDialog({
         return;
       }
       setReply(typeof data.reflection === 'string' ? data.reflection : 'Logged.');
+      setLearned(typeof data.learned === 'string' ? data.learned : null);
     } catch {
       setErr('Network error — try again.');
     } finally {
@@ -74,11 +98,11 @@ export default function CheckinDialog({
             <p className="dialog-sub">A quick end-of-day check-in. Kona logs it — nothing gets diagnosed.</p>
 
             <div className="field">
-              <label>How&apos;s your workout?</label>
+              <label>Legs?</label>
               <div className="choice-row">
-                {FEELS.map((f) => (
-                  <button key={f} className={`choice${feel === f ? ' on' : ''}`} onClick={() => setFeel(f)}>
-                    {f}
+                {LEGS.map((f) => (
+                  <button key={f.value} className={`choice${legs === f.value ? ' on' : ''}`} onClick={() => setLegs(f.value)}>
+                    {f.label}
                   </button>
                 ))}
               </div>
@@ -105,6 +129,33 @@ export default function CheckinDialog({
                   <button className={`choice${pains === false ? ' on' : ''}`} onClick={() => setPains(false)}>
                     No
                   </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="choice-pair-row">
+              <div className="field">
+                <label>
+                  Sleep <span className="hint">optional</span>
+                </label>
+                <div className="choice-row">
+                  {SLEEP.map((s) => (
+                    <button key={s.value} className={`choice${sleep === s.value ? ' on' : ''}`} onClick={() => setSleep(s.value)}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="field">
+                <label>
+                  Mood <span className="hint">optional</span>
+                </label>
+                <div className="choice-row">
+                  {MOOD.map((m) => (
+                    <button key={m.value} className={`choice${mood === m.value ? ' on' : ''}`} onClick={() => setMood(m.value)}>
+                      {m.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -173,7 +224,7 @@ export default function CheckinDialog({
             <h2>Thanks — logged.</h2>
             <p className="dialog-reply">{reply}</p>
             <div className="dialog-actions">
-              <button className="cta" onClick={onDone}>
+              <button className="cta" onClick={() => onDone(learned)}>
                 Done
               </button>
             </div>

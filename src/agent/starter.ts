@@ -1,4 +1,5 @@
 import type { PlannedSession, Profile, Sport } from '../domain/types';
+import { goalContext, nearestUpcomingGoal } from '../domain/goal';
 import type { KonaBriefing } from './briefing';
 
 /**
@@ -40,6 +41,38 @@ const SPORT_LABEL: Record<Sport, string> = {
   other: 'training',
 };
 
+const TAPER_WEEKS = 8;
+
+/** Deterministic, context-tied suggestions — same discipline as the rest of
+ *  this file (and briefing.ts/insights.ts): never invented, never
+ *  LLM-improvised, computed fresh from real profile/briefing state. Replaces
+ *  the old fixed three-prompt list (M27) — a chip only appears when the
+ *  condition it names is actually true. */
+function buildSuggestedPrompts(profile: Profile, ctx?: StarterContext): { label: string; prefill: string }[] {
+  const prompts: { label: string; prefill: string }[] = [];
+  const goal = goalContext(nearestUpcomingGoal(profile.goals, ctx?.now), ctx?.now);
+
+  if (goal.weeks_until !== null && goal.weeks_until >= 0 && goal.weeks_until <= TAPER_WEEKS) {
+    prompts.push({ label: "How's my taper looking?", prefill: "How's my taper looking? " });
+  }
+
+  const briefing = ctx?.briefing;
+  if (briefing?.session_label) {
+    const when = (briefing.when ?? 'that session').toLowerCase();
+    prompts.push({
+      label: `What should I eat before ${when}?`,
+      prefill: `What should I eat before ${briefing.session_label.toLowerCase()}? `,
+    });
+  }
+
+  if (prompts.length === 0) {
+    prompts.push({ label: 'My training plan', prefill: 'My training plan is: ' });
+  }
+  prompts.push({ label: "What I'm doing today or tomorrow", prefill: "Tomorrow I'm doing " });
+
+  return prompts.slice(0, 3);
+}
+
 export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarter {
   const name = profile.username?.trim() || 'there';
   const sports =
@@ -54,8 +87,9 @@ export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarte
       `so tell me in your own words. I've got ${sports} from your setup.`,
   ];
 
-  if (profile.goal?.text) {
-    lines.push('', `You're working towards: ${profile.goal.text}. I'll keep that in view.`);
+  if (profile.goals?.length) {
+    const names = profile.goals.map((g) => g.text).join('; ');
+    lines.push('', `You're working towards: ${names}. I'll keep that in view.`);
   } else {
     lines.push(
       '',
@@ -68,8 +102,8 @@ export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarte
   if (briefing) {
     const lead = briefing.session_label ? `${briefing.when ?? 'Coming up'} · ${briefing.session_label}` : briefing.when;
     lines.push('', lead ? `${lead} — ${briefing.headline}.` : `${briefing.headline}.`);
-    if (briefing.why) lines.push(briefing.why);
-    lines.push(briefing.action);
+    if (briefing.why) lines.push('', briefing.why);
+    lines.push('', briefing.action);
     const targetSessions = briefing.date ? (ctx?.sessions ?? []).filter((s) => s.start_at.slice(0, 10) === briefing.date) : [];
     if (targetSessions.some((s) => (s.needs_detail ?? []).length > 0)) {
       lines.push('Fill in the rest of the details when you get a chance and I can sort the fuelling too.');
@@ -82,10 +116,6 @@ export function buildStarter(profile: Profile, ctx?: StarterContext): ChatStarte
 
   return {
     greeting: lines.join('\n'),
-    prompts: [
-      { label: 'My training plan', prefill: 'My training plan is: ' },
-      { label: "What I'm doing today or tomorrow", prefill: "Tomorrow I'm doing " },
-      { label: 'My next race', prefill: 'My next race is ' },
-    ],
+    prompts: buildSuggestedPrompts(profile, ctx),
   };
 }

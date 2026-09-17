@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryRepository } from '../../src/data/index';
 import { DeterministicLlmClient, runTool } from '../../src/agent/index';
-import { getHome, getWeek, getStarter } from '../../lib/kona-server';
+import { getToday, getWeek, getStarter, respondToRecommendation } from '../../lib/kona-server';
 import type { KonaContext } from '../../lib/server-context';
 
 /**
  * Regression coverage for a real alpha bug (2026-09-12): a standalone
  * "tomorrow I'm running 14km" session — saved via save_planned_session, which
  * never sets weekly_plan_id — was invisible on Home/Week/the chat starter
- * because getHome/getWeek/getStarter only fetched the latest weekly plan's
+ * because getToday/getWeek/getStarter only fetched the latest weekly plan's
  * sessions. They now fetch every planned session for the user.
  */
 
@@ -24,7 +24,7 @@ async function ctxWith(repo: InMemoryRepository): Promise<KonaContext> {
   return { repo, userId: USER_ID, llm: new DeterministicLlmClient(), persistent: false };
 }
 
-// Today, not tomorrow: today is always inside both buildHome's 14-day window
+// Today, not tomorrow: today is always inside both buildToday's 14-day window
 // and buildWeek's single 7-day window, whichever weekday "now" happens to be
 // (tomorrow isn't — it can fall in the next Mon-Sun week, which buildWeek
 // doesn't show, flakily failing this file when a run lands on a Sunday).
@@ -34,7 +34,7 @@ function isoSessionDate(): string {
 }
 
 describe('standalone planned sessions (no weekly_plan_id) reach Home/Week/starter', () => {
-  it('getHome shows a standalone session on its date, with no weekly plan on record', async () => {
+  it('getToday shows a standalone session on its date, with no weekly plan on record', async () => {
     const repo = new InMemoryRepository();
     const ctx = await ctxWith(repo);
     const start_at = isoSessionDate();
@@ -47,7 +47,7 @@ describe('standalone planned sessions (no weekly_plan_id) reach Home/Week/starte
       intensity: 'easy',
     });
 
-    const home = await getHome(ctx, start_at.slice(0, 10));
+    const home = await getToday(ctx, start_at.slice(0, 10));
     expect(home).not.toBeNull();
     expect(home!.selected.sessions).toHaveLength(1);
     expect(home!.selected.sessions[0]).toMatchObject({ sport: 'running' });
@@ -101,7 +101,7 @@ describe('a stated distance range reaches Home verbatim (save_planned_session to
     );
     expect(result.ok).toBe(true);
 
-    const home = await getHome(ctx, start_at.slice(0, 10));
+    const home = await getToday(ctx, start_at.slice(0, 10));
     expect(home!.briefing.your_day.headline).toContain('13-14km');
     expect(home!.briefing.your_day.headline).not.toContain('13.5');
   });
@@ -131,7 +131,7 @@ describe('save_planned_session edits an existing standalone session instead of d
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({ distance_label: '13-14km' });
 
-    const home = await getHome(ctx, start_at.slice(0, 10));
+    const home = await getToday(ctx, start_at.slice(0, 10));
     expect(home!.selected.sessions).toHaveLength(1);
     expect(home!.briefing.your_day.headline).toContain('13-14km');
   });
@@ -152,7 +152,7 @@ describe('save_planned_session edits an existing standalone session instead of d
       { repo, userId: USER_ID },
     );
 
-    const home = await getHome(ctx, start_at.slice(0, 10));
+    const home = await getToday(ctx, start_at.slice(0, 10));
     expect(home!.selected.sessions).toHaveLength(2);
   });
 });
@@ -172,7 +172,7 @@ describe('delete_planned_session / delete_actual_session', () => {
     expect(await repo.listPlannedSessions(USER_ID)).toHaveLength(0);
     expect(await repo.listActualSessions(USER_ID)).toHaveLength(0); // never became a "skipped" actual session
 
-    const home = await getHome(ctx, date);
+    const home = await getToday(ctx, date);
     expect(home!.selected.sessions).toHaveLength(0);
   });
 
@@ -207,7 +207,7 @@ describe('delete_planned_session / delete_actual_session', () => {
   });
 });
 
-describe('getHome/getWeek/sendMessage use the athlete\'s timezone for "today", not the server\'s clock', () => {
+describe('getToday/getWeek/sendMessage use the athlete\'s timezone for "today", not the server\'s clock', () => {
   // 2026-09-13T16:20:00Z == 2026-09-14T00:20:00+08:00 — the exact real-world
   // instant the bug was found at: server-local/UTC still reads the 13th, the
   // athlete's own wall clock already reads the 14th.
@@ -219,14 +219,14 @@ describe('getHome/getWeek/sendMessage use the athlete\'s timezone for "today", n
     vi.useRealTimers();
   });
 
-  it('getHome reports "today" in the athlete\'s local date, not the server\'s', async () => {
+  it('getToday reports "today" in the athlete\'s local date, not the server\'s', async () => {
     const repo = new InMemoryRepository();
     const ctx = await ctxWith(repo);
 
-    const utcHome = await getHome(ctx, undefined, 'UTC');
+    const utcHome = await getToday(ctx, undefined, 'UTC');
     expect(utcHome!.today).toBe('2026-09-13');
 
-    const sgtHome = await getHome(ctx, undefined, 'Asia/Singapore');
+    const sgtHome = await getToday(ctx, undefined, 'Asia/Singapore');
     expect(sgtHome!.today).toBe('2026-09-14');
   });
 
@@ -251,7 +251,7 @@ describe('a missed end-of-day check-in stays flagged once the local day has pass
     vi.useRealTimers();
   });
 
-  it('getHome flags yesterday (athlete-local) as missed once "today" rolls over, and stays due', async () => {
+  it('getToday flags yesterday (athlete-local) as missed once "today" rolls over, and stays due', async () => {
     const repo = new InMemoryRepository();
     const ctx = await ctxWith(repo);
 
@@ -265,7 +265,7 @@ describe('a missed end-of-day check-in stays flagged once the local day has pass
     });
 
     vi.setSystemTime(new Date('2026-09-13T16:20:00.000Z')); // 2026-09-14T00:20 SGT — next local day
-    const home = await getHome(ctx, undefined, 'Asia/Singapore');
+    const home = await getToday(ctx, undefined, 'Asia/Singapore');
     expect(home!.today).toBe('2026-09-14');
     expect(home!.checkin.missed_date).toBe('2026-09-13');
     expect(home!.checkin.due).toBe(true);
@@ -287,8 +287,91 @@ describe('a missed end-of-day check-in stays flagged once the local day has pass
     await repo.saveRecoveryLog({ user_id: USER_ID, free_text: 'End-of-day check-in — felt fine' });
 
     vi.setSystemTime(new Date('2026-09-13T16:20:00.000Z')); // next local day
-    const resolvedHome = await getHome(ctx, undefined, 'Asia/Singapore');
+    const resolvedHome = await getToday(ctx, undefined, 'Asia/Singapore');
     expect(resolvedHome!.checkin.missed_date).toBeNull(); // logged the same local day it was due
+  });
+});
+
+describe('load-clustering recommendation reaches getToday and respondToRecommendation closes the loop (M27)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-14T08:00:00.000Z')); // Monday
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function seedCluster(repo: InMemoryRepository) {
+    await repo.saveWeeklyPlan({ user_id: USER_ID, week_start: '2026-09-14', rest_days: ['2026-09-16'] });
+    for (const date of ['2026-09-11', '2026-09-12', '2026-09-13']) {
+      await repo.saveActualSession({
+        user_id: USER_ID,
+        sport: 'running',
+        start_at: `${date}T18:00:00`,
+        intensity: 'hard',
+        status: 'completed',
+      });
+    }
+    return repo.savePlannedSession({
+      user_id: USER_ID,
+      sport: 'running',
+      start_at: '2026-09-14T18:00:00',
+      intensity: 'hard',
+    });
+  }
+
+  it('getToday surfaces a real accept/decline proposal, not just softened advice', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+    const today = await seedCluster(repo);
+
+    const home = await getToday(ctx, undefined, 'UTC');
+    const rec = home!.briefing.kona_briefing.pending_recommendation;
+    expect(rec).not.toBeNull();
+    expect(rec).toMatchObject({ session_id: today.id, from_date: '2026-09-14', to_date: '2026-09-16' });
+  });
+
+  it('accepting moves the session and the proposal is gone next time', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+    const today = await seedCluster(repo);
+    const before = await getToday(ctx, undefined, 'UTC');
+    const rec = before!.briefing.kona_briefing.pending_recommendation!;
+
+    const result = await respondToRecommendation(ctx, {
+      action: 'accept',
+      recommendation_id: rec.id,
+      session_id: rec.session_id,
+      to_date: rec.to_date,
+    });
+    expect(result.ok).toBe(true);
+
+    const moved = await repo.getPlannedSession(today.id);
+    expect(moved?.start_at).toBe('2026-09-16T18:00:00');
+
+    const after = await getToday(ctx, undefined, 'UTC');
+    // The session no longer falls today, so there's nothing left today to cluster onto.
+    expect(after!.briefing.kona_briefing.pending_recommendation).toBeNull();
+  });
+
+  it('declining is remembered — the exact same swap is never proposed again', async () => {
+    const repo = new InMemoryRepository();
+    const ctx = await ctxWith(repo);
+    await seedCluster(repo);
+    const before = await getToday(ctx, undefined, 'UTC');
+    const rec = before!.briefing.kona_briefing.pending_recommendation!;
+
+    await respondToRecommendation(ctx, {
+      action: 'decline',
+      recommendation_id: rec.id,
+      session_id: rec.session_id,
+      to_date: rec.to_date,
+    });
+
+    const after = await getToday(ctx, undefined, 'UTC');
+    expect(after!.briefing.kona_briefing.pending_recommendation).toBeNull();
+    // Falls back to the softer, non-proposal advice instead of going silent.
+    expect(after!.briefing.kona_briefing.headline).toMatch(/maintenance/i);
   });
 });
 
@@ -300,7 +383,7 @@ describe('the Kona Briefing (M24) reaches Home and the chat starter identically'
     vi.useRealTimers();
   });
 
-  it('getHome.briefing.kona_briefing and getStarter\'s opener say the exact same thing', async () => {
+  it('getToday.briefing.kona_briefing and getStarter\'s opener say the exact same thing', async () => {
     const repo = new InMemoryRepository();
     const ctx = await ctxWith(repo);
 
@@ -326,7 +409,7 @@ describe('the Kona Briefing (M24) reaches Home and the chat starter identically'
       intensity: 'easy',
     });
 
-    const home = await getHome(ctx, undefined, 'UTC');
+    const home = await getToday(ctx, undefined, 'UTC');
     const starter = await getStarter(ctx, 'UTC');
 
     expect(home!.briefing.kona_briefing.session_label).not.toBeNull();

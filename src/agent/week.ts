@@ -1,6 +1,6 @@
 import type { ActualSession, PlannedSession, Profile, Range, WeeklyPlan } from '../domain/types';
 import { buildDashboard } from './dashboard';
-import { addDays, dayOfMonth, dayTitle, durationLabel, isoDate, joinList, weekdayFull, weekdayLabel } from './home';
+import { addDays, dayOfMonth, dayTitle, durationLabel, isoDate, joinList, mondayOf, weekdayFull, weekdayLabel } from './home';
 
 /**
  * "Your week" — the week plan as a page, not a dashboard (product UI pass,
@@ -61,12 +61,13 @@ export function buildWeek(input: {
   now?: Date;
 }): WeekView {
   const now = input.now ?? new Date();
-  // Rolling, today-anchored window (today - 6 .. today + 7 = 14 days), matching
-  // Home's day-strip — not a fixed Monday-Sunday. Fuelling numbers (from
-  // buildDashboard, below) still only resolve for days inside the athlete's
-  // actual stored weekly-plan week; days outside it show the session title
-  // without fuel chips, same as Home already does for an out-of-plan day.
-  const windowStart = addDays(now, -6);
+  // Two calendar weeks, Monday-anchored (this Monday .. the Sunday after
+  // next = 14 days) — always shows Monday first, per founder direction
+  // (M27.1). Fuelling numbers (from buildDashboard, below) still only
+  // resolve for days inside the athlete's actual stored weekly-plan week;
+  // days outside it show the session title without fuel chips, same as
+  // Home already does for an out-of-plan day.
+  const windowStart = mondayOf(now);
 
   const byDate = new Map<string, PlannedSession[]>();
   for (const s of input.sessions) {

@@ -1,4 +1,4 @@
-import { getYou } from '../../../lib/kona-server';
+import { getToday } from '../../../lib/kona-server';
 import { requireContext, requestTimezone } from '../../../lib/route-helpers';
 
 export const runtime = 'nodejs';
@@ -7,5 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request): Promise<Response> {
   const c = await requireContext();
   if ('response' in c) return c.response;
-  return Response.json({ you: await getYou(c.ctx, requestTimezone(req)) });
+  const date = new URL(req.url).searchParams.get('date');
+  const valid = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined;
+  return Response.json({ today: await getToday(c.ctx, valid, requestTimezone(req)) });
 }

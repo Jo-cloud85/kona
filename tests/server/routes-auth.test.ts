@@ -29,13 +29,12 @@ type Handler = (r: Request) => Promise<Response>;
 type RouteMod = Record<string, unknown>;
 
 const LOADERS: Record<string, () => Promise<RouteMod>> = {
-  home: () => import('../../app/api/home/route'),
+  today: () => import('../../app/api/today/route'),
   insights: () => import('../../app/api/insights/route'),
-  knows: () => import('../../app/api/knows/route'),
+  rhythm: () => import('../../app/api/rhythm/route'),
   conversations: () => import('../../app/api/conversations/route'),
   profile: () => import('../../app/api/profile/route'),
   chat: () => import('../../app/api/chat/route'),
-  you: () => import('../../app/api/you/route'),
 };
 const ROUTES = Object.keys(LOADERS);
 const loadRoute = (name: string): Promise<RouteMod> => LOADERS[name]!();
@@ -54,17 +53,17 @@ describe('API routes — auth boundary', () => {
 
   it('return 500 when persistence is misconfigured', async () => {
     getServerContext.mockResolvedValue({ ok: false, status: 500, error: 'Persistence is not configured.' });
-    const mod = await loadRoute('home');
-    const res = await (mod.GET as Handler)(new Request('http://localhost/api/home'));
+    const mod = await loadRoute('today');
+    const res = await (mod.GET as Handler)(new Request('http://localhost/api/today'));
     expect(res.status).toBe(500);
   });
 
   it('serve normally with a valid context (scoped to that user)', async () => {
     getServerContext.mockResolvedValue(okContext());
-    const home = await loadRoute('home');
-    const res = await (home.GET as Handler)(new Request('http://localhost/api/home'));
+    const today = await loadRoute('today');
+    const res = await (today.GET as Handler)(new Request('http://localhost/api/today'));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ home: null }); // fresh user, no onboarding
+    expect(await res.json()).toEqual({ today: null }); // fresh user, no onboarding
 
     getServerContext.mockResolvedValue(okContext());
     const insights = await loadRoute('insights');

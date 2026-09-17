@@ -127,9 +127,11 @@ export function buildKnows(input: {
   }).map((i) => ({ ...i, tier: learningTier(i) }));
 
   const told: KnowsToldLine[] = [];
-  if (input.profile?.goal?.text) told.push({ label: 'Training for', value: input.profile.goal.text });
+  for (const g of input.profile?.goals ?? []) {
+    told.push({ label: 'Training for', value: g.text });
+  }
   for (const m of input.memories) {
-    if (m.key === 'goal') continue; // covered by profile.goal
+    if (m.key === 'goal') continue; // covered by profile.goals
     told.push({ label: memLabel(m.key), value: m.value });
   }
 

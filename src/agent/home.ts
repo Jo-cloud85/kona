@@ -12,7 +12,7 @@ import type {
   TimeOfDay,
   WeeklyPlan,
 } from '../domain/types';
-import { goalContext } from '../domain/goal';
+import { goalContext, nearestUpcomingGoal } from '../domain/goal';
 import type { KonaBriefing } from './briefing';
 import { buildDashboard } from './dashboard';
 import { deriveInsights, type Insight } from './insights';
@@ -44,7 +44,7 @@ const SPORT_LABEL: Record<Sport, string> = {
   other: 'session',
 };
 
-export interface HomeSession {
+export interface TodaySession {
   sport: Sport;
   /** Human title, e.g. "Long run", "18 km evening run", "Morning gym". */
   title: string;
@@ -59,7 +59,7 @@ export interface HomeSession {
   is_long: boolean;
 }
 
-export interface HomeWeekDay {
+export interface TodayWeekDay {
   date: string;
   weekday: string;
   day_of_month: number;
@@ -72,7 +72,7 @@ export interface HomeWeekDay {
 /** A short, forward-looking preview of the week for the Home tab — the same
  *  per-day title/duration "Your week" already computes, just the first few
  *  days (today first), for a card that links through to the full page. */
-export interface HomeWeekPreviewDay {
+export interface TodayWeekPreviewDay {
   date: string;
   weekday: string;
   day_of_month: number;
@@ -85,7 +85,7 @@ export interface HomeWeekPreviewDay {
   duration_label: string | null;
 }
 
-export interface HomeBriefing {
+export interface TodayBriefing {
   /** "What am I doing today?" + "does it matter?" */
   your_day: {
     headline: string;
@@ -108,13 +108,13 @@ export interface HomeBriefing {
   remembers: string[];
 }
 
-export interface HomeView {
+export interface TodayView {
   greeting_name: string | null;
   today: string;
   selected_date: string;
-  week: HomeWeekDay[];
+  week: TodayWeekDay[];
   /** Today + the next few days, for the "Your week" preview card. */
-  week_preview: HomeWeekPreviewDay[];
+  week_preview: TodayWeekPreviewDay[];
   has_plan: boolean;
   /** One-line goal context ("11 weeks to your first Olympic-distance triathlon"), or null. */
   goal_line: string | null;
@@ -132,9 +132,9 @@ export interface HomeView {
     /** The selected date falls inside the stored plan's week. */
     in_plan: boolean;
     is_rest: boolean;
-    sessions: HomeSession[];
+    sessions: TodaySession[];
   };
-  briefing: HomeBriefing;
+  briefing: TodayBriefing;
 }
 
 export function isoDate(d: Date): string {
@@ -219,7 +219,7 @@ export function dayTitle(sessions: PlannedSession[], isRest: boolean): string | 
   return null;
 }
 
-function sessionView(s: PlannedSession): HomeSession {
+function sessionView(s: PlannedSession): TodaySession {
   const intensityKnown = !(s.needs_detail ?? []).includes('intensity');
   const timeKnown = !(s.needs_detail ?? []).includes('time_of_day') && s.time_of_day != null;
   return {
@@ -235,7 +235,7 @@ function sessionView(s: PlannedSession): HomeSession {
 }
 
 /** Pre-fuel nudge for the selected day, keyed off a session's stated time. */
-function preFuelNote(sessions: HomeSession[]): string | null {
+function preFuelNote(sessions: TodaySession[]): string | null {
   const times = new Set(sessions.map((s) => s.time_of_day).filter((t): t is TimeOfDay => t != null));
   if (times.has('morning')) {
     return 'Since it starts before a full breakfast, have something light 20–30 min before — a banana, a few dates, toast with jam — rather than a big meal.';
@@ -263,7 +263,7 @@ export function weekdayFull(iso: string): string {
   return WEEKDAY_FULL[new Date(y, m - 1, d).getDay()]!;
 }
 
-function sessionNeeds(sessions: HomeSession[]): string[] {
+function sessionNeeds(sessions: TodaySession[]): string[] {
   const needs = new Set<string>();
   for (const s of sessions) {
     if (!s.intensity_known) needs.add('effort');
@@ -289,13 +289,13 @@ interface DashDayLite {
 }
 
 function buildYourDay(opts: {
-  sessions: HomeSession[];
+  sessions: TodaySession[];
   isRest: boolean;
   hasPlan: boolean;
   inPlan: boolean;
   dashDay: DashDayLite | null;
   postProtein: Range;
-}): HomeBriefing['your_day'] {
+}): TodayBriefing['your_day'] {
   const { sessions, isRest, hasPlan, inPlan, dashDay } = opts;
 
   if (sessions.length === 0) {
@@ -383,7 +383,7 @@ function buildRemembers(opts: {
   return out;
 }
 
-export function buildHome(input: {
+export function buildToday(input: {
   profile: Profile;
   weeklyPlan?: WeeklyPlan;
   sessions: PlannedSession[];
@@ -404,7 +404,7 @@ export function buildHome(input: {
    *  `./briefing` (which itself imports plain helpers from this file).
    *  Optional only so tests that don't care about it can omit it. */
   konaBriefing?: KonaBriefing;
-}): HomeView {
+}): TodayView {
   const now = input.now ?? new Date();
   const today = isoDate(now);
   const selected_date = input.selectedDate && ISO_DATE.test(input.selectedDate) ? input.selectedDate : today;
@@ -424,7 +424,7 @@ export function buildHome(input: {
   // right, so a session further out than "this calendar week" still lands
   // somewhere the athlete can see it.
   const windowStart = addDays(now, -6);
-  const week: HomeWeekDay[] = Array.from({ length: 14 }, (_, i) => {
+  const week: TodayWeekDay[] = Array.from({ length: 14 }, (_, i) => {
     const date = isoDate(addDays(windowStart, i));
     return {
       date,
@@ -454,7 +454,7 @@ export function buildHome(input: {
 
   // Today first, then the next few days — a short forward-looking preview
   // for the Home card (the full rolling window is "Your week").
-  const week_preview: HomeWeekPreviewDay[] = Array.from({ length: 4 }, (_, i) => {
+  const week_preview: TodayWeekPreviewDay[] = Array.from({ length: 4 }, (_, i) => {
     const date = isoDate(addDays(now, i));
     const sessions = byDate.get(date) ?? [];
     const isRest = restSet.has(date);
@@ -493,6 +493,8 @@ export function buildHome(input: {
     why: null,
     deviation: null,
     basis: null,
+    category: null,
+    pending_recommendation: null,
   };
   const usedTexts = new Set<string>();
   // The briefing's own evidence sentence shouldn't also repeat verbatim in
@@ -528,7 +530,7 @@ export function buildHome(input: {
     week,
     week_preview,
     has_plan: input.weeklyPlan != null,
-    goal_line: goalContext(input.profile.goal, now).phrase,
+    goal_line: goalContext(nearestUpcomingGoal(input.profile.goals, now), now).phrase,
     checkin: { due: todayDue || missedCheckinDate != null, done: checkinDone, today_due: todayDue, missed_date: missedCheckinDate },
     selected: {
       date: selected_date,

@@ -664,3 +664,50 @@ export function deriveInsights(input: InsightInput): Insight[] {
     )
     .slice(0, 8);
 }
+
+// --- "Kona learned" — show the consequence, not a track record (M27) ------
+//
+// Deliberately NOT "Kona's calls have been landing" (a self-graded track
+// record — reads as the app reviewing itself). Instead: the specific,
+// evidenced thing that changed — "extra fluid helped" — same discipline as
+// every other insight here (a real count, an honest minimum, no invented
+// certainty). Reads `RecoveryLog.followed_category`/`followed_outcome`,
+// recorded directly by the check-in (checkin.ts), not re-parsed from prose.
+
+const LEARNED_MIN = 2;
+
+const LEARNED_PHRASE: Record<SessionFlagCategory, (better: number, total: number) => string> = {
+  thirst: (n, m) => `Extra fluid seems to help — based on ${n} of your last ${m} check-ins after a hot or long session.`,
+  gi: (n, m) => `A lighter pre-session meal seems to help — based on ${n} of your last ${m} check-ins.`,
+  cramp: (n, m) => `Watching sodium and easing the early pace seems to help — based on ${n} of your last ${m} check-ins.`,
+  trouble: (n, m) => `Easing into a session when it's not feeling right seems to help — based on ${n} of your last ${m} check-ins.`,
+  stopped_early: (n, m) => `Easing into a session when it's not feeling right seems to help — based on ${n} of your last ${m} check-ins.`,
+};
+
+export interface LearnedInsight {
+  category: SessionFlagCategory;
+  /** How many of the category's followed-it check-ins came back "better". */
+  count: number;
+  text: string;
+}
+
+/** One entry per advice category with >= {@link LEARNED_MIN} "followed it,
+ *  felt better" check-ins — the permanent "what Kona has learned" list
+ *  (Rhythm tab). `submitCheckin` (lib/kona-server.ts) diffs this before vs.
+ *  after saving a check-in to detect the exact moment a category first
+ *  crosses the threshold, for the one-time Today toast. */
+export function learnedCategoryInsights(recoveryLogs: RecoveryLog[]): LearnedInsight[] {
+  const better = new Map<SessionFlagCategory, number>();
+  const total = new Map<SessionFlagCategory, number>();
+  for (const log of recoveryLogs) {
+    const cat = log.followed_category as SessionFlagCategory | undefined;
+    if (!cat || !(cat in LEARNED_PHRASE)) continue;
+    total.set(cat, (total.get(cat) ?? 0) + 1);
+    if (log.followed_outcome === 'better') better.set(cat, (better.get(cat) ?? 0) + 1);
+  }
+  const out: LearnedInsight[] = [];
+  for (const [category, count] of better) {
+    if (count >= LEARNED_MIN) out.push({ category, count, text: LEARNED_PHRASE[category](count, total.get(category) ?? count) });
+  }
+  return out;
+}

@@ -144,6 +144,9 @@ function rowToRecoveryLog(r: Row): RecoveryLog {
     overall_severity: (r.overall_severity as RecoveryLog['overall_severity']) ?? undefined,
     reported_symptoms: (r.reported_symptoms as string[] | null) ?? undefined,
     sleep_quality: (r.sleep_quality as RecoveryLog['sleep_quality']) ?? undefined,
+    mood: (r.mood as RecoveryLog['mood']) ?? undefined,
+    followed_category: (r.followed_category as string | null) ?? undefined,
+    followed_outcome: (r.followed_outcome as RecoveryLog['followed_outcome']) ?? undefined,
   }) as RecoveryLog;
 }
 
@@ -196,7 +199,7 @@ export class SupabaseRepository implements Repository {
     return clean({
       user_id: data.user_id,
       username: data.username ?? undefined,
-      goal: data.goal ?? undefined,
+      goals: data.goals ?? undefined,
       gender: data.gender ?? undefined,
       age: data.age ?? undefined,
       body_weight_kg: data.body_weight_kg ?? undefined,
@@ -214,7 +217,7 @@ export class SupabaseRepository implements Repository {
     const row = {
       user_id: profile.user_id,
       username: profile.username ?? null,
-      goal: profile.goal ?? null,
+      goals: profile.goals ?? null,
       gender: profile.gender ?? null,
       age: profile.age ?? null,
       body_weight_kg: profile.body_weight_kg ?? null,
@@ -429,6 +432,9 @@ export class SupabaseRepository implements Repository {
       overall_severity: input.overall_severity ?? null,
       reported_symptoms: input.reported_symptoms ?? null,
       sleep_quality: input.sleep_quality ?? null,
+      mood: input.mood ?? null,
+      followed_category: input.followed_category ?? null,
+      followed_outcome: input.followed_outcome ?? null,
       origin_message_id: input.origin_message_id ?? null,
       logged_at: new Date().toISOString(),
     };

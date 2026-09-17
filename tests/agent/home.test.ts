@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHome, type KonaBriefing } from '../../src/agent/index';
+import { buildToday, type KonaBriefing } from '../../src/agent/index';
 import { dayTitle, titleFor } from '../../src/agent/home';
 import type { PlannedSession, Profile, RecoveryLog, WeeklyPlan } from '../../src/domain/types';
 
@@ -37,9 +37,9 @@ function session(over: Partial<PlannedSession>): PlannedSession {
     ...over,
   };
 }
-describe('buildHome', () => {
+describe('buildToday', () => {
   it('lays out a rolling 14-day window (today - 6 .. today + 7), today marked and default-selected', () => {
-    const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
+    const h = buildToday({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
     // NOW is Wed 2026-09-09, so the window runs Thu 09-03 .. Wed 09-16.
     expect(h.week.map((d) => d.date)).toEqual([
       '2026-09-03',
@@ -67,7 +67,7 @@ describe('buildHome', () => {
   });
 
   it('YOUR DAY: an easy session reads plainly, no numbers, nothing to prepare', () => {
-    const h = buildHome({
+    const h = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions: [session({ start_at: '2026-09-09T13:00:00', distance_km: 6, time_of_day: 'afternoon' })],
@@ -82,7 +82,7 @@ describe('buildHome', () => {
   });
 
   it('YOUR DAY: a stated distance range shows verbatim, not a fabricated midpoint number', () => {
-    const h = buildHome({
+    const h = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions: [
@@ -101,7 +101,7 @@ describe('buildHome', () => {
   });
 
   it('YOUR DAY: a long session shows the during-session references + post protein', () => {
-    const h = buildHome({
+    const h = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions: [session({ start_at: '2026-09-09T06:00:00', distance_km: 18, is_long: true })],
@@ -116,17 +116,17 @@ describe('buildHome', () => {
   });
 
   it('YOUR DAY: a rest day and an unplanned day read honestly', () => {
-    const rest = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW, selectedDate: '2026-09-07' });
+    const rest = buildToday({ profile, weeklyPlan: plan(), sessions: [], now: NOW, selectedDate: '2026-09-07' });
     expect(rest.briefing.your_day.headline).toBe('Rest day');
     expect(rest.briefing.your_day.fuelling).toBeNull();
 
-    const noPlan = buildHome({ profile, sessions: [], now: NOW });
+    const noPlan = buildToday({ profile, sessions: [], now: NOW });
     expect(noPlan.briefing.your_day.headline).toMatch(/no plan/i);
     expect(noPlan.briefing.your_day.line).toMatch(/bring your training plan/i);
   });
 
   it('YOUR DAY: unset details are listed and the line nudges to chat', () => {
-    const h = buildHome({
+    const h = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions: [
@@ -139,7 +139,7 @@ describe('buildHome', () => {
     expect(h.briefing.your_day.line).toMatch(/sort it in chat/i);
   });
 
-  it('KONA BRIEFING: buildHome threads a caller-computed briefing through untouched (M24/M25.1 — buildKonaBriefing owns the judgment, see briefing.test.ts)', () => {
+  it('KONA BRIEFING: buildToday threads a caller-computed briefing through untouched (M24/M25.1 — buildKonaBriefing owns the judgment, see briefing.test.ts)', () => {
     const briefing: KonaBriefing = {
       when: 'Tomorrow',
       date: '2026-09-10',
@@ -149,19 +149,21 @@ describe('buildHome', () => {
       why: 'Last time you did a similar long ride, you said: "got very thirsty".',
       deviation: null,
       basis: 'reported',
+      category: 'thirst',
+      pending_recommendation: null,
     };
-    const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW, konaBriefing: briefing });
+    const h = buildToday({ profile, weeklyPlan: plan(), sessions: [], now: NOW, konaBriefing: briefing });
     expect(h.briefing.kona_briefing).toEqual(briefing);
   });
 
   it('KONA BRIEFING defaults to an honest "nothing special" state when the caller omits it', () => {
-    const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
+    const h = buildToday({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
     expect(h.briefing.kona_briefing.session_label).toBeNull();
     expect(h.briefing.kona_briefing.action).toMatch(/nothing special/i);
   });
 
   it('KONA REMEMBERS surfaces a recurring-symptom fact, and is empty with no history', () => {
-    const withHistory = buildHome({
+    const withHistory = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions: [],
@@ -173,14 +175,14 @@ describe('buildHome', () => {
     });
     expect(withHistory.briefing.remembers.some((t) => /calf/i.test(t))).toBe(true);
 
-    const empty = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
+    const empty = buildToday({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
     expect(empty.briefing.remembers).toEqual([]);
   });
 
   it('does not repeat the Kona Briefing\'s own evidence sentence inside KONA REMEMBERS', () => {
     // A recurring-symptom fact Kona would otherwise surface under "remembers" —
-    // reused here as the briefing's own "why", to prove buildHome excludes it.
-    const h = buildHome({
+    // reused here as the briefing's own "why", to prove buildToday excludes it.
+    const h = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions: [],
@@ -198,6 +200,8 @@ describe('buildHome', () => {
         why: "You've noted calf 2 times — most recently 5 Sep. Kona doesn't diagnose; this is just a flag.",
         deviation: null,
         basis: 'reported',
+        category: null,
+        pending_recommendation: null,
       },
     });
     // Without the dedup, this exact text would also appear under "remembers".
@@ -205,33 +209,33 @@ describe('buildHome', () => {
   });
 
   it('ignores a malformed selectedDate and falls back to today', () => {
-    const h = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW, selectedDate: 'garbage' });
+    const h = buildToday({ profile, weeklyPlan: plan(), sessions: [], now: NOW, selectedDate: 'garbage' });
     expect(h.selected_date).toBe('2026-09-09');
   });
 
   it('surfaces a goal_line when the goal has a (parseable) date, null otherwise', () => {
-    const withDate = buildHome({
-      profile: { ...profile, goal: { text: 'Chicago Marathon on 2026-10-11' } },
+    const withDate = buildToday({
+      profile: { ...profile, goals: [{ text: 'Chicago Marathon on 2026-10-11' }] },
       weeklyPlan: plan(),
       sessions: [],
       now: NOW,
     });
     expect(withDate.goal_line).toMatch(/weeks to your Chicago Marathon/i);
 
-    const noDate = buildHome({
-      profile: { ...profile, goal: { text: 'Stay consistent' } },
+    const noDate = buildToday({
+      profile: { ...profile, goals: [{ text: 'Stay consistent' }] },
       weeklyPlan: plan(),
       sessions: [],
       now: NOW,
     });
     expect(noDate.goal_line).toBeNull();
 
-    const noGoal = buildHome({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
+    const noGoal = buildToday({ profile, weeklyPlan: plan(), sessions: [], now: NOW });
     expect(noGoal.goal_line).toBeNull();
   });
 
   it('the session title carries the time of day and the morning pre-fuel note folds into the line', () => {
-    const h = buildHome({
+    const h = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions: [session({ start_at: '2026-09-09T07:00:00', distance_km: 6, time_of_day: 'morning' })],
@@ -249,15 +253,15 @@ describe('buildHome', () => {
       sessions: [session({ start_at: '2026-09-09T07:00:00', distance_km: 6, time_of_day: 'morning' })],
       now: NOW,
     };
-    expect(buildHome(withSession).checkin).toEqual({ due: true, done: false, today_due: true, missed_date: null });
-    expect(buildHome({ ...withSession, checkinDoneToday: true }).checkin).toEqual({
+    expect(buildToday(withSession).checkin).toEqual({ due: true, done: false, today_due: true, missed_date: null });
+    expect(buildToday({ ...withSession, checkinDoneToday: true }).checkin).toEqual({
       due: false,
       done: true,
       today_due: false,
       missed_date: null,
     });
 
-    const restToday = buildHome({
+    const restToday = buildToday({
       profile,
       weeklyPlan: { ...plan(), rest_days: ['2026-09-09'] },
       sessions: [],
@@ -272,12 +276,12 @@ describe('buildHome', () => {
       session({ start_at: '2026-09-09T07:00:00' }), // Wed (today) — its own due/today_due path, not "missed"
     ];
 
-    const noCheckins = buildHome({ profile, weeklyPlan: plan(), sessions, now: NOW });
+    const noCheckins = buildToday({ profile, weeklyPlan: plan(), sessions, now: NOW });
     expect(noCheckins.checkin.missed_date).toBe('2026-09-08');
     expect(noCheckins.checkin.due).toBe(true);
 
     // Tuesday gets a recovery log (in the athlete's local day) -> no longer missed.
-    const resolved = buildHome({
+    const resolved = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions,
@@ -289,7 +293,7 @@ describe('buildHome', () => {
   });
 
   it('week_preview starts with today and carries real per-day titles', () => {
-    const h = buildHome({
+    const h = buildToday({
       profile,
       weeklyPlan: plan(),
       sessions: [

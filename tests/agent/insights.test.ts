@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveInsights, recentSessionRead, similarSessionFlag, type InsightInput } from '../../src/agent/index';
+import { deriveInsights, learnedCategoryInsights, recentSessionRead, similarSessionFlag, type InsightInput } from '../../src/agent/index';
 import type { ActualSession, FuelLog, PersistedMemory, RecoveryLog } from '../../src/domain/types';
 
 let n = 0;
@@ -271,5 +271,42 @@ describe('recentSessionRead (M25.1 — the most recent session within a lookback
     const read = recentSessionRead(TODAY, 2, { actualSessions: sessions, recoveryLogs: [] });
     expect(read?.date).toBe('2026-09-13');
     expect(read?.outcome).toBeNull(); // the more recent one has no trouble signal
+  });
+});
+
+describe('learnedCategoryInsights (M27) — "Kona learned: X", not a self-graded track record', () => {
+  function followed(category: string, outcome: 'better' | 'worse' | 'same'): RecoveryLog {
+    return recovery({ followed_category: category, followed_outcome: outcome });
+  }
+
+  it('needs at least 2 "better" outcomes for the same category before saying anything', () => {
+    expect(learnedCategoryInsights([followed('thirst', 'better')])).toEqual([]);
+    const two = learnedCategoryInsights([followed('thirst', 'better'), followed('thirst', 'better')]);
+    expect(two).toHaveLength(1);
+    expect(two[0]!.category).toBe('thirst');
+    expect(two[0]!.text).toMatch(/extra fluid/i);
+  });
+
+  it('"worse"/"same" outcomes count toward the total shown but never toward the "better" count', () => {
+    const logs = [followed('cramp', 'better'), followed('cramp', 'better'), followed('cramp', 'worse')];
+    const out = learnedCategoryInsights(logs);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.count).toBe(2);
+    expect(out[0]!.text).toMatch(/based on 2 of your last 3/i);
+  });
+
+  it('categories are tracked independently', () => {
+    const logs = [
+      followed('thirst', 'better'),
+      followed('thirst', 'better'),
+      followed('gi', 'better'), // only 1 — not enough yet
+    ];
+    const out = learnedCategoryInsights(logs);
+    expect(out.map((l) => l.category)).toEqual(['thirst']);
+  });
+
+  it('logs with no followed_category (an ordinary check-in) are ignored, not miscounted', () => {
+    const logs = [recovery({ free_text: 'felt fine' }), followed('thirst', 'better'), followed('thirst', 'better')];
+    expect(learnedCategoryInsights(logs)).toHaveLength(1);
   });
 });

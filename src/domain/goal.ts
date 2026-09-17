@@ -7,6 +7,10 @@ import type { TrainingGoal } from './types';
  * ready-to-show line ("11 weeks to your first Olympic-distance triathlon").
  */
 
+/** An athlete can track a race plus a couple of secondary aims — not a full
+ *  goal-management feature, just enough to stop forcing everything into one. */
+export const MAX_GOALS = 3;
+
 const MONTHS = [
   'january',
   'february',
@@ -143,4 +147,16 @@ export function goalContext(goal: TrainingGoal | undefined, now: Date = new Date
   }
 
   return { text: goal.text, event_date, days_until, weeks_until, phrase, short_text, countdown };
+}
+
+/** The goal to lead with when only one can be named (e.g. Chat's taper chip) —
+ *  whichever has the soonest future event date, or the first goal when none
+ *  are dated. Undefined when there are no goals at all. */
+export function nearestUpcomingGoal(goals: TrainingGoal[] | undefined, now: Date = new Date()): TrainingGoal | undefined {
+  if (!goals?.length) return undefined;
+  const dated = goals
+    .map((g) => ({ goal: g, ctx: goalContext(g, now) }))
+    .filter((x) => x.ctx.days_until !== null && x.ctx.days_until >= 0)
+    .sort((a, b) => a.ctx.days_until! - b.ctx.days_until!);
+  return dated[0]?.goal ?? goals[0];
 }

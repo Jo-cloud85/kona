@@ -2,31 +2,28 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Workspace from './Workspace';
-import HomeTab from './HomeTab';
-import KnowsView from './KnowsView';
+import TodayTab from './TodayTab';
 import ProfileOverlay from './ProfileOverlay';
 import type { ProfileValues } from './ProfileForm';
 import WeekView from './WeekView';
-import YouTab from './YouTab';
+import RhythmTab from './RhythmTab';
 
-// M26 (Direction B): five persistent tabs, matching the mockup's own stated
-// intent verbatim — "A fifth bottom-nav item, level with Home, Chat, Week
-// and Memory. This is the athlete's identity, not a settings sub-screen
-// buried behind an avatar tap — Home keeps its own small avatar button,
-// which still opens account settings." So: Home, Chat, Week, Memory
-// ("What Kona knows"), You (progression/identity) — and Profile is
-// deliberately NOT a tab; it's an overlay opened from Home's avatar.
-type Tab = 'home' | 'chat' | 'week' | 'knows' | 'you';
+// M27 ("Kona accompanies me" redesign): four persistent tabs — Today (was
+// Home; the state-driven judgment card, not a pre-workout-only reminder),
+// Chat, Week, Rhythm (merges the old You + Memory tabs — progression AND
+// "what Kona has learned" now read as one screen instead of two). Profile is
+// still deliberately NOT a tab — reached from Today's avatar, as before.
+type Tab = 'today' | 'chat' | 'week' | 'rhythm';
 const TAB_KEY = 'kona.tab';
 
 const NAV: { tab: Tab; label: string; icon: ReactNode }[] = [
   {
-    tab: 'home',
-    label: 'Home',
+    tab: 'today',
+    label: 'Today',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-        <path d="M4 11.5 12 4l8 7.5" />
-        <path d="M6 10.5V20h12v-9.5" />
+        <circle cx="12" cy="12" r="8" />
+        <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
       </svg>
     ),
   },
@@ -52,22 +49,11 @@ const NAV: { tab: Tab; label: string; icon: ReactNode }[] = [
     ),
   },
   {
-    tab: 'knows',
-    label: 'Memory',
+    tab: 'rhythm',
+    label: 'Rhythm',
     icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-        <circle cx="11" cy="13" r="7" />
-        <circle cx="17" cy="7" r="2.2" fill="currentColor" stroke="none" />
-      </svg>
-    ),
-  },
-  {
-    tab: 'you',
-    label: 'You',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-        <circle cx="12" cy="8" r="3.4" />
-        <path d="M5 20c1.2-4 4-6 7-6s5.8 2 7 6" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M2.5 13h4l2.5-7 4 15 2.5-8h6" />
       </svg>
     ),
   },
@@ -80,24 +66,30 @@ export default function AppShell({
   greetingName?: string;
   onProfileChange: (p: ProfileValues) => void;
 }) {
-  const [tab, setTab] = useState<Tab>('home');
+  const [tab, setTab] = useState<Tab>('today');
   const [chatPrefill, setChatPrefill] = useState<string | undefined>(undefined);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileCheckin, setProfileCheckin] = useState<{ label: string; onOpen: () => void } | null>(null);
-  // Bumped on every profile save so Home/You reload (greeting name, goal
-  // line, sports can all change) — see HomeTab/YouTab's `profileVersion` prop.
+  // Bumped on every profile save so Today/Rhythm reload (greeting name, goal
+  // line, sports can all change) — see TodayTab/RhythmTab's `profileVersion` prop.
   const [profileVersion, setProfileVersion] = useState(0);
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(TAB_KEY);
-      // 'profile'/'daily'/'dashboard'/'memory' were bottom-nav tabs at one
-      // point or another pre-M26; land those stale values on Home rather
-      // than a tab that no longer means what it used to. ('memory' was
-      // renamed to 'knows' in this pass — also redirected to Home so it
-      // reloads onto the new tab fresh rather than silently mismatching.)
-      const stale = raw === 'profile' || raw === 'daily' || raw === 'dashboard' || raw === 'memory';
-      const t = stale ? 'home' : (raw as Tab | null);
+      // Every bottom-nav tab name this app has ever used, pre-M27, redirected
+      // to whichever current tab now owns that content — so an existing
+      // alpha tester's localStorage never lands on a dead tab.
+      const REMAP: Record<string, Tab> = {
+        profile: 'today',
+        daily: 'today',
+        dashboard: 'today',
+        home: 'today',
+        memory: 'rhythm',
+        knows: 'rhythm',
+        you: 'rhythm',
+      };
+      const t = (raw && REMAP[raw]) || (raw as Tab | null);
       if (t && NAV.some((n) => n.tab === t)) setTab(t);
     } catch {
       /* ignore */
@@ -130,8 +122,8 @@ export default function AppShell({
   return (
     <div className="app-shell">
       <div className="tab-content" key={tab}>
-        {tab === 'home' && (
-          <HomeTab
+        {tab === 'today' && (
+          <TodayTab
             greetingName={greetingName}
             onOpenChat={openChat}
             onOpenProfile={openProfile}
@@ -146,9 +138,8 @@ export default function AppShell({
             onPrefillConsumed={() => setChatPrefill(undefined)}
           />
         )}
-        {tab === 'week' && <WeekView onOpenChat={openChat} onOpenMemory={() => go('knows')} />}
-        {tab === 'knows' && <KnowsView />}
-        {tab === 'you' && <YouTab profileVersion={profileVersion} />}
+        {tab === 'week' && <WeekView onOpenChat={openChat} onOpenMemory={() => go('rhythm')} />}
+        {tab === 'rhythm' && <RhythmTab profileVersion={profileVersion} />}
       </div>
 
       <ProfileOverlay

@@ -5,7 +5,7 @@ import { validateProfileInput } from '../../src/domain/profile-input';
 const onboarding = {
   username: 'joan',
   usual_sports: ['running', 'swimming'],
-  goal: 'First half-marathon in March',
+  goals: [{ text: 'First half-marathon in March' }],
 };
 
 describe('validateProfileInput', () => {
@@ -16,7 +16,7 @@ describe('validateProfileInput', () => {
     expect(r.data).toMatchObject({
       username: 'joan',
       usual_sports: ['running', 'swimming'],
-      goal: { text: 'First half-marathon in March' },
+      goals: [{ text: 'First half-marathon in March' }],
     });
     // nothing else is required or invented
     expect(r.data.body_weight_kg).toBeUndefined();
@@ -26,7 +26,7 @@ describe('validateProfileInput', () => {
   it('accepts no goal at all', () => {
     const r = validateProfileInput({ username: 'sam', usual_sports: ['cycling'] });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.data.goal).toBeUndefined();
+    if (r.ok) expect(r.data.goals).toBeUndefined();
   });
 
   it('accepts the fuller settings form and trims / normalises', () => {
@@ -51,18 +51,33 @@ describe('validateProfileInput', () => {
     });
   });
 
-  it('omits an empty injury note and an empty goal', () => {
-    const r = validateProfileInput({ ...onboarding, goal: '   ', recent_injuries_note: '   ' });
+  it('omits an empty injury note and drops a goal with blank text', () => {
+    const r = validateProfileInput({ ...onboarding, goals: [{ text: '   ' }], recent_injuries_note: '   ' });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect('recent_injuries_note' in r.data).toBe(false);
-    expect(r.data.goal).toBeUndefined();
+    expect(r.data.goals).toBeUndefined();
   });
 
-  it('accepts a structured goal with an event date', () => {
-    const r = validateProfileInput({ ...onboarding, goal: { text: 'Chicago Marathon', event_date: '2026-10-11' } });
+  it('accepts a structured goal with an explicit event date', () => {
+    const r = validateProfileInput({ ...onboarding, goals: [{ text: 'Chicago Marathon', event_date: '2026-10-11' }] });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.data.goal).toEqual({ text: 'Chicago Marathon', event_date: '2026-10-11' });
+    if (r.ok) expect(r.data.goals).toEqual([{ text: 'Chicago Marathon', event_date: '2026-10-11' }]);
+  });
+
+  it('never infers an event date from free text — only an explicit date is kept (M27.1)', () => {
+    const r = validateProfileInput({ ...onboarding, goals: [{ text: 'Race in 3 weeks' }] });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.goals).toEqual([{ text: 'Race in 3 weeks' }]);
+  });
+
+  it('caps goals at 3', () => {
+    const r = validateProfileInput({
+      ...onboarding,
+      goals: [{ text: 'Goal 1' }, { text: 'Goal 2' }, { text: 'Goal 3' }, { text: 'Goal 4' }],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.goals).toEqual([{ text: 'Goal 1' }, { text: 'Goal 2' }, { text: 'Goal 3' }]);
   });
 
   it.each([

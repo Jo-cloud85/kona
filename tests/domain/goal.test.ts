@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { goalContext, parseGoalDate } from '../../src/domain/goal';
+import { goalContext, nearestUpcomingGoal, parseGoalDate } from '../../src/domain/goal';
 
 const NOW = new Date(2026, 2, 15); // 15 Mar 2026
 
@@ -47,5 +47,28 @@ describe('goalContext', () => {
   });
   it('goes quiet once the event has passed', () => {
     expect(goalContext({ text: 'race', event_date: '2026-03-01' }, NOW).phrase).toBeNull();
+  });
+});
+
+describe('nearestUpcomingGoal (M27.1 — multiple goals)', () => {
+  it('returns undefined with no goals', () => {
+    expect(nearestUpcomingGoal(undefined, NOW)).toBeUndefined();
+    expect(nearestUpcomingGoal([], NOW)).toBeUndefined();
+  });
+  it('picks the soonest future-dated goal among several', () => {
+    const soon = { text: 'Local 10k', event_date: '2026-04-01' };
+    const far = { text: 'Marathon', event_date: '2026-09-20' };
+    const noDate = { text: 'Stay consistent' };
+    expect(nearestUpcomingGoal([far, noDate, soon], NOW)).toBe(soon);
+  });
+  it('ignores a goal whose date has already passed', () => {
+    const past = { text: 'Old race', event_date: '2026-01-01' };
+    const upcoming = { text: 'Next race', event_date: '2026-06-01' };
+    expect(nearestUpcomingGoal([past, upcoming], NOW)).toBe(upcoming);
+  });
+  it('falls back to the first goal when none are dated', () => {
+    const first = { text: 'Stay consistent' };
+    const second = { text: 'Build a base' };
+    expect(nearestUpcomingGoal([first, second], NOW)).toBe(first);
   });
 });

@@ -633,6 +633,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
           ? (args.reported_symptoms as string[])
           : undefined,
         sleep_quality: str(args, 'sleep_quality', false) as 'poor' | 'ok' | 'good' | 'unknown' | undefined,
+        mood: str(args, 'mood', false) as 'low' | 'ok' | 'good' | undefined,
       });
     },
   },
@@ -671,7 +672,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
       const patch: {
         body_weight_kg?: number;
         usual_bottle_ml?: number;
-        goal?: { text: string; event_date?: string };
+        goals?: { text: string; event_date?: string }[];
       } = {};
 
       const w = num(args, 'body_weight_kg');
@@ -687,15 +688,19 @@ export const TOOLS: Record<string, ToolDefinition> = {
       const goalText = str(args, 'goal_text', false);
       const goalDate = str(args, 'goal_event_date', false);
       if (goalText || goalDate) {
-        const text = goalText?.slice(0, 200) ?? profile.goal?.text;
+        // Chat only ever edits the primary (first) goal — adding a second or
+        // third goal is a settings-form action (up to 3, see ProfileForm).
+        const existingGoals = profile.goals ?? [];
+        const primary = existingGoals[0];
+        const text = goalText?.slice(0, 200) ?? primary?.text;
         if (!text) throw new ToolError('goal_event_date needs an existing goal or goal_text');
         const goal: { text: string; event_date?: string } = { text };
-        const date = goalDate ?? profile.goal?.event_date;
+        const date = goalDate ?? primary?.event_date;
         if (date) {
           if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ToolError('goal_event_date must be YYYY-MM-DD');
           goal.event_date = date;
         }
-        patch.goal = goal;
+        patch.goals = [goal, ...existingGoals.slice(1)];
       }
       if (Object.keys(patch).length === 0) {
         throw new ToolError('save_profile_fact needs body_weight_kg, usual_bottle_ml, or goal_text/goal_event_date');
@@ -901,6 +906,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       overall_severity: { type: 'string', enum: ['none', 'low', 'moderate', 'high'] },
       reported_symptoms: { type: 'array', items: { type: 'string' } },
       sleep_quality: { type: 'string', enum: ['poor', 'ok', 'good', 'unknown'] },
+      mood: { type: 'string', enum: ['low', 'ok', 'good'] },
       session_id: { type: 'string' },
     },
     required: ['free_text'],

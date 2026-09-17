@@ -54,16 +54,14 @@ describe('save_profile_fact — contextual profile facts', () => {
       { goal_text: 'Berlin Marathon', goal_event_date: '2026-09-20' },
       { repo, userId: DEMO_USER_ID },
     );
-    expect((await repo.getProfile(DEMO_USER_ID))?.goal).toEqual({
-      text: 'Berlin Marathon',
-      event_date: '2026-09-20',
-    });
+    expect((await repo.getProfile(DEMO_USER_ID))?.goals).toEqual([
+      { text: 'Berlin Marathon', event_date: '2026-09-20' },
+    ]);
 
     // a later date-only update keeps the existing goal text
     await runTool('save_profile_fact', { goal_event_date: '2026-09-27' }, { repo, userId: DEMO_USER_ID });
-    expect((await repo.getProfile(DEMO_USER_ID))?.goal).toEqual({
-      text: 'Berlin Marathon',
-      event_date: '2026-09-27',
-    });
+    expect((await repo.getProfile(DEMO_USER_ID))?.goals).toEqual([
+      { text: 'Berlin Marathon', event_date: '2026-09-27' },
+    ]);
   });
 });

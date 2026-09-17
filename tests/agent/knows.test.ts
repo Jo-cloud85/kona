@@ -6,7 +6,7 @@ const profile: Profile = {
   user_id: 'u',
   username: 'Joan',
   usual_sports: ['running', 'cycling'],
-  goal: { text: 'First Olympic-distance triathlon in June' },
+  goals: [{ text: 'First Olympic-distance triathlon in June' }],
   onboarded_at: '2026-08-01T00:00:00Z',
 };
 
@@ -41,7 +41,7 @@ function actual(over: Partial<ActualSession>): ActualSession {
 describe('buildKnows', () => {
   it('is empty and honest when there is nothing on record', () => {
     const k = buildKnows({
-      profile: { ...profile, goal: undefined },
+      profile: { ...profile, goals: undefined },
       memories: [],
       actualSessions: [],
       recoveryLogs: [],
@@ -71,7 +71,7 @@ describe('buildKnows', () => {
 
   it('lists recent training with how it felt, newest first', () => {
     const k = buildKnows({
-      profile: { ...profile, goal: undefined },
+      profile: { ...profile, goals: undefined },
       memories: [],
       actualSessions: [
         actual({ start_at: '2026-09-02T07:00:00', distance_km: 6 }),
@@ -136,7 +136,7 @@ describe('buildKnows', () => {
 
   it('renders the activity timeline (newest first), hiding plan noise, tagging Kona-side steps', () => {
     const k = buildKnows({
-      profile: { ...profile, goal: undefined },
+      profile: { ...profile, goals: undefined },
       memories: [],
       actualSessions: [],
       recoveryLogs: [],
