@@ -1,4 +1,4 @@
-import type { Intensity, MissingDetail, PlannedSession, Sport, TimeOfDay } from '../domain/types';
+import type { ActualSession, Intensity, MissingDetail, PlannedSession, Sport, TimeOfDay } from '../domain/types';
 import { timeOfDayFromHour } from './parse';
 import type { Repository } from '../data/repository';
 import { getProduct, resolveProductByPhrase } from '../data/products';
@@ -142,6 +142,24 @@ function intensity(args: Record<string, unknown>, key: string): Intensity | unde
   if (v === undefined) return undefined;
   if (!INTENSITIES.includes(v as Intensity)) throw new ToolError(`Unknown intensity: ${v}`);
   return v as Intensity;
+}
+
+// Same date/sport is normal (two sessions in a day); this is only true for
+// byte-identical rows, the shape a duplicate save produces (M27 report:
+// "set time_of_day" on an existing actual re-saved instead of updating,
+// since there's no update-in-place tool for actual sessions).
+function isDuplicateActualSession(a: ActualSession, b: ActualSession): boolean {
+  return (
+    a.sport === b.sport &&
+    a.start_at === b.start_at &&
+    a.status === b.status &&
+    a.intensity === b.intensity &&
+    a.duration_minutes === b.duration_minutes &&
+    a.distance_km === b.distance_km &&
+    a.distance_label === b.distance_label &&
+    a.notes === b.notes &&
+    a.time_of_day === b.time_of_day
+  );
 }
 
 function timeOfDay(args: Record<string, unknown>, key: string): TimeOfDay | undefined {
@@ -476,6 +494,11 @@ export const TOOLS: Record<string, ToolDefinition> = {
         distance_km: num(args, 'distance_km'),
         duration_minutes: num(args, 'duration_minutes'),
         intensity: intensity(args, 'intensity') ?? plan?.intensity ?? 'easy',
+        // Inherits the plan's own notes when the athlete didn't give a new
+        // description — a session completed as planned then naturally
+        // shows the same detail on both sides, no need to repeat it
+        // (M27.8; also what save_planned_session's notes already do).
+        notes: str(args, 'notes', false) ?? plan?.notes,
         planned_session_id: plannedId,
         status,
         reason: str(args, 'reason', false),
@@ -505,7 +528,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
 
   delete_actual_session: {
     description:
-      "Remove a logged (actual) session the athlete said was a mistake / to delete — not the same as saving it with a status. Errors if the day/sport doesn't uniquely identify one session.",
+      "Remove a logged (actual) session the athlete said was a mistake / to delete — not the same as saving it with a status. Errors if the day/sport doesn't uniquely identify one session, unless every match is an identical duplicate of the others, in which case one copy is removed.",
     async run(args, ctx) {
       const date = str(args, 'date')!;
       const wantSport = sport(args, 'sport', false);
@@ -513,7 +536,7 @@ export const TOOLS: Record<string, ToolDefinition> = {
         (s) => s.start_at.slice(0, 10) === date && (wantSport ? s.sport === wantSport : true),
       );
       if (matches.length === 0) throw new ToolError('No logged session found for that day/sport to delete.');
-      if (matches.length > 1) {
+      if (matches.length > 1 && !matches.every((m) => isDuplicateActualSession(m, matches[0]!))) {
         throw new ToolError(`${matches.length} logged sessions match that day — name the sport to pick one.`);
       }
       const target = matches[0]!;
@@ -739,7 +762,11 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       },
       duration_minutes: { type: 'number' },
       intensity: { type: 'string', enum: INTENSITY_ENUM },
-      notes: { type: 'string' },
+      notes: {
+        type: 'string',
+        description:
+          'A few words describing what makes this session specific — e.g. "interval", "tempo", "core, upper body". Shown in the title as "<type> - <details>", so keep it to the workout itself, never a comment about how it felt or went.',
+      },
     },
     required: ['sport', 'start_at'],
   },
@@ -779,7 +806,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
                   notes: {
                     type: 'string',
                     description:
-                      'A short (few words) description of what this session actually is, whenever the athlete said more than sport/intensity/duration — e.g. "interval run", "cardio core + lower body strength", "hill repeats". Shown to the athlete as the session title, so keep it brief and in their own words rather than a full sentence.',
+                      'A few words describing what makes this session specific — e.g. "interval", "tempo", "core, upper body", "hill repeats" — whenever the athlete said more than sport/intensity/duration. Shown in the title as "<type> - <details>", so keep it to the workout itself, never a comment about how it felt or went (that belongs in a check-in, not here).',
                   },
                 },
                 required: ['sport'],
@@ -821,7 +848,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       notes: {
         type: 'string',
         description:
-          'A short (few words) description of what the session actually is, when the athlete adds that detail now — e.g. "interval run", "cardio core + lower body strength". Shown as the session title.',
+          'A few words describing what makes the session specific, when the athlete adds that detail now — e.g. "interval", "core, upper body". Shown in the title as "<type> - <details>", so keep it to the workout itself, never a comment about how it felt or went.',
       },
     },
     required: [],
@@ -836,6 +863,11 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       distance_km: { type: 'number' },
       duration_minutes: { type: 'number' },
       intensity: { type: 'string', enum: INTENSITY_ENUM },
+      notes: {
+        type: 'string',
+        description:
+          'A few words describing what makes this session specific — e.g. "interval", "tempo", "core, upper body". Shown in the title as "<type> - <details>", so keep it to the workout itself, never a comment about how it felt or went. Omit when it matches the linked plan — inherited automatically.',
+      },
       reason: { type: 'string', description: "The athlete's stated reason, in their words" },
       planned_session_id: { type: 'string' },
       link_to_plan_date: { type: 'string', description: 'YYYY-MM-DD to link this to an existing plan' },

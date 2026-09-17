@@ -31,16 +31,16 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const SPORT_LABEL: Record<Sport, string> = {
   running: 'run',
-  cycling: 'ride',
+  cycling: 'cycle',
   swimming: 'swim',
-  gym: 'gym',
-  cardio: 'cardio session',
-  crossfit: 'CrossFit session',
+  gym: 'strength',
+  cardio: 'cardio',
+  crossfit: 'CrossFit',
   climbing: 'climb',
   skating: 'skate',
-  combat_sports: 'combat session',
-  hyrox: 'HYROX session',
-  triathlon: 'triathlon session',
+  combat_sports: 'combat',
+  hyrox: 'HYROX',
+  triathlon: 'triathlon',
   other: 'session',
 };
 
@@ -81,14 +81,17 @@ export interface TodayWeekPreviewDay {
   is_double: boolean;
   /** A long/hard/race day worth calling out — see buildDashboard's is_key_day. */
   is_key_day: boolean;
-  title: string | null;
+  /** One line per session (M27.9) — empty array for an open day. */
+  title_lines: string[];
   duration_label: string | null;
 }
 
 export interface TodayBriefing {
   /** "What am I doing today?" + "does it matter?" */
   your_day: {
-    headline: string;
+    /** One line per session (M27.9) — a double/brick day is two short
+     *  lines, never one joined with "and". */
+    headline_lines: string[];
     line: string;
     /** During-/around-session references — present ONLY when the session warrants them. */
     fuelling: {
@@ -99,6 +102,13 @@ export interface TodayBriefing {
     } | null;
     /** Details still missing for the selected day's session(s): e.g. ["effort","time"]. */
     needs: string[];
+    /** What was actually logged for this day, when it differs from the plan
+     *  above (a modified/unplanned session, or something logged on a day
+     *  nothing was planned) — planned vs actual stay separate facts; this
+     *  is a quiet aside, never a rewrite of `headline_lines`. One line per
+     *  actual session (M27.9); empty array when they match or nothing's
+     *  been logged yet. */
+    updated_lines: string[];
   };
   /** "How should you approach the next session?" (M24) — ONE evidence-backed
    *  recommendation for the next genuinely meaningful session, today or ahead.
@@ -176,24 +186,59 @@ export function sportLabel(sport: Sport): string {
   return SPORT_LABEL[sport] ?? 'session';
 }
 
+/** A detail tag longer than this reads as a sentence, not a tag — e.g.
+ *  "easy" or "core, upper body" fit; "easy run after bike, transition can
+ *  feel tiring at start" doesn't. Past this length we show NO detail
+ *  rather than a truncated fragment — a partial sentence ("...transition
+ *  can fee…") is worse than nothing, and there's no reliable way to
+ *  distill an old free-text sentence down to the short tag it should have
+ *  been without guessing at what the athlete meant (M27.9). */
+const DETAIL_MAX = 20;
+
+/** "<workout type> · <details>", e.g. "interval", "core, upper body" — the
+ *  specific short tag that makes this session what it is, never a comment
+ *  about how it went. Notes only (M27.10) — distance/duration already have
+ *  their own dedicated spot (the day's chips/meta), so echoing them again
+ *  here was redundant; a plain "Morning cycle" with no note is the honest
+ *  title when there's nothing more specific to say. Suppresses a note
+ *  that's just the sport's own name again ("Gym" on a gym session) rather
+ *  than showing a redundant "strength · Gym". */
+function detailFor(s: SessionInputCore, label: string): string | null {
+  const note = s.notes?.trim();
+  if (note && note.length <= DETAIL_MAX && note.toLowerCase() !== label.toLowerCase() && note.toLowerCase() !== s.sport) {
+    return note;
+  }
+  return null;
+}
+
+/** "<Time> <workout type> · <details>" — e.g. "Morning run · interval",
+ *  "Morning strength · core, upper body". Deliberately no intensity in the
+ *  title itself (founder direction, M27.8) — it's shown elsewhere (chips,
+ *  the session view) when relevant. The time of day always leads so the
+ *  title reads the same regardless of what detail follows, and stays
+ *  correct automatically if the athlete later changes just the time —
+ *  titleFor is recomputed fresh from the stored fields every time, never
+ *  cached, so this format applies to every existing record too, not just
+ *  new ones. ONE session per call — a multi-session day is a list of these,
+ *  never joined into one line (M27.9, see dayTitleLines). */
 export function titleFor(s: SessionInputCore): string {
   const label = sportLabel(s.sport);
   const when = s.time_of_day ? `${s.time_of_day} ` : '';
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-  // The athlete's own short description of what the session actually is
-  // ("interval run", "cardio core + lower body strength") reads as more
-  // useful than a generic sport label — use it when it's short enough to
-  // read as a title, not a full sentence.
-  const note = s.notes?.trim();
-  // The time of day always leads — "Morning long run", not "Long morning
-  // run" — so it reads the same way regardless of which detail follows it,
-  // and stays correct automatically if the athlete later changes just the
-  // time (titleFor is recomputed fresh from the stored fields, never cached).
-  if (note && note.length <= 60) return cap(`${when}${note}`);
-  if (s.is_long) return cap(`${when}long ${label}`);
-  if (s.distance_label) return cap(`${when}${s.distance_label} ${label}`);
-  if (s.distance_km) return cap(`${when}${s.distance_km} km ${label}`);
-  return cap(`${when}${label}`);
+  const detail = detailFor(s, label);
+  return cap(`${when}${label}${detail ? ` · ${detail}` : ''}`);
+}
+
+/** The "Updated: …" line for a logged actual session — `titleFor` plus the
+ *  real distance as a trailing segment when known (e.g. "Morning run ·
+ *  easy · 9 km"), since an "Updated" line IS specifically the record of
+ *  what physically happened, unlike a plan, where distance already has its
+ *  own chip and doesn't need repeating in the title (M27.10). */
+export function updatedTitleFor(a: ActualSession): string {
+  const base = titleFor(a);
+  if (a.distance_label) return `${base} · ${a.distance_label}`;
+  if (a.distance_km) return `${base} · ${a.distance_km} km`;
+  return base;
 }
 
 export function durationLabel(s: SessionInputCore): string {
@@ -207,16 +252,15 @@ export function durationLabel(s: SessionInputCore): string {
   return 'length not set';
 }
 
-/** A day's title for a week-shaped view (Home's preview, the full "Your week"
- *  page): joined sports for a double day, the single session's title, "Rest",
- *  or null for an open day — nothing told to Kona yet. */
-export function dayTitle(sessions: PlannedSession[], isRest: boolean): string | null {
-  if (sessions.length > 1) {
-    return joinList(sessions.map((s) => titleFor(s)));
-  }
-  if (sessions.length === 1) return titleFor(sessions[0]!);
-  if (isRest) return 'Rest';
-  return null;
+/** A day's title lines for a week-shaped view (Home's preview, the full
+ *  "Your week" page) — ONE line per session, never joined with "and" into
+ *  a single sentence (M27.9, founder direction): a double/brick day is two
+ *  short lines, not one long run-on one. Empty array for an open day —
+ *  nothing told to Kona yet. */
+export function dayTitleLines(sessions: PlannedSession[], isRest: boolean): string[] {
+  if (sessions.length > 0) return sessions.map((s) => titleFor(s));
+  if (isRest) return ['Rest'];
+  return [];
 }
 
 function sessionView(s: PlannedSession): TodaySession {
@@ -290,43 +334,56 @@ interface DashDayLite {
 
 function buildYourDay(opts: {
   sessions: TodaySession[];
+  /** Actual sessions logged for this same date — compared against the plan
+   *  above to surface an "Updated: …" aside when they diverge (M27.4). */
+  actuals: ActualSession[];
   isRest: boolean;
   hasPlan: boolean;
   inPlan: boolean;
   dashDay: DashDayLite | null;
   postProtein: Range;
 }): TodayBriefing['your_day'] {
-  const { sessions, isRest, hasPlan, inPlan, dashDay } = opts;
+  const { sessions, actuals, isRest, hasPlan, inPlan, dashDay } = opts;
+  const actualLines = actuals.map((a) => updatedTitleFor(a));
 
   if (sessions.length === 0) {
     if (isRest) {
-      return { headline: 'Rest day', line: 'Recovery and normal meals. Nothing to prepare.', fuelling: null, needs: [] };
+      return {
+        headline_lines: ['Rest day'],
+        line: 'Recovery and normal meals. Nothing to prepare.',
+        fuelling: null,
+        needs: [],
+        updated_lines: actualLines,
+      };
     }
     if (!hasPlan) {
       return {
-        headline: 'No plan yet',
+        headline_lines: ['No plan yet'],
         line: "Bring your training plan in chat — Kona doesn't sync Strava or Garmin, so tell it in your own words and the day's plan shows up here.",
         fuelling: null,
         needs: [],
+        updated_lines: actualLines,
       };
     }
     if (!inPlan) {
       return {
-        headline: 'Not in your current plan',
+        headline_lines: ['Not in your current plan'],
         line: "This day is outside the week you've told Kona about.",
         fuelling: null,
         needs: [],
+        updated_lines: actualLines,
       };
     }
     return {
-      headline: 'Nothing planned',
+      headline_lines: ['Nothing planned'],
       line: "An open day. If you train, tell Kona and it'll help you prep.",
       fuelling: null,
       needs: [],
+      updated_lines: actualLines,
     };
   }
 
-  const headline = joinList(sessions.map((s) => s.title));
+  const headline_lines = sessions.map((s) => s.title);
   const needs = sessionNeeds(sessions);
   const during =
     dashDay && (dashDay.carb_g_per_hour || dashDay.fluid_ml_per_hour)
@@ -355,7 +412,12 @@ function buildYourDay(opts: {
   if (pre) line += ` ${pre}`;
   if (needs.length) line += ` (Kona still needs the ${joinList(needs)} for this — sort it in chat.)`;
 
-  return { headline, line, fuelling: during, needs };
+  // "Updated" means genuinely off-plan, not just worded differently from the
+  // plan (see week.ts's identical fix, M27.8) — only when a logged actual
+  // didn't complete as planned.
+  const deviated = actuals.some((a) => a.status !== 'completed');
+  const updated_lines = deviated ? actualLines : [];
+  return { headline_lines, line, fuelling: during, needs, updated_lines };
 }
 
 const PREF_KEY = /(^prefers?_|preference|^only_|^no_|^cant_|^cannot_|constraint|fuel|setup)/i;
@@ -466,7 +528,7 @@ export function buildToday(input: {
       is_rest: isRest,
       is_double: sessions.length > 1,
       is_key_day: dashDays.find((d) => d.date === date)?.is_key_day ?? false,
-      title: dayTitle(sessions, isRest),
+      title_lines: dayTitleLines(sessions, isRest),
       duration_label: sessions.length === 1 ? durationLabel(sessions[0]!) : null,
     };
   });
@@ -501,8 +563,10 @@ export function buildToday(input: {
   // "Kona remembers" — same de-dup convention buildNextKey used to follow.
   if (konaBriefing.why) usedTexts.add(konaBriefing.why);
 
+  const selectedActuals = (input.actualSessions ?? []).filter((a) => a.start_at.slice(0, 10) === selected_date);
   const your_day = buildYourDay({
     sessions: selectedSessions,
+    actuals: selectedActuals,
     isRest: restSet.has(selected_date),
     hasPlan: input.weeklyPlan != null,
     inPlan: in_plan,

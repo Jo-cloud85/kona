@@ -1,6 +1,6 @@
 import type { ActualSession, PlannedSession, Profile, Range, WeeklyPlan } from '../domain/types';
 import { buildDashboard } from './dashboard';
-import { addDays, dayOfMonth, dayTitle, durationLabel, isoDate, joinList, mondayOf, weekdayFull, weekdayLabel } from './home';
+import { addDays, dayOfMonth, dayTitleLines, durationLabel, isoDate, mondayOf, updatedTitleFor, weekdayLabel } from './home';
 
 /**
  * "Your week" — the week plan as a page, not a dashboard (product UI pass,
@@ -19,13 +19,18 @@ export interface WeekDayView {
   is_rest: boolean;
   is_key_day: boolean;
   is_double: boolean;
-  /** null when nothing is known about this day yet (outside the stored plan). */
-  title: string | null;
+  /** One line per session (M27.9) — empty array for an open day. */
+  title_lines: string[];
   duration_label: string | null;
   fuelling: { carb_g_per_hour: Range; fluid_ml_per_hour: Range } | null;
   /** true when this day has a logged actual session — the only days with a
    *  post-session recap to open. */
   has_recap: boolean;
+  /** What was actually logged for this day, when it differs from
+   *  `title_lines` (M27.4) — planned vs actual stay separate facts; this is
+   *  a quiet aside under the plan, never a rewrite of it. One line per
+   *  actual session (M27.9); empty array when nothing to show. */
+  updated_lines: string[];
 }
 
 export interface WeekView {
@@ -34,7 +39,6 @@ export interface WeekView {
   session_count: number;
   rest_count: number;
   protein_daily_g: Range | null;
-  key_days_label: string | null;
   days: WeekDayView[];
   footnote: string;
 }
@@ -83,6 +87,13 @@ export function buildWeek(input: {
   const restSet = new Set(input.weeklyPlan?.rest_days ?? []);
   const hasPlan = input.weeklyPlan != null;
   const actualDates = new Set((input.actualSessions ?? []).map((a) => a.start_at.slice(0, 10)));
+  const actualsByDate = new Map<string, ActualSession[]>();
+  for (const a of input.actualSessions ?? []) {
+    const key = a.start_at.slice(0, 10);
+    const bucket = actualsByDate.get(key);
+    if (bucket) bucket.push(a);
+    else actualsByDate.set(key, [a]);
+  }
 
   const days: WeekDayView[] = Array.from({ length: 14 }, (_, i) => {
     const date = isoDate(addDays(windowStart, i));
@@ -90,7 +101,18 @@ export function buildWeek(input: {
     const isRest = restSet.has(date);
     const dashDay = dashByDate.get(date);
 
-    const title = dayTitle(sessions, isRest);
+    const titleLines = dayTitleLines(sessions, isRest);
+    const actuals = actualsByDate.get(date) ?? [];
+    const actualLines = actuals.map((a) => updatedTitleFor(a));
+    // "Updated" means genuinely off-plan, not just worded differently from
+    // the plan — comparing title TEXT flagged nearly every completed-as-
+    // planned session, since the athlete rarely logs it with identical
+    // wording to the plan (founder report, M27.8). Only show it when
+    // either nothing was planned at all, or a logged actual didn't
+    // complete as planned (modified/skipped/stopped_early).
+    const hadPlan = sessions.length > 0;
+    const deviated = actuals.some((a) => a.status !== 'completed');
+    const updatedLines = actualLines.length && (!hadPlan || deviated) ? actualLines : [];
 
     const fuelling =
       dashDay && (dashDay.carb_g_per_hour || dashDay.fluid_ml_per_hour)
@@ -108,15 +130,15 @@ export function buildWeek(input: {
       is_rest: isRest,
       is_key_day: dashDay?.is_key_day ?? false,
       is_double: sessions.length > 1,
-      title,
+      title_lines: titleLines,
       duration_label: sessions.length === 1 ? durationLabel(sessions[0]!) : null,
       fuelling,
       has_recap: actualDates.has(date),
+      updated_lines: updatedLines,
     };
   });
 
   const windowEnd = isoDate(addDays(windowStart, 13));
-  const keyDays = days.filter((d) => d.is_key_day).map((d) => weekdayFull(d.date));
   const inWindow = (dateIso: string) => dateIso >= isoDate(windowStart) && dateIso <= windowEnd;
   const sessionsInWindow = input.sessions.filter((s) => inWindow(s.start_at.slice(0, 10)));
   const hasRecapInWindow = (input.actualSessions ?? []).some((a) => inWindow(a.start_at.slice(0, 10)));
@@ -130,7 +152,6 @@ export function buildWeek(input: {
     session_count: sessionsInWindow.length,
     rest_count: days.filter((d) => d.is_rest).length,
     protein_daily_g: dashboard.baseline.protein_daily_g,
-    key_days_label: keyDays.length ? joinList(keyDays) : null,
     days,
     footnote: 'Ranges are references for the session, not daily totals. Tell Kona in chat if the week changes.',
   };

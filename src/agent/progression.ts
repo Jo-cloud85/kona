@@ -1,4 +1,5 @@
 import type { ActivityEvent, ActualSession, Sport } from '../domain/types';
+import { addDays, isoDate, mondayOf } from './home';
 
 /**
  * "You" screen progression — the Arc/milestone system approved in M26.
@@ -85,9 +86,88 @@ function earliestTriathlonDate(completed: ActualSession[]): string | null {
   return dates[0] ?? null;
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** The calendar month a Monday-start week "belongs to" — the month
+ *  containing that week's Thursday, same ownership convention isoWeekKey
+ *  uses for ISO-year assignment, so a week straddling a month boundary is
+ *  never split or double-counted between two months. */
+function weekOwningMonth(mondayIso: string): string {
+  const [y, m, d] = mondayIso.split('-').map(Number) as [number, number, number];
+  const thursday = addDays(new Date(y, m - 1, d), 3);
+  return `${thursday.getFullYear()}-${String(thursday.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function firstCompletedDateInWeek(completed: ActualSession[], monday: string): string | null {
+  const sunday = isoDate(addDays(new Date(`${monday}T00:00:00`), 6));
+  const dates = completed.map((s) => dateOf(s.start_at)).filter((d) => d >= monday && d <= sunday).sort();
+  return dates[0] ?? null;
+}
+
+/** "Missing" one week out of a month's is still a consistent month — the
+ *  odd sick day or travel week shouldn't reset the whole thing. */
+const CONSISTENT_MONTH_MISS_ALLOWANCE = 1;
+
+/** One "Consistent: <Month> <Year>" milestone per calendar month the
+ *  athlete has any training history in — not a one-time "first", a
+ *  recurring one (founder direction, M27.6), so there's always something
+ *  new to earn once the one-time firsts are all done. Qualifies when all
+ *  but at most one Monday-start week owned by that month had a completed
+ *  session. Flips to achieved live, mid-month, the moment the bar is
+ *  cleared — same as every other milestone here, never held back until
+ *  the month closes. */
+function computeConsistentMonths(actualSessions: ActualSession[], now: Date): Milestone[] {
+  const completed = actualSessions.filter((s) => s.status === 'completed');
+  if (completed.length === 0) return [];
+
+  const trainedMondays = new Set(completed.map((s) => isoDate(mondayOf(new Date(`${dateOf(s.start_at)}T00:00:00`)))));
+  const earliestMonday = [...trainedMondays].sort()[0]!;
+  const currentMonday = isoDate(mondayOf(now));
+
+  const mondaysByMonth = new Map<string, string[]>();
+  for (let d = earliestMonday; d <= currentMonday; d = isoDate(addDays(new Date(`${d}T00:00:00`), 7))) {
+    const monthKey = weekOwningMonth(d);
+    const list = mondaysByMonth.get(monthKey);
+    if (list) list.push(d);
+    else mondaysByMonth.set(monthKey, [d]);
+  }
+
+  const results: Milestone[] = [];
+  for (const [monthKey, mondays] of [...mondaysByMonth.entries()].sort()) {
+    const required = mondays.length - CONSISTENT_MONTH_MISS_ALLOWANCE;
+    if (required < 1) continue; // too small a sliver of a month (grid's earliest edge) to fairly judge
+
+    let trainedCount = 0;
+    let clinchedMonday: string | null = null;
+    for (const monday of mondays) {
+      if (trainedMondays.has(monday)) {
+        trainedCount++;
+        if (trainedCount >= required) {
+          clinchedMonday = monday;
+          break;
+        }
+      }
+    }
+
+    const [y, m] = monthKey.split('-').map(Number) as [number, number];
+    const date = clinchedMonday ? firstCompletedDateInWeek(completed, clinchedMonday) : null;
+    results.push({
+      id: `consistent_month_${monthKey}`,
+      title: `Consistent: ${MONTH_NAMES[m - 1]} ${y}`,
+      sport: null,
+      achieved: date != null,
+      date,
+    });
+  }
+  return results;
+}
+
 /** Earliest qualifying ActualSession per milestone shape, over the athlete's
  *  full history. Extensible, not exhaustive — this is a first, small set. */
-export function computeMilestones(actualSessions: ActualSession[]): Milestone[] {
+export function computeMilestones(actualSessions: ActualSession[], now: Date = new Date()): Milestone[] {
   const completed = actualSessions.filter((s) => s.status === 'completed');
 
   const runMilestones = RUN_MILESTONES.map((def) => {
@@ -99,6 +179,7 @@ export function computeMilestones(actualSessions: ActualSession[]): Milestone[] 
   return [
     ...runMilestones,
     { id: 'first_triathlon', title: 'First triathlon', sport: 'triathlon' as Sport, achieved: triDate != null, date: triDate },
+    ...computeConsistentMonths(actualSessions, now),
   ];
 }
 

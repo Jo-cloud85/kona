@@ -334,7 +334,7 @@ h3 {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: calc(20px + env(safe-area-inset-top)) 32px 14px;
+  padding: calc(40px + env(safe-area-inset-top)) 32px 14px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -442,7 +442,12 @@ h3 {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 12px 32px calc(14px + env(safe-area-inset-bottom));
+  /* Was 14px + env(safe-area-inset-bottom) — but .bottom-nav sits right
+     below this, at the TRUE bottom edge, and already adds that same inset
+     itself. Stacking both doubled up into a much bigger gap than intended
+     (founder report, M27.4) — this isn't the screen's bottom edge, so it
+     doesn't need the inset at all. */
+  padding: 12px 32px 10px;
   border-top: 1px solid var(--border);
   background: var(--bg);
 }
@@ -455,10 +460,15 @@ h3 {
   padding: 12px 18px;
   font: inherit;
   font-size: 13.5px;
+  line-height: 1.4;
   background: var(--panel);
   color: var(--text);
   min-height: 46px;
-  max-height: 140px;
+  /* ~4 lines (line-height 1.4 * 13.5px * 4) + vertical padding — grows
+     upward as you type (JS sets height from scrollHeight, see Chat.tsx),
+     then scrolls internally past this. */
+  max-height: 100px;
+  overflow-y: auto;
 }
 
 .composer textarea:focus {
@@ -501,7 +511,7 @@ h3 {
 .landing {
   max-width: 520px;
   margin: 0 auto;
-  padding: calc(40px + env(safe-area-inset-top)) 20px 8px;
+  padding: calc(80px + env(safe-area-inset-top)) 20px 8px;
   text-align: center;
 }
 
@@ -916,6 +926,10 @@ button.cta:disabled {
     bottom: 0;
     left: 0;
     z-index: 20;
+    /* Fixed to the true viewport top on mobile — needs its own safe-area
+       clearance (notch/Dynamic Island) or "+ New chat" sits under it,
+       unreachable (founder report on iPhone, M27.4). */
+    padding-top: env(safe-area-inset-top);
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.45);
@@ -1261,7 +1275,7 @@ button.cta:disabled {
 .home {
   max-width: 680px;
   margin: 0 auto;
-  padding: calc(20px + env(safe-area-inset-top)) 32px 32px;
+  padding: calc(40px + env(safe-area-inset-top)) 32px 32px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1644,7 +1658,9 @@ button.cta:disabled {
   z-index: 40;
   background: var(--bg-gradient), var(--bg);
   overflow-y: auto;
-  padding: 16px 0 32px;
+  /* Was a flat 16px — sat under the notch/Dynamic Island with no way to
+     reach the close button (founder report on iPhone, M27.4). */
+  padding: calc(32px + env(safe-area-inset-top)) 0 32px;
 }
 
 /* A screen opened from inside another overlay (Memory from Profile, a
@@ -1890,13 +1906,15 @@ button.cta:disabled {
 .choice-pair-row {
   display: flex;
   gap: 12px;
+  /* Same 16px every other field group uses (.dialog .field) — was 0, which
+     is why Sleep/Mood sat flush against Elaborate right below it (founder
+     report, M27.5). One rule on the row itself, not a "+" adjacency case,
+     so it's consistent regardless of what follows. */
+  margin-bottom: 16px;
 }
 .choice-pair-row .field {
   flex: 1;
   margin-bottom: 0;
-}
-.choice-pair-row + .choice-pair-row {
-  margin-top: 16px;
 }
 
 .dialog textarea {
@@ -2026,7 +2044,7 @@ button.cta:disabled {
 .knows {
   max-width: 680px;
   margin: 0 auto;
-  padding: calc(20px + env(safe-area-inset-top)) 32px 32px;
+  padding: calc(40px + env(safe-area-inset-top)) 32px 32px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -2236,6 +2254,12 @@ button.cta:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+/* "Updated: …" (M27.4/M27.6) — what was actually logged, in white so it
+   reads as a fact worth noticing, not a quiet muted aside. */
+.kona-deviation.is-updated {
+  color: var(--text);
+}
+
 .kona-call-label {
   margin: 4px 0 -4px;
   font-size: 10.5px;
@@ -2413,14 +2437,17 @@ button.cta:disabled {
 
 /* ---- "Your week" (UI pass, 2026-09) -------------------------------- */
 
-/* No left/right/top padding of its own — it's always nested inside the
-   shared `.home` wrapper (WeekView.tsx), which already supplies that
-   offset. It used to duplicate it (an extra 16px/8px on top of `.home`'s),
-   which pushed the day-cards out of alignment with the "Week" title above
-   them. */
+/* No left/right/top padding, max-width, or auto-margins of its own — it's
+   always nested inside the shared `.home` wrapper (WeekView.tsx), which
+   already supplies that offset and centering. It used to duplicate both
+   (an extra 16px/8px of padding, plus its own max-width/margin:auto left
+   over from when `.week` was the outer element), which first pushed the
+   day-cards out of alignment with the "Week" title above them, and then —
+   once the padding duplication was fixed — left `max-width`+`margin:auto`
+   behind; since `.home` is a column flex container, those auto margins
+   override stretch and shrink `.week` to its content width, re-opening the
+   same misalignment from the other side (founder report, 2026-09-18). */
 .week {
-  max-width: 680px;
-  margin: 0 auto;
   padding: 0 0 32px;
   display: flex;
   flex-direction: column;
@@ -2457,25 +2484,6 @@ button.cta:disabled {
   padding: 7px 13px;
   border-radius: 999px;
   white-space: nowrap;
-}
-
-.week-keydays {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.week-keydays-label {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.week-keydays-value {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 750;
 }
 
 .week-days {
@@ -2522,8 +2530,21 @@ button.cta:disabled {
 }
 
 .week-day-title {
+  display: block;
   font-size: 15px;
   font-weight: 500;
+}
+
+/* What was actually logged, when it differs from the plan above (M27.4) —
+   planned vs actual stay separate facts, so this is a quiet aside under
+   the plan, never a replacement for it. White (M27.6), not accent-colored,
+   for consistency with the same "Updated:" line on Today's own card. */
+.week-day-updated {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .week-day-open {
@@ -2580,9 +2601,17 @@ button.cta:disabled {
   color: var(--accent);
 }
 
-/* A key/double/hard day — just the label tint + the orange "Key"/"Double"
-   badge; no card background (per founder review — a tinted background on
-   every key day competed with Today's). */
+/* A key/double/hard day — translucent orange background (M27.6; an earlier
+   pass dropped this to avoid competing with Today's highlight, but Today
+   now uses blue-violet, a different hue family, so the two no longer
+   clash) + the orange "Key"/"Double" badge. Gradient leads with the light
+   orange end, not the dark red end, so it reads orange, not red (founder
+   review, M27.7). */
+.week-day.is-key:not(.is-today) {
+  background: linear-gradient(135deg, rgba(255, 154, 68, 0.18), rgba(246, 43, 10, 0.1));
+  border: 1px solid rgba(255, 154, 68, 0.45);
+  border-radius: 20px;
+}
 .week-day.is-key:not(.is-today) .week-day-dow {
   color: #ffb877;
 }
@@ -2639,24 +2668,71 @@ button.cta:disabled {
   gap: 14px;
 }
 
+/* Visible date range for the leftmost (current) column — the grid used to
+   only carry dates in a hover-only title attribute, undiscoverable on
+   mobile, which read as "misaligned" with Week's own date range (M27.8:
+   the two are intentionally different windows — see rhythm.ts). */
+.rhythm-range {
+  margin: -8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* No card chrome around the grid itself (founder review, M27.2) — it sits
    directly on the page background; the reading (headline) is its own card
-   further down. */
+   further down. A horizontally-scrollable row of week-columns (M27.5),
+   this week first (leftmost), running forward — dates run forward left to
+   right (founder direction, 2026-09-18), matching Week's own date range.
+   buildConsistencyDays (src/agent/rhythm.ts) anchors the whole window at
+   the current week, so column 0 is always "this week" with no extra
+   scroll handling needed on load; weeks ahead are reached by scrolling
+   right. Each column is 7 fixed-size dots, Monday at the top
+   (buildConsistencyDays aligns the data to Monday so row position is
+   consistent down every column). */
 .rhythm-grid {
-  display: grid;
-  grid-template-columns: repeat(24, 1fr);
-  grid-template-rows: repeat(7, 1fr);
-  grid-auto-flow: column;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 2px;
+  margin: 0 -2px;
+  scrollbar-width: none;
+  /* A vertical swipe here should pan the grid, not the page behind it —
+     without this the browser's gesture heuristic often picks the page's
+     own vertical scroll instead, reading as "scrolling doesn't work"
+     (founder report, 2026-09-18). overscroll-behavior-x stops a scroll
+     that hits either edge from chaining into the page too. */
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  /* The scrollbar is hidden (below) and RhythmTab.tsx adds click-drag
+     scrolling for mouse users, since that's their only way in without a
+     trackpad — the grab cursor is what tells them it's draggable. */
+  cursor: grab;
+}
+.rhythm-grid:active {
+  cursor: grabbing;
+}
+.rhythm-grid::-webkit-scrollbar {
+  display: none;
+}
+.rhythm-week-col {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-/* Four states, not a plain trained/not (M27.1 — see buildConsistencyDays,
+/* Five states, not a plain trained/not (see buildConsistencyDays,
    src/agent/rhythm.ts, for exactly what each means). Gradient fills, not
-   flat colors (M27.3 — flat read as missing the app's gradient language) —
-   the founder's blue-violet pair (dark #3B33C7, light #7C8CF0), distinct
-   from the brighter --grad-recovery now used for buttons/pills. */
+   flat colors (M27.3 — flat read as missing the app's gradient language).
+   Blue-violet (dark #3B33C7, light #7C8CF0) for moderate/easy effort,
+   orange-red (var(--grad-performance)) for the two "worth a second look"
+   states — off_plan translucent, hard solid, so they read as a pair but
+   stay distinguishable (M27.5). */
 .rhythm-dot {
-  aspect-ratio: 1;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: transparent;
   border: 1px dashed var(--border);
@@ -2666,11 +2742,16 @@ button.cta:disabled {
   opacity: 0.45;
   border: none;
 }
-.rhythm-dot.normal {
+.rhythm-dot.moderate {
   background: linear-gradient(135deg, #3b33c7, #7c8cf0);
   border: none;
 }
-.rhythm-dot.flag {
+.rhythm-dot.off_plan {
+  background: var(--grad-performance);
+  opacity: 0.45;
+  border: none;
+}
+.rhythm-dot.hard {
   background: var(--grad-performance);
   border: none;
 }
@@ -2693,7 +2774,6 @@ button.cta:disabled {
 .rhythm-legend-item .rhythm-dot {
   width: 11px;
   height: 11px;
-  flex-shrink: 0;
 }
 
 /* Goal — an actual tinted/bordered card (Performance Orange), not just

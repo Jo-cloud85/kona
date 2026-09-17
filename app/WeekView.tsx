@@ -17,10 +17,11 @@ interface WeekDay {
   is_rest: boolean;
   is_key_day: boolean;
   is_double: boolean;
-  title: string | null;
+  title_lines: string[];
   duration_label: string | null;
   fuelling: { carb_g_per_hour: Range; fluid_ml_per_hour: Range } | null;
   has_recap: boolean;
+  updated_lines: string[];
 }
 interface WeekViewData {
   has_plan: boolean;
@@ -28,7 +29,6 @@ interface WeekViewData {
   session_count: number;
   rest_count: number;
   protein_daily_g: Range | null;
-  key_days_label: string | null;
   days: WeekDay[];
   footnote: string;
 }
@@ -93,13 +93,6 @@ export default function WeekView({
               )}
             </header>
 
-            {data.key_days_label && (
-              <div className="week-keydays">
-                <p className="week-keydays-label">Key days</p>
-                <p className="week-keydays-value">{data.key_days_label}</p>
-              </div>
-            )}
-
             <div className="week-days">
               {data.days.map((d) => (
                 <div
@@ -114,13 +107,24 @@ export default function WeekView({
                         }
                       : undefined
                   }
-                  className={`week-day${d.is_today ? ' is-today' : ''}${!d.is_today && (d.is_key_day || d.is_double) ? ' is-key' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title ? ' is-open' : ''}${d.has_recap ? ' is-tappable' : ''}`}
+                  className={`week-day${d.is_today ? ' is-today' : ''}${!d.is_today && (d.is_key_day || d.is_double) ? ' is-key' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title_lines.length ? ' is-open' : ''}${d.has_recap ? ' is-tappable' : ''}`}
                 >
                   <span className="week-day-dow">{d.weekday}</span>
                   <div className="week-day-main">
-                    <span className="week-day-title">
-                      {d.title ?? <span className="week-day-open">Nothing planned</span>}
-                    </span>
+                    {d.title_lines.length ? (
+                      d.title_lines.map((line, i) => (
+                        <span key={i} className="week-day-title">
+                          {line}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="week-day-title week-day-open">Nothing planned</span>
+                    )}
+                    {d.updated_lines.map((line, i) => (
+                      <span key={i} className="week-day-updated">
+                        Updated: {line}
+                      </span>
+                    ))}
                     {d.fuelling && (
                       <div className="week-day-chips">
                         <span className="week-day-chip">{rangeText(d.fuelling.carb_g_per_hour)} g carbs/hr</span>

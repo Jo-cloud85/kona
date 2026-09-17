@@ -46,17 +46,25 @@ export async function POST(req: Request): Promise<Response> {
   const category =
     followed_recommendation === true && typeof b.category === 'string' && b.category ? b.category : undefined;
 
-  const result = await submitCheckin(c.ctx, {
-    legs: legs as 'fresh' | 'normal' | 'heavy',
-    went_as_planned: b.went_as_planned,
-    pains: b.pains,
-    sleep_quality,
-    mood,
-    elaborate,
-    followed_recommendation,
-    recommendation_outcome,
-    category,
-  });
-  if (!result) return Response.json({ error: 'Finish onboarding first.' }, { status: 409 });
-  return Response.json(result);
+  try {
+    const result = await submitCheckin(c.ctx, {
+      legs: legs as 'fresh' | 'normal' | 'heavy',
+      went_as_planned: b.went_as_planned,
+      pains: b.pains,
+      sleep_quality,
+      mood,
+      elaborate,
+      followed_recommendation,
+      recommendation_outcome,
+      category,
+    });
+    if (!result) return Response.json({ error: 'Finish onboarding first.' }, { status: 409 });
+    return Response.json(result);
+  } catch (err) {
+    // An uncaught throw here (e.g. a DB error) was reaching the client as a
+    // non-JSON 500 page, which res.json() then failed to parse — surfacing
+    // as a generic, unhelpful "Network error" (founder report, M27.4).
+    console.error('kona checkin error', err);
+    return Response.json({ error: 'Could not save that check-in — try again.' }, { status: 500 });
+  }
 }

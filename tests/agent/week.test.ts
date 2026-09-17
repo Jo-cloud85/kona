@@ -56,7 +56,7 @@ describe('buildWeek', () => {
       now: NOW,
     });
     expect(w.has_plan).toBe(true);
-    expect(w.days.find((d) => d.date === '2026-09-09')?.title).toContain('run');
+    expect(w.days.find((d) => d.date === '2026-09-09')?.title_lines.join(' ')).toMatch(/run/i);
   });
 
   it('is false (empty state) when there is truly nothing in the window', () => {
@@ -80,6 +80,64 @@ describe('buildWeek', () => {
     expect(w.days.find((d) => d.date === '2026-09-09')?.has_recap).toBe(true);
   });
 
+  it('shows "Updated: …" when what was actually logged differs from the plan (M27.4)', () => {
+    const planned = session({ start_at: '2026-09-09T06:00:00', notes: '15km long run' });
+    const actual: ActualSession = {
+      id: 'a1',
+      user_id: 'user_demo',
+      kind: 'actual',
+      sport: 'running',
+      intensity: 'easy',
+      notes: '9km easy run',
+      start_at: '2026-09-09T06:00:00',
+      status: 'modified',
+      created_at: '2026-09-09T19:00:00Z',
+    };
+    const w = buildWeek({ profile, weeklyPlan: plan(), sessions: [planned], actualSessions: [actual], now: NOW });
+    const day = w.days.find((d) => d.date === '2026-09-09');
+    expect(day!.title_lines.join(' ')).toMatch(/15km long run/i);
+    expect(day!.updated_lines.join(' ')).toMatch(/9km easy run/i);
+  });
+
+  it('leaves updated_lines empty when the actual completed as planned, even if worded differently (M27.8)', () => {
+    // Regression: comparing TEXT flagged almost every completed session as
+    // "updated", since the athlete rarely logs it with identical wording to
+    // the plan — "Gym" vs. "Morning cardio core and lower body strength" is
+    // the same session, just described tersely. Only status should matter.
+    const planned = session({ start_at: '2026-09-09T06:00:00', notes: 'cardio core and lower body strength' });
+    const actual: ActualSession = {
+      id: 'a1',
+      user_id: 'user_demo',
+      kind: 'actual',
+      sport: 'gym',
+      intensity: 'moderate',
+      notes: 'Gym',
+      start_at: '2026-09-09T06:00:00',
+      status: 'completed',
+      created_at: '2026-09-09T19:00:00Z',
+    };
+    const w = buildWeek({ profile, weeklyPlan: plan(), sessions: [planned], actualSessions: [actual], now: NOW });
+    expect(w.days.find((d) => d.date === '2026-09-09')?.updated_lines).toEqual([]);
+  });
+
+  it('shows "Updated: …" for an unplanned session logged on an otherwise open day', () => {
+    const actual: ActualSession = {
+      id: 'a1',
+      user_id: 'user_demo',
+      kind: 'actual',
+      sport: 'cycling',
+      intensity: 'easy',
+      notes: 'easy spin',
+      start_at: '2026-09-10T06:00:00',
+      status: 'completed',
+      created_at: '2026-09-10T19:00:00Z',
+    };
+    const w = buildWeek({ profile, weeklyPlan: plan(), sessions: [], actualSessions: [actual], now: NOW });
+    const day = w.days.find((d) => d.date === '2026-09-10');
+    expect(day!.title_lines).toEqual([]);
+    expect(day!.updated_lines.join(' ')).toMatch(/easy spin/i);
+  });
+
   it('session_count only counts sessions inside the displayed window, not every session ever saved', () => {
     const w = buildWeek({
       profile,
@@ -101,6 +159,6 @@ describe('buildWeek', () => {
       now: NOW,
     });
     const day = w.days.find((d) => d.date === '2026-09-15');
-    expect(day?.title).toContain('run');
+    expect(day?.title_lines.join(' ')).toMatch(/run/i);
   });
 });

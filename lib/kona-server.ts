@@ -307,16 +307,21 @@ export async function getRhythm(ctx: KonaContext, tz: string = DEFAULT_TZ): Prom
   ]);
   const now = athleteNow(tz);
   const arc = computeArcProgress({ actualSessions, activityEvents: events, now });
-  const milestones = computeMilestones(actualSessions);
+  const milestones = computeMilestones(actualSessions, now);
   const goals = (profile.goals ?? []).map((g) => {
     const gc = goalContext(g, now);
     return { name: gc.short_text ?? g.text, countdown: gc.countdown };
   });
 
-  const painDates = new Set(
-    recoveryLogs.filter((l) => (l.reported_symptoms?.length ?? 0) > 0).map((l) => localDateOf(l.logged_at, tz)),
+  // A check-in alone (M27.8) — pain/injury reported, or the athlete
+  // explicitly said the day didn't go as planned — flags the day even when
+  // nothing was separately logged as an ActualSession that date.
+  const offPlanDates = new Set(
+    recoveryLogs
+      .filter((l) => (l.reported_symptoms?.length ?? 0) > 0 || l.went_as_planned === false)
+      .map((l) => localDateOf(l.logged_at, tz)),
   );
-  const consistencyDays = buildConsistencyDays(actualSessions, painDates, now);
+  const consistencyDays = buildConsistencyDays(actualSessions, offPlanDates, now);
   const recentHard = recentHardSessions(actualSessions, ymdLocal(now), CLUSTER_WINDOW_DAYS);
   const consistency = { days: consistencyDays, ...describeConsistency(recentHard, ymdLocal(now)) };
 
@@ -403,6 +408,7 @@ export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Prom
     mood: log.mood,
     followed_category: log.followed_category,
     followed_outcome: log.followed_outcome,
+    went_as_planned: log.went_as_planned,
   });
   await ctx.repo.appendActivityEvent({
     user_id: ctx.userId,

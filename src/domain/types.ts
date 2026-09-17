@@ -255,6 +255,13 @@ export interface RecoveryLog {
    *  without re-parsing free_text. */
   followed_category?: string;
   followed_outcome?: 'better' | 'worse' | 'same';
+  /** The check-in's own "did today go as planned?" answer, as a structured
+   *  field (M27.8) — previously only folded into `free_text` prose, which
+   *  meant a day with a check-in but no separately-logged ActualSession had
+   *  no queryable "this was off-plan" signal at all (Rhythm's grid showed
+   *  it as empty/nothing-happened, which was wrong when the athlete had in
+   *  fact checked in and said it didn't go as planned). */
+  went_as_planned?: boolean;
 }
 
 // ---------------------------------------------------------------------------

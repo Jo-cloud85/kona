@@ -36,7 +36,7 @@ interface TodayWeekPreviewDay {
   is_rest: boolean;
   is_double: boolean;
   is_key_day: boolean;
-  title: string | null;
+  title_lines: string[];
   duration_label: string | null;
 }
 export interface PendingRecommendation {
@@ -79,7 +79,7 @@ interface TodayView {
   };
   briefing: {
     your_day: {
-      headline: string;
+      headline_lines: string[];
       line: string;
       fuelling: {
         carb_g_per_hour: Range;
@@ -88,6 +88,7 @@ interface TodayView {
         post_session_protein_g: Range | null;
       } | null;
       needs: string[];
+      updated_lines: string[];
     };
     kona_briefing: KonaBriefing;
     remembers: string[];
@@ -415,8 +416,17 @@ export default function TodayTab({
       {/* YOUR DAY */}
       <section className="home-card brief-card">
         <p className="brief-label">{dayLabel}</p>
-        <p className="brief-headline">{yd.headline}</p>
+        {yd.headline_lines.map((line, i) => (
+          <p key={i} className="brief-headline">
+            {line}
+          </p>
+        ))}
         <p className="brief-line">{yd.line}</p>
+        {yd.updated_lines.map((line, i) => (
+          <p key={i} className="kona-deviation is-updated">
+            Updated: {line}
+          </p>
+        ))}
 
         {yd.fuelling && (
           <div className="fuel-grid brief-fuel">
@@ -468,11 +478,19 @@ export default function TodayTab({
           {data.week_preview.map((d) => (
             <div
               key={d.date}
-              className={`week-day${d.is_today ? ' is-today' : ''}${!d.is_today && (d.is_key_day || d.is_double) ? ' is-key' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title ? ' is-open' : ''}`}
+              className={`week-day${d.is_today ? ' is-today' : ''}${!d.is_today && (d.is_key_day || d.is_double) ? ' is-key' : ''}${d.is_rest ? ' is-rest' : ''}${!d.title_lines.length ? ' is-open' : ''}`}
             >
               <span className="week-day-dow">{d.weekday}</span>
               <div className="week-day-main">
-                <span className="week-day-title">{d.title ?? <span className="week-day-open">Nothing planned</span>}</span>
+                {d.title_lines.length ? (
+                  d.title_lines.map((line, i) => (
+                    <span key={i} className="week-day-title">
+                      {line}
+                    </span>
+                  ))
+                ) : (
+                  <span className="week-day-title week-day-open">Nothing planned</span>
+                )}
               </div>
               {d.is_today && <span className="week-day-badge">Today</span>}
               {!d.is_today && (d.is_key_day || d.is_double) && (

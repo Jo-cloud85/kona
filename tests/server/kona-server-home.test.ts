@@ -70,7 +70,7 @@ describe('standalone planned sessions (no weekly_plan_id) reach Home/Week/starte
 
     const week = await getWeek(ctx);
     const day = week?.days.find((d) => d.date === start_at.slice(0, 10));
-    expect(day?.title).toMatch(/run/i);
+    expect(day?.title_lines.join(' ')).toMatch(/run/i);
   });
 
   it('getStarter still resolves when a standalone session exists with no weekly plan', async () => {
@@ -102,8 +102,8 @@ describe('a stated distance range reaches Home verbatim (save_planned_session to
     expect(result.ok).toBe(true);
 
     const home = await getToday(ctx, start_at.slice(0, 10));
-    expect(home!.briefing.your_day.headline).toContain('13-14km');
-    expect(home!.briefing.your_day.headline).not.toContain('13.5');
+    expect(home!.selected.sessions[0]!.duration_label).toBe('13-14km');
+    expect(home!.selected.sessions[0]!.duration_label).not.toContain('13.5');
   });
 });
 
@@ -133,7 +133,7 @@ describe('save_planned_session edits an existing standalone session instead of d
 
     const home = await getToday(ctx, start_at.slice(0, 10));
     expect(home!.selected.sessions).toHaveLength(1);
-    expect(home!.briefing.your_day.headline).toContain('13-14km');
+    expect(home!.selected.sessions[0]!.duration_label).toBe('13-14km');
   });
 
   it('a different sport on the same date is still a separate session (double-session day)', async () => {

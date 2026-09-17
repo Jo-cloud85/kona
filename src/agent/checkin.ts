@@ -44,6 +44,7 @@ export interface CheckinLog {
   mood?: 'low' | 'ok' | 'good';
   followed_category?: string;
   followed_outcome?: 'better' | 'worse' | 'same';
+  went_as_planned: boolean;
 }
 
 const SEVERITY_ORDER: RecoverySeverity[] = ['none', 'low', 'moderate', 'high'];
@@ -101,6 +102,7 @@ export function buildCheckinLog(input: CheckinInput): CheckinLog {
   return {
     free_text,
     overall_severity: severity,
+    went_as_planned: input.went_as_planned,
     ...(symptoms.length ? { reported_symptoms: symptoms } : {}),
     ...(input.sleep_quality ? { sleep_quality: input.sleep_quality } : {}),
     ...(input.mood ? { mood: input.mood } : {}),

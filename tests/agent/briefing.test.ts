@@ -155,7 +155,7 @@ describe('buildKonaBriefing — tier 1: a recent bad outcome, and today trains (
     expect(b.when).toBe('Today');
     expect(b.headline).toMatch(/keep today easy/i);
     expect(b.why).toContain('Yesterday');
-    expect(b.why).toContain('ride'); // sportLabel(cycling) => "ride"
+    expect(b.why).toContain('cycle'); // sportLabel(cycling) => "cycle"
     expect(b.basis).toBe('reported');
     expect(b.deviation).toEqual({ planned: '40 km', actual: '22 km', reason: 'legs felt heavy' });
   });

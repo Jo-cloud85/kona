@@ -55,6 +55,7 @@ export interface NewRecoveryLog {
   mood?: RecoveryLog['mood'];
   followed_category?: RecoveryLog['followed_category'];
   followed_outcome?: RecoveryLog['followed_outcome'];
+  went_as_planned?: RecoveryLog['went_as_planned'];
   origin_message_id?: string;
 }
 

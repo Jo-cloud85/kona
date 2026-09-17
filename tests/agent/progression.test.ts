@@ -83,6 +83,58 @@ describe('computeMilestones', () => {
   });
 });
 
+describe('computeMilestones — "Consistent month" (M27.6, recurring, live mid-month)', () => {
+  // September 2026: Mondays 08-31, 09-07, 09-14, 09-21 all own September
+  // (each Monday's Thursday falls in September); 09-28 owns October instead
+  // (its Thursday, 10-01, falls in October) — so September has 4 owned
+  // weeks and needs 3 trained (miss-allowance 1) to qualify.
+  const NOW_MID_SEPT = new Date(2026, 8, 23, 9, 0, 0); // Wed 23 Sep 2026
+
+  it('qualifies live, mid-month, the moment the 3rd of 4 owned weeks trains — does not wait for the month to close', () => {
+    const sessions = [
+      actual({ start_at: '2026-08-31T07:00:00' }),
+      actual({ start_at: '2026-09-08T07:00:00' }),
+      actual({ start_at: '2026-09-15T07:00:00' }), // 3rd trained week — clinches it
+      // 09-21 week deliberately left untrained — still mid-week, not over yet
+    ];
+    const out = computeMilestones(sessions, NOW_MID_SEPT);
+    const sept = out.find((m) => m.id === 'consistent_month_2026-09')!;
+    expect(sept.title).toBe('Consistent: September 2026');
+    expect(sept.achieved).toBe(true);
+    expect(sept.date).toBe('2026-09-15'); // the day it was actually clinched, not month-end
+  });
+
+  it('does not qualify with only 2 of 4 owned weeks trained', () => {
+    const sessions = [actual({ start_at: '2026-08-31T07:00:00' }), actual({ start_at: '2026-09-08T07:00:00' })];
+    const out = computeMilestones(sessions, new Date(2026, 9, 15)); // well past September
+    const sept = out.find((m) => m.id === 'consistent_month_2026-09')!;
+    expect(sept.achieved).toBe(false);
+    expect(sept.date).toBeNull();
+  });
+
+  it('is a recurring milestone, not a one-time first — separate months each get their own entry', () => {
+    const sessions = [
+      actual({ start_at: '2026-08-31T07:00:00' }),
+      actual({ start_at: '2026-09-08T07:00:00' }),
+      actual({ start_at: '2026-09-15T07:00:00' }),
+      // October 2026 owns 5 Mondays (09-28, 10-05, 10-12, 10-19, 10-26), so
+      // needs 4 trained (miss-allowance 1) — train all but 10-26's week.
+      actual({ start_at: '2026-09-28T07:00:00' }),
+      actual({ start_at: '2026-10-05T07:00:00' }),
+      actual({ start_at: '2026-10-12T07:00:00' }),
+      actual({ start_at: '2026-10-19T07:00:00' }),
+    ];
+    const out = computeMilestones(sessions, new Date(2026, 10, 20));
+    expect(out.find((m) => m.id === 'consistent_month_2026-09')!.achieved).toBe(true);
+    expect(out.find((m) => m.id === 'consistent_month_2026-10')!.achieved).toBe(true);
+  });
+
+  it('produces no "Consistent month" entries with no training history at all', () => {
+    const out = computeMilestones([], NOW_MID_SEPT);
+    expect(out.some((m) => m.id.startsWith('consistent_month_'))).toBe(false);
+  });
+});
+
 describe('computeArcProgress', () => {
   it('zero history — Foundation, all metrics 0', () => {
     const out = computeArcProgress({ actualSessions: [], activityEvents: [] });

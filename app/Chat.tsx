@@ -97,6 +97,16 @@ export default function Chat({
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' });
   }, [entries, busy, prompts]);
 
+  // Grows the composer upward as the draft wraps onto more lines — CSS
+  // max-height caps it at ~4 lines, after which it scrolls internally
+  // instead of growing further.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
+
   const send = useCallback(
     async (text?: string, opts?: { editId?: string }) => {
       const message = (text ?? draft).trim();
