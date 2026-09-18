@@ -1,11 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createSupabaseBrowserClient } from '../../lib/supabase/client';
+import Landing from '../Landing';
 
 const CONFIGURED = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const SEEN_LANDING_KEY = 'kona_seen_landing';
 
 export default function LoginPage() {
+  // Shown once per browser to anyone who isn't signed in — including right
+  // after Sign Out, which is the only place a real user reaches this page.
+  // `null` until the localStorage check resolves on mount (avoids an SSR/
+  // client hydration mismatch); resolving to `false` reveals the carousel,
+  // `true` skips straight to the sign-in form below.
+  const [seenLanding, setSeenLanding] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!CONFIGURED) return;
+    try {
+      setSeenLanding(localStorage.getItem(SEEN_LANDING_KEY) === '1');
+    } catch {
+      setSeenLanding(true);
+    }
+  }, []);
+
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
@@ -26,6 +43,22 @@ export default function LoginPage() {
       </div>
     );
   }
+
+  if (seenLanding === false) {
+    return (
+      <Landing
+        onContinue={() => {
+          try {
+            localStorage.setItem(SEEN_LANDING_KEY, '1');
+          } catch {
+            /* ignore */
+          }
+          setSeenLanding(true);
+        }}
+      />
+    );
+  }
+  if (seenLanding === null) return null;
 
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();

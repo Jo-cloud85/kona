@@ -16,8 +16,8 @@ export function TriangleMark(): ReactElement {
           <stop offset="1" stopColor="#f62b0a" />
         </linearGradient>
         <linearGradient id="rec" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#11970c" />
-          <stop offset="1" stopColor="#7cff3b" />
+          <stop offset="0" stopColor="#5b4fe8" />
+          <stop offset="1" stopColor="#9c6bff" />
         </linearGradient>
         <linearGradient id="vital" x1="0" y1="1" x2="1" y2="0">
           <stop offset="0" stopColor="#6388d1" />

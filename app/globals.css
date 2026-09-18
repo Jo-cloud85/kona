@@ -2620,3 +2620,232 @@ button.cta:disabled {
   color: var(--muted);
   margin-top: 3px;
 }
+
+/* ---- Pre-onboarding Landing carousel (design handoff) ------------------ */
+
+.lc-screen {
+  min-height: 100dvh;
+  max-width: 520px;
+  margin: 0 auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.lc-skip {
+  position: absolute;
+  top: calc(20px + env(safe-area-inset-top));
+  right: 24px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lc-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: calc(72px + env(safe-area-inset-top)) 28px 16px;
+}
+
+.lc-hero {
+  margin: 0 auto;
+  text-align: center;
+  max-width: 320px;
+}
+
+.lc-mark {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 20px;
+}
+
+.lc-hero h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+
+.lc-tagline {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.lc-blurb {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.lc-content {
+  width: 100%;
+}
+
+.lc-eyebrow {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lc-h1 {
+  margin: 0 0 22px;
+  font-size: 25px;
+  line-height: 1.25;
+}
+
+.lc-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.lc-row-accent {
+  background: var(--panel-kona);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+}
+
+.lc-row-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.lc-row-accent .lc-row-num {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: #fff;
+}
+
+.lc-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lc-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 15px;
+}
+
+.lc-card-accent {
+  background: var(--panel-kona);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.lc-card-label {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lc-card-body {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.lc-trust-body {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.lc-foot {
+  flex-shrink: 0;
+  padding: 0 24px calc(36px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lc-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.lc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.lc-dot.on {
+  width: 18px;
+  background: var(--accent);
+}
+
+.lc-next {
+  border: 0;
+  border-radius: 999px;
+  width: 48px;
+  height: 48px;
+  background: var(--grad-recovery);
+  color: var(--accent-text);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lc-cta {
+  width: 100%;
+}
+
+@keyframes lc-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lc-si {
+  opacity: 0;
+  animation: lc-slide-in 0.5s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-si {
+    animation: none;
+    opacity: 1;
+  }
+}
