@@ -32,6 +32,30 @@
   --grad-recovery: linear-gradient(135deg, #5b4fe8, #9c6bff);
   --grad-vital: linear-gradient(135deg, #6388d1, #ff4bd8);
   --font-sans: 'Helvetica Neue', Helvetica, Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Design tokens (added alongside the M28 nav/check-in work) — additive
+     only: nothing existing has been retrofitted to use these, so this
+     carries zero visual-regression risk. New CSS should pull from this
+     scale instead of inventing new px values; existing rules get migrated
+     opportunistically, only when a screen is already being touched for
+     another reason — never as its own pass. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
 }
 
 * {
@@ -133,20 +157,26 @@ h3 {
   max-width: 420px;
 }
 
+/* M28: icon + label, stacked — icon-only nav made every tab a memorization
+   exercise (a 2x2 grid read as "apps", not "Week"). Sized to the same
+   icon:label:padding ratios as Airbnb's tab bar (24px icon, ~11px medium
+   label, ~3px gap) rather than shrinking to fit — Kona only has 4 tabs
+   against Airbnb's 5, so there's more room per tab here, not less; matching
+   the ratio (not just copying absolute sizes) is what keeps 4 stacked items
+   in ~94px each from reading as cluttered as 5 in less space would. */
 .nav-item {
   flex: 1;
   border: 0;
   background: none;
   color: var(--muted);
   font: inherit;
-  font-weight: 700;
-  font-size: 13px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 8px 6px;
-  border-radius: 999px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
+  border-radius: var(--radius-md);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.15s ease, color 0.15s ease;
@@ -157,14 +187,20 @@ h3 {
 }
 
 .nav-item svg {
-  width: 21px;
-  height: 21px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
 }
 
-/* Matches the mockup exactly: the active tab is a subtle glass highlight
-   with the icon switching outline -> filled and accent-colored — no label
-   text appears (labels stay display:none in both states). */
+.nav-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+/* Active tab: subtle glass highlight, icon switches outline -> filled, both
+   icon and label pick up the accent color via currentColor. */
 .nav-item.on {
   background: rgba(255, 255, 255, 0.08);
   color: var(--accent);
@@ -1550,6 +1586,59 @@ button.cta:disabled {
   }
 }
 
+/* M28: check-in's step header — back arrow, a segmented progress bar
+   (Instagram-Stories style, one segment per step), and close. Replaces the
+   old single "Later" ghost button that used to sit at the bottom of a
+   six-field form. */
+.checkin-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.checkin-back,
+.checkin-close {
+  width: 36px;
+  height: 36px;
+}
+
+/* A hidden back button on step 0 still needs to reserve its slot so the
+   progress bar doesn't jump sideways on the very next step. */
+.checkin-back[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+.checkin-progress {
+  flex: 1;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.checkin-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+
+.checkin-seg.done {
+  background: var(--accent);
+}
+
+.checkin-skip {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: var(--space-2) 0 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .dialog h2 {
   margin: 0 0 4px;
   font-size: 20px;
@@ -1601,20 +1690,6 @@ button.cta:disabled {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent);
-}
-
-.choice-pair-row {
-  display: flex;
-  gap: 12px;
-  /* Same 16px every other field group uses (.dialog .field) — was 0, which
-     is why Sleep/Mood sat flush against Elaborate right below it (founder
-     report, M27.5). One rule on the row itself, not a "+" adjacency case,
-     so it's consistent regardless of what follows. */
-  margin-bottom: 16px;
-}
-.choice-pair-row .field {
-  flex: 1;
-  margin-bottom: 0;
 }
 
 .dialog textarea {

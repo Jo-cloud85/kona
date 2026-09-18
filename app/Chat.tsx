@@ -72,6 +72,14 @@ export default function Chat({
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  // Was missing entirely: the fetch below always resolves to a starter (a
+  // profile always produces one — buildStarter has no empty case), so the
+  // `.empty` block below was never a real empty state, only a loading flash
+  // shown on every first-visit-this-session. Tracking `historyLoaded`
+  // replaces that flash with the same typing indicator already used
+  // elsewhere in this thread, instead of a plain instructional sentence
+  // that looked like unfinished content.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -81,6 +89,7 @@ export default function Chat({
     setPrompts([]);
     setPicks({});
     setEditingId(null);
+    setHistoryLoaded(false);
     fetch(`/api/chat?conversationId=${encodeURIComponent(conversationId)}`, { headers: tzHeaders() })
       .then((r) => r.json())
       .then((data: { messages?: ChatEntry[]; starter?: Starter | null }) => {
@@ -90,7 +99,8 @@ export default function Chat({
           setStarter(data.starter);
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setHistoryLoaded(true));
   }, [conversationId]);
 
   useEffect(() => {
@@ -269,7 +279,17 @@ export default function Chat({
       </header>
 
       <div className="thread" ref={threadRef}>
-        {entries.length === 0 && !starter && (
+        {entries.length === 0 && !starter && !historyLoaded && (
+          <div className="row assistant">
+            <div className="bubble typing" aria-label="Loading">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        )}
+
+        {entries.length === 0 && !starter && historyLoaded && (
           <div className="empty">
             Tell Kona about a session, e.g. <code>Tomorrow I&apos;m doing an 18km run at 6am.</code>
           </div>

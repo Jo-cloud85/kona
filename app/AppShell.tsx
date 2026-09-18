@@ -62,11 +62,17 @@ const NAV: { tab: Tab; label: string; icon: ReactNode }[] = [
 export default function AppShell({
   greetingName,
   onProfileChange,
+  initialTab,
 }: {
   greetingName?: string;
   onProfileChange: (p: ProfileValues) => void;
+  /** Set only right after onboarding finishes, to land on Chat instead of
+   *  the default Today — see HomeGate. When set, the saved-tab restore
+   *  below is skipped so a brand-new profile can't get overridden by a
+   *  stale localStorage value from a previous account on the same device. */
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>('today');
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'today');
   // Every tab the athlete has switched to this session, so its component
   // mounts once (lazily, on first visit) and then stays mounted — see the
   // `.tab-pane` rendering below. Avoids the old key={tab} full unmount/
@@ -81,6 +87,7 @@ export default function AppShell({
   const [profileVersion, setProfileVersion] = useState(0);
 
   useEffect(() => {
+    if (initialTab) return; // fresh onboarding already picked the right tab
     try {
       const raw = window.localStorage.getItem(TAB_KEY);
       // Every bottom-nav tab name this app has ever used, pre-M27, redirected
@@ -187,6 +194,7 @@ export default function AppShell({
               onClick={() => go(n.tab)}
             >
               {n.icon}
+              <span className="nav-label">{n.label}</span>
             </button>
           ))}
         </div>
