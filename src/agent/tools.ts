@@ -750,7 +750,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
       time_of_day: {
         type: 'string',
         enum: TIME_OF_DAY_ENUM,
-        description: 'morning / afternoon / evening / night. Derived from start_at if omitted.',
+        description: 'Derived from start_at if omitted.',
       },
       distance_km: {
         type: 'number',
@@ -801,7 +801,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
                   },
                   duration_minutes: { type: 'number' },
                   intensity: { type: 'string', enum: INTENSITY_ENUM },
-                  time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening / night.' },
+                  time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM },
                   is_long: { type: 'boolean', description: 'The athlete called it a "long" session.' },
                   notes: {
                     type: 'string',
@@ -844,7 +844,7 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
         type: 'string',
         description: 'Only when distance_km alone would misrepresent what they said (a range like "13-14 km", "~10k"). Their own words, shown instead of the number.',
       },
-      time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM, description: 'morning / afternoon / evening / night.' },
+      time_of_day: { type: 'string', enum: TIME_OF_DAY_ENUM },
       notes: {
         type: 'string',
         description:

@@ -69,6 +69,8 @@ Run tests after meaningful changes.
 
 For UI changes, run the app and manually verify the primary flow where browser tooling is available.
 
+When the founder gives visual/UX feedback, prefer collecting it into one batched pass over several small items rather than shipping and re-verifying after each individual tweak — each round re-pays the cost of loading context and re-running browser verification. Same-day iterative pixel-fixing passes are sometimes the right call (a live, fast feedback loop has real value), but default to batching when the items are independent and none is blocking.
+
 ## State tracking
 Maintain `progress.md` with:
 - current milestone

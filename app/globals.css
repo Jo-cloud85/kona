@@ -34,21 +34,6 @@
   --font-sans: 'Helvetica Neue', Helvetica, Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* Frosted-glass utility for new (M26) markup. Existing panel-background
-   selectors get the blur applied directly below, section by section, so
-   they don't need a class change. */
-.glass {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-}
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass {
-    background: rgba(20, 20, 26, 0.82);
-  }
-}
-
 * {
   box-sizing: border-box;
 }
@@ -958,14 +943,11 @@ button.cta:disabled {
   }
 }
 
-/* ---- Dashboard (fueling-detail visualisations, opened from chat) -------- */
-
-.dash {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 24px 20px 60px;
-  --viz-fill: var(--accent);
-}
+/* ---- Shared screen-header / status-message utilities --------------------
+   Named for the M17 Dashboard page that first used them; that page (and its
+   chart/table/KPI CSS) was removed, but dash-head/dash-msg/dash-sub outlived
+   it as generic utilities reused by SessionRecapView, RhythmTab, WeekView,
+   TodayTab and ProfileOverlay. */
 
 .dash-head {
   margin-bottom: 20px;
@@ -1025,259 +1007,11 @@ button.cta:disabled {
   padding: 24px 0;
 }
 
-.dash-msg .muted,
-.muted {
-  color: var(--muted);
-}
-
-.dash-foot {
-  margin-top: 22px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.kpi-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 22px;
-}
-
-.kpi {
-  flex: 1;
-  min-width: 200px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px 16px;
-  background: var(--panel);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.kpi-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.kpi-value {
-  font-size: 26px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.kpi-unit {
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.kpi-note {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.viz {
-  margin: 0 0 22px;
-}
-
-.viz figcaption {
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-
-.viz-unit {
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.viz-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.viz-grid {
-  stroke: var(--border);
-  stroke-width: 1;
-}
-
-.viz-tick {
-  fill: var(--muted);
-  font-size: 10px;
-}
-
-.viz-track {
-  fill: var(--border);
-}
-
-.viz-fill {
-  fill: var(--viz-fill);
-}
-
-.viz-row:hover .viz-fill {
-  fill: color-mix(in srgb, var(--viz-fill) 78%, var(--text));
-}
-
-.viz-rowlabel {
-  fill: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.viz-rowsub {
-  fill: var(--muted);
-  font-size: 9.5px;
-}
-
-.viz-value {
-  fill: var(--text);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.viz-none {
-  fill: var(--muted);
-  font-size: 10.5px;
-}
-
-.callout {
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--viz-fill);
-  border-radius: 12px;
-  padding: 12px 14px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text);
-  background: var(--panel);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-}
-
-.table-view {
-  margin-top: 18px;
-  font-size: 13px;
-}
-
-.table-view summary {
-  cursor: pointer;
-  color: var(--muted);
-}
-
-.table-view table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 10px;
-}
-
-.table-view th,
-.table-view td {
-  text-align: left;
-  padding: 7px 8px;
-  border-bottom: 1px solid var(--border);
-  font-variant-numeric: tabular-nums;
-}
-
-.table-view th {
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.dash-link {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.dash-link:hover {
-  border-color: var(--accent);
-}
-
-/* ---- Daily tab ------------------------------------------------------------ */
-
-.macro {
-  margin-bottom: 18px;
-}
-
-.macro-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--border);
-}
-
-.macro-name {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.macro-target {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.food-list {
-  list-style: none;
-  margin: 8px 0 4px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.food-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 13px;
-  padding: 3px 0;
-}
-
-.food-amt {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.macro-hint {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.callout + .callout {
-  margin-top: 10px;
-}
-
 .form-saved {
   margin: 0;
   color: var(--accent);
   font-size: 13px;
   font-weight: 700;
-}
-
-.dash-lead {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--muted);
-  margin: 0 0 18px;
-}
-.dash-lead strong {
-  color: var(--text);
 }
 
 /* ---- Home tab ------------------------------------------------------- */
@@ -1425,12 +1159,6 @@ button.cta:disabled {
   font-size: 15px;
 }
 
-.home-card-sub {
-  margin: 0 0 12px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 /* Kona's own "voice" cards — the daily briefing, next-key, remembers — get a
    subtly tinted surface so companion speech reads as distinct from plain data. */
 .kona-card {
@@ -1458,28 +1186,6 @@ button.cta:disabled {
   background: var(--accent);
 }
 
-.plan-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.plan-item + .plan-item {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.plan-title {
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.plan-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .plan-chip {
   font-size: 12px;
   font-weight: 600;
@@ -1500,22 +1206,6 @@ button.cta:disabled {
   margin: 0;
   color: var(--muted);
   font-size: 14px;
-}
-
-.home-cta {
-  margin-top: 14px;
-  width: 100%;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  border-radius: 14px;
-  padding: 12px;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.home-cta:hover {
-  border-color: var(--accent);
 }
 
 .fuel-refs-label {
@@ -2659,8 +2349,7 @@ button.cta:disabled {
    consistency grid below.) */
 
 .week-tab .home-top,
-.rhythm-tab .home-top,
-.profile-tab .home-top {
+.rhythm-tab .home-top {
   margin-bottom: 2px;
 }
 
@@ -2806,19 +2495,6 @@ button.cta:disabled {
 
 .you-goal-empty {
   border-style: dashed;
-}
-
-/* "Kona learned" — a distinct violet/purple tint, separate from the Arc
-   card's green, so the two "Kona voice" cards on this screen read apart. */
-.you-learned {
-  background: linear-gradient(135deg, color-mix(in srgb, #a855f7 16%, transparent), color-mix(in srgb, #ff4bd8 8%, transparent));
-  border-color: color-mix(in srgb, #c084fc 40%, var(--border));
-}
-.you-learned .kona-eyebrow {
-  color: #d9b8ff;
-}
-.you-learned .kona-eyebrow .dot {
-  background: #c084fc;
 }
 
 .you-milestones {
