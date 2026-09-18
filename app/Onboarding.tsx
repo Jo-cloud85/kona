@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import ProfileForm from './ProfileForm';
+import ProfileForm, { type ProfileValues } from './ProfileForm';
 
-export default function Onboarding({ onDone }: { onDone: () => void }) {
+export default function Onboarding({ onDone }: { onDone: (profile: ProfileValues) => void }) {
   const [started, setStarted] = useState(false);
 
   if (!started) {
@@ -35,7 +35,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           as you talk.
         </p>
       </div>
-      <ProfileForm mode="onboard" submitLabel="Start with Kona →" onSaved={() => onDone()} />
+      <ProfileForm mode="onboard" submitLabel="Start with Kona →" onSaved={(p) => onDone(p)} />
     </div>
   );
 }

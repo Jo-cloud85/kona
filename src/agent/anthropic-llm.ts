@@ -19,6 +19,13 @@ import type {
  *    tool_use blocks it wants (the orchestrator executes them, not the model).
  *  - compose(): a second call given the tool results, returns the prose reply.
  *
+ * interpret() and compose() intentionally use different models — interpret is
+ * pure tool routing/NLU (never seen by the athlete) and carries the full tool
+ * schema payload on every call, so it defaults to a cheaper model than
+ * compose's user-facing prose. Both calls mark their system prompt as
+ * cacheable so the static tool schemas + instructions aren't paid for at full
+ * price on every turn (see the `cache_control` blocks below).
+ *
  * The model never computes fueling numbers: interpret is told not to, and every
  * number compose may use is present in the tool results it is given.
  */
@@ -33,14 +40,22 @@ export interface AnthropicLike {
 
 export interface AnthropicLlmOptions {
   apiKey?: string;
-  /** Defaults to KONA_LLM_MODEL or claude-opus-5. */
+  /** Model for compose() (user-facing prose). Defaults to KONA_LLM_MODEL or claude-opus-5. */
   model?: string;
+  /**
+   * Model for interpret() — tool routing / NLU only, never seen by the athlete.
+   * Defaults to KONA_LLM_INTERPRET_MODEL or claude-sonnet-5. interpret() also
+   * carries the full ~45KB tool-schema payload on every call, so this is the
+   * higher-leverage place to spend on a cheaper model than compose().
+   */
+  interpretModel?: string;
   /** Inject a client (or fake) instead of constructing one. */
   client?: AnthropicLike;
   maxTokens?: { interpret?: number; compose?: number };
 }
 
-const DEFAULT_MODEL = 'claude-opus-5';
+const DEFAULT_COMPOSE_MODEL = 'claude-opus-5';
+const DEFAULT_INTERPRET_MODEL = 'claude-sonnet-5';
 
 const INTERPRET_SYSTEM = `You are Kona's conversation router. Kona is a calm, practical AI endurance companion for a self-coached athlete.
 
@@ -246,11 +261,13 @@ export function toInterpretResult(message: Anthropic.Message): InterpretResult {
 export class AnthropicLlmClient implements LlmClient {
   private readonly client: AnthropicLike;
   private readonly model: string;
+  private readonly interpretModel: string;
   private readonly maxTokens: { interpret: number; compose: number };
 
   constructor(opts: AnthropicLlmOptions = {}) {
     this.client = opts.client ?? new Anthropic({ apiKey: opts.apiKey ?? process.env.ANTHROPIC_API_KEY });
-    this.model = opts.model ?? process.env.KONA_LLM_MODEL ?? DEFAULT_MODEL;
+    this.model = opts.model ?? process.env.KONA_LLM_MODEL ?? DEFAULT_COMPOSE_MODEL;
+    this.interpretModel = opts.interpretModel ?? process.env.KONA_LLM_INTERPRET_MODEL ?? DEFAULT_INTERPRET_MODEL;
     this.maxTokens = {
       interpret: opts.maxTokens?.interpret ?? 3000,
       compose: opts.maxTokens?.compose ?? 1200,
@@ -264,9 +281,16 @@ export class AnthropicLlmClient implements LlmClient {
     // turns ahead of the final CONTEXT + new message turn below.
     const priorTurns = (req.recent_messages ?? []).map((m) => ({ role: m.role, content: m.content }));
     const response = await this.client.messages.create({
-      model: this.model,
+      model: this.interpretModel,
       max_tokens: this.maxTokens.interpret,
-      system: INTERPRET_SYSTEM,
+      // The tool schemas (req.tools, ~45KB, identical every call) and this
+      // system prompt are static across the whole conversation. Marking the
+      // system block cacheable caches that entire prefix (tools + system) on
+      // Anthropic's side — later calls within the cache window pay the ~90%
+      // cheaper cache-read rate instead of full input-token price for it.
+      // The dynamic part (CONTEXT + the athlete's message) stays uncached,
+      // as it should — it's different on every turn.
+      system: [{ type: 'text', text: INTERPRET_SYSTEM, cache_control: { type: 'ephemeral' } }],
       tools: req.tools.map((t) => ({
         name: t.name,
         description: t.description,
@@ -288,7 +312,7 @@ export class AnthropicLlmClient implements LlmClient {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: this.maxTokens.compose,
-      system: COMPOSE_SYSTEM,
+      system: [{ type: 'text', text: COMPOSE_SYSTEM, cache_control: { type: 'ephemeral' } }],
       messages: [
         {
           role: 'user',

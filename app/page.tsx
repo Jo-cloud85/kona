@@ -1,54 +1,19 @@
-'use client';
+import { getServerContext } from '../lib/server-context';
+import { getProfile } from '../lib/kona-server';
+import HomeGate from './HomeGate';
 
-import { useCallback, useEffect, useState } from 'react';
-import AppShell from './AppShell';
-import Onboarding from './Onboarding';
+// Auth-gated, per-user content — never statically cache this page.
+export const dynamic = 'force-dynamic';
 
-type View = 'loading' | 'onboarding' | 'app';
+/**
+ * Server Component: resolves the signed-in athlete's profile before any HTML
+ * is sent, so the client never has to render a "Loading…" placeholder and
+ * then fetch /api/profile just to learn which view to show. That extra round
+ * trip was pure dead time on a cold load, worst on a phone over cellular.
+ */
+export default async function Page() {
+  const result = await getServerContext();
+  const profile = result.ok ? await getProfile(result.ctx) : undefined;
 
-export default function Page() {
-  const [view, setView] = useState<View>('loading');
-  const [name, setName] = useState<string | undefined>(undefined);
-
-  const loadProfile = useCallback(async () => {
-    try {
-      const res = await fetch('/api/profile');
-      const data = (await res.json()) as { profile: { username?: string; onboarded_at?: string } | null };
-      if (data.profile?.onboarded_at) {
-        setName(data.profile.username);
-        setView('app');
-      } else {
-        setView('onboarding');
-      }
-    } catch {
-      setView('onboarding');
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
-
-  if (view === 'loading') {
-    return (
-      <div className="app">
-        <div className="landing">
-          <p className="blurb">Loading…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (view === 'onboarding') {
-    return <Onboarding onDone={() => void loadProfile()} />;
-  }
-
-  return (
-    <AppShell
-      greetingName={name}
-      onProfileChange={(p) => {
-        if (p.username) setName(p.username);
-      }}
-    />
-  );
+  return <HomeGate initialOnboarded={Boolean(profile?.onboarded_at)} initialUsername={profile?.username} />;
 }

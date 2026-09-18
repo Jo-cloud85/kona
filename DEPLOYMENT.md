@@ -50,16 +50,26 @@ ANTHROPIC_API_KEY=…              # existing — the conversation model
 NEXT_PUBLIC_SUPABASE_URL=…       # Supabase Project URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=…  # Supabase anon public key
 KONA_LLM_MODEL=…                 # optional but recommended — see note below
+KONA_LLM_INTERPRET_MODEL=…       # optional but recommended — see note below
 ```
 
 Set these in `.env.local` for local dev, and in the Vercel project settings for
 Production (and Preview, if you want preview deploys to behave the same way).
 That is the whole configuration.
 
-`KONA_LLM_MODEL` defaults to `claude-opus-5` when unset (`src/agent/anthropic-llm.ts`).
-If local dev is pinned to a different model (e.g. `claude-sonnet-5` in
-`.env.local`), set the same value in Vercel deliberately — otherwise production
-silently runs a different, pricier model than what you've been testing against.
+Every chat turn makes two model calls (`src/agent/anthropic-llm.ts`):
+`interpret()` (tool routing/NLU, never shown to the athlete — but carries the
+full ~45KB tool-schema payload) and `compose()` (the athlete-facing reply).
+`KONA_LLM_MODEL` (compose) defaults to `claude-opus-5`; `KONA_LLM_INTERPRET_MODEL`
+(interpret) defaults to the cheaper `claude-sonnet-5` — interpret doesn't need
+Opus-level reasoning to pick a tool and fill in arguments. Both prompts also
+mark their system instructions as cacheable, so the static tool schemas /
+system prompt are billed at Anthropic's ~90%-cheaper cache-read rate on repeat
+calls within the cache window, instead of full price every turn.
+
+If local dev is pinned to different models than production's defaults, set the
+same values in Vercel deliberately — otherwise production silently runs
+different, pricier models than what you've been testing against.
 
 Never set `KONA_TEST_SUPABASE_URL` / `_ANON_KEY` / `_SERVICE_ROLE` in Vercel —
 they're local/CI-test-only, point at a disposable second project, and the

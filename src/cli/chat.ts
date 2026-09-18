@@ -32,7 +32,9 @@ function pickLlm(args: string[]): { llm: LlmClient; name: string } {
           'Set it (see .env.example) or use --llm=deterministic.\n',
       );
     }
-    return { llm: new AnthropicLlmClient(), name: `anthropic (${process.env.KONA_LLM_MODEL ?? 'claude-opus-5'})` };
+    const composeModel = process.env.KONA_LLM_MODEL ?? 'claude-opus-5';
+    const interpretModel = process.env.KONA_LLM_INTERPRET_MODEL ?? 'claude-sonnet-5';
+    return { llm: new AnthropicLlmClient(), name: `anthropic (interpret: ${interpretModel}, compose: ${composeModel})` };
   }
   return { llm: new DeterministicLlmClient(), name: 'deterministic' };
 }
