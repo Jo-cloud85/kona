@@ -110,6 +110,16 @@ h3 {
   overflow-y: auto;
 }
 
+/* Each tab's mount point (see AppShell.tsx) — kept in the DOM and hidden via
+   the native `hidden` attribute on tab switch, instead of unmounting, so
+   switching tabs doesn't re-trigger a "Loading…" + refetch every time.
+   height:100% preserves the definite-height chain Chat's `.workspace` needs
+   (it was previously a direct child of `.tab-content`, which has one via the
+   `.app-shell` flex column above it). */
+.tab-pane {
+  height: 100%;
+}
+
 /* M25.0: each tab is a flex:1 column spanning its full share of the bar, not
    a small pill floating in dead space — the whole column is tappable, not
    just the visible icon. max-width + margin:auto keeps it from stretching

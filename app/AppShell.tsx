@@ -67,6 +67,12 @@ export default function AppShell({
   onProfileChange: (p: ProfileValues) => void;
 }) {
   const [tab, setTab] = useState<Tab>('today');
+  // Every tab the athlete has switched to this session, so its component
+  // mounts once (lazily, on first visit) and then stays mounted — see the
+  // `.tab-pane` rendering below. Avoids the old key={tab} full unmount/
+  // remount on every nav switch (a spinner + a refetch every time), while
+  // still not eagerly fetching all four tabs' data on cold load.
+  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>(['today']));
   const [chatPrefill, setChatPrefill] = useState<string | undefined>(undefined);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileCheckin, setProfileCheckin] = useState<{ label: string; onOpen: () => void } | null>(null);
@@ -90,7 +96,10 @@ export default function AppShell({
         you: 'rhythm',
       };
       const t = (raw && REMAP[raw]) || (raw as Tab | null);
-      if (t && NAV.some((n) => n.tab === t)) setTab(t);
+      if (t && NAV.some((n) => n.tab === t)) {
+        setTab(t);
+        setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
+      }
     } catch {
       /* ignore */
     }
@@ -98,6 +107,7 @@ export default function AppShell({
 
   const go = useCallback((t: Tab) => {
     setTab(t);
+    setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
     try {
       window.localStorage.setItem(TAB_KEY, t);
     } catch {
@@ -121,25 +131,37 @@ export default function AppShell({
 
   return (
     <div className="app-shell">
-      <div className="tab-content" key={tab}>
-        {tab === 'today' && (
-          <TodayTab
-            greetingName={greetingName}
-            onOpenChat={openChat}
-            onOpenProfile={openProfile}
-            onOpenWeek={() => go('week')}
-            profileVersion={profileVersion}
-          />
+      <div className="tab-content">
+        {visited.has('today') && (
+          <div className="tab-pane" hidden={tab !== 'today'}>
+            <TodayTab
+              greetingName={greetingName}
+              onOpenChat={openChat}
+              onOpenProfile={openProfile}
+              onOpenWeek={() => go('week')}
+              profileVersion={profileVersion}
+            />
+          </div>
         )}
-        {tab === 'chat' && (
-          <Workspace
-            greetingName={greetingName}
-            initialPrefill={chatPrefill}
-            onPrefillConsumed={() => setChatPrefill(undefined)}
-          />
+        {visited.has('chat') && (
+          <div className="tab-pane" hidden={tab !== 'chat'}>
+            <Workspace
+              greetingName={greetingName}
+              initialPrefill={chatPrefill}
+              onPrefillConsumed={() => setChatPrefill(undefined)}
+            />
+          </div>
         )}
-        {tab === 'week' && <WeekView onOpenChat={openChat} onOpenMemory={() => go('rhythm')} />}
-        {tab === 'rhythm' && <RhythmTab profileVersion={profileVersion} />}
+        {visited.has('week') && (
+          <div className="tab-pane" hidden={tab !== 'week'}>
+            <WeekView onOpenChat={openChat} onOpenMemory={() => go('rhythm')} />
+          </div>
+        )}
+        {visited.has('rhythm') && (
+          <div className="tab-pane" hidden={tab !== 'rhythm'}>
+            <RhythmTab profileVersion={profileVersion} />
+          </div>
+        )}
       </div>
 
       <ProfileOverlay

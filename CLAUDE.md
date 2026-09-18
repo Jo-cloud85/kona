@@ -76,6 +76,13 @@ Maintain `progress.md` with:
 - known issues
 - next recommended task
 
+Keep `progress.md` to the current milestone plus the last few — it's read
+before substantive work, so an ever-growing file is a real, recurring context
+cost. When it gets large, move older milestone entries verbatim (don't
+summarize or delete) to `progress-archive.md`, oldest history at the bottom,
+newest at the top, same as `progress.md`. Leave a short pointer at the top of
+`progress.md` saying an archive exists.
+
 Use git commits as checkpoints.
 
 ## Scope control

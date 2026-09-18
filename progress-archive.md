@@ -1,0 +1,1478 @@
+# Kona — Progress archive
+
+Older milestone history, moved out of `progress.md` on 2026-09-18 to keep
+that file — and the cost of reading it every session — from growing without
+bound. Nothing below was edited or summarized; it's the exact prior content,
+newest at the top, oldest at the bottom. See `progress.md` for the current
+milestone and recent history.
+
+---
+
+### Chat quick-reply chips (`ask_choice`) + cardio/crossfit (2026-09-15) ✅
+Founder wanted chat to offer tappable options (sport, then a running-specific
+style, then time of day, duration, intensity, another session that day,
+conditions) instead of always requiring free text — matching what the
+existing weekly-plan `SessionPrompt` chips already do, but for the very start
+of describing a session, not just gap-filling after a plan is saved. Also:
+add `cardio` and `crossfit` to the sport list. Confirmed cardio/crossfit are
+low-risk — like `gym`/`hyrox`, neither has a pace-estimate table in
+`src/rules/v0_1_0.ts`, so they're duration-based only, no calc-engine changes
+needed. Added to `Sport` (`src/domain/types.ts`), `SPORTS` (`tools.ts`),
+`extractSport()` word patterns (`parse.ts`), and every `SPORT_LABEL` map
+(`home.ts`, `starter.ts`, `ProfileOverlay.tsx`) plus the onboarding/profile
+sport picker (`ProfileForm.tsx`).
+
+**Design**: the existing `SessionPrompt` system only ever fires after
+`save_weekly_plan` — sport is required before a session object exists, so a
+missing sport can't be a "gap" on an already-saved record. Solved with a new
+tool, `ask_choice` (`src/agent/tools.ts`) — not a repo-mutating action (no
+entry in the `TOOLS` registry, so `runTool()` never touches it): the LLM
+calls it instead of writing a plain-text question when exactly one clearly-
+scoped detail is missing. `toInterpretResult()` (`anthropic-llm.ts`)
+intercepts it before it ever reaches the tool-execution loop and turns it
+into `clarifying_question` + `clarifying_options` on `InterpretResult` /
+`AgentTurn` — threaded through `SentMessage`, `/api/chat`'s response, and a
+new `.choice-row` block in `Chat.tsx` (reusing `CheckinDialog`'s existing
+`.choice` pill styling). Tapping an option sends its `value` as the next chat
+message verbatim — same mechanism `SessionPrompt`'s `submitPicks()` already
+uses, so no new mutation path was needed. A `value` of the literal
+`"__type_own__"` is the "let me type it myself" chip: the frontend treats it
+specially — dismiss the chips and focus the composer, send nothing.
+
+The tool's own description carries the exact canonical option sets and
+asking order the founder specified (sport → running style → time of day →
+duration → intensity → another session → conditions), each ending in a
+`__type_own__` chip where free text might not be covered, and tells the
+model never to re-ask something the athlete's message already answered.
+"Felt hot" maps to a representative `environment.temperature_c: 29` (just
+over `hot_humid.min_temp_c`) only when no exact figure was given — matching
+the existing `distance_label`/`distance_km` precedent (preserve their words,
+derive one workable number) rather than inventing a precise-looking figure;
+"felt fine" leaves `temperature_c` unset rather than guessing a number for
+"not hot."
+
+**Bug found and fixed while building this**: `interpret()` sends the model
+only the current message + structured `CONTEXT` (a deliberate design rule —
+"never pass the whole history to the LLM"), with no memory of the raw
+conversation at all. Fine for a single free-text message, but it broke a
+multi-step chip exchange: by the 3rd or 4th tap, Claude had already lost
+"tomorrow morning" from the 1st message and started re-asking for time of
+day. Fixed with a bounded window (`RECENT_MESSAGE_WINDOW = 8`, so ~4 turns —
+not "the whole history," just enough for one guided exchange to hold
+together): `orchestrator.ts` fetches it via `repo.listMessages()` *before*
+appending the new message (so it never includes the message being
+interpreted), threads it through `InterpretRequest.recent_messages`, and
+`anthropic-llm.ts` prepends it as real `user`/`assistant` turns ahead of the
+final CONTEXT+message turn — letting Claude's native conversational memory
+do the work instead of trying to cram it into the JSON context blob. Safe by
+construction: `orchestrator.ts` is the only code that ever calls
+`repo.appendMessage()`, always exactly one user then one assistant per turn,
+so the window is always strictly alternating and starts on `user`.
+
+Tests: `tests/agent/anthropic-llm.test.ts` gained cases for `ask_choice`
+interception (well-formed, malformed args, ignored-alongside-another-tool)
+and for the memory-window fix (a 2nd `interpret()` call carries the 1st
+turn's exchange as real messages; a fresh conversation sends none). Verified
+live against real Claude (`claude-sonnet-5`, not the deterministic test
+client): sent a deliberately vague "I'm training tomorrow morning," tapped
+through Running → Interval → 60 min → Hard via the actual rendered chips in
+`Chat.tsx` (not just the API), confirmed it skipped re-asking time of day,
+and confirmed the resulting planned session saved as "Morning interval run,"
+hard, 60 min, morning — exactly right. Also confirmed the `"__type_own__"`
+chip dismisses the options and focuses the composer without sending
+anything.
+
+### App icon (home-screen shortcut) (2026-09-15) ✅
+Founder wanted the icon shown when the app is added to a phone's home screen
+to be a "triangular multicolor" mark — nothing like it existed in the repo
+(no `public/`, no manifest, no icon files at all; the app had no explicit
+favicon/apple-touch-icon before this). Built it from the app's own palette
+rather than inventing new colors: `app/brand-icon.tsx` draws a triangle split
+into 3 facets from its centroid, one per existing gradient token
+(`--grad-performance/recovery/vital`) — a multicolor mark grounded in the
+same identity system as the You tab's progression ring, not a new logo.
+`app/icon.tsx` (32×32 favicon) and `app/apple-icon.tsx` (180×180, full-bleed
+square — iOS applies its own rounded-square mask) both render it via Next's
+file-convention icon routes (`next/og`'s `ImageResponse`, Satori — no manual
+asset export/rasterizing needed). Added `app/manifest.ts` for Android/Chrome
+"Add to Home Screen" parity (name, theme_color, icons) and `appleWebApp`
+metadata in `layout.tsx` for the iOS home-screen label. Verified live:
+`/icon`, `/apple-icon`, `/manifest.webmanifest` all render correctly, and
+`<link rel="apple-touch-icon">` / `rel="icon"` / `rel="manifest"` are
+auto-injected into `<head>` — confirmed via `next build`'s route list too
+(`○ /apple-icon`, `○ /icon`, `○ /manifest.webmanifest` all static).
+
+### Full account data reset ("start over") (2026-09-15) ✅
+Founder wants to wipe all saved data for their account and re-add the last
+few days manually. Root investigation: no Supabase service-role key exists
+in this environment (only the anon key, RLS-scoped) — deliberately, so
+Claude never holds standing access to bypass Row Level Security. The right,
+reusable fix is a real in-app capability that runs under the founder's own
+authenticated session, not a one-off script run with elevated credentials.
+
+Added `Repository.deleteAllUserData(userId)`, implemented in both
+`InMemoryRepository` (filters every Map/array by `user_id`) and
+`SupabaseRepository` (deletes from every user-owned table under RLS — no
+service key needed since `auth.uid() = user_id` already scopes it). Wired to
+`DELETE /api/profile` (`lib/kona-server.ts`'s new `resetAccount()`) and a
+"Danger zone" section in `ProfileOverlay.tsx` — a confirm-dialog-gated "Reset
+all data" button. On success the profile row is gone, so the app naturally
+falls back to onboarding on next load (same `onboarded_at` check `page.tsx`
+already had) — no separate "reset" screen needed.
+
+One deliberate schema change: `activity_events` (the "how Kona's been
+learning" timeline) was append-only at the DB level on purpose (0001_init.sql:
+"No update/delete policy => immutable"), so a reset couldn't clear it without
+relaxing that. Confirmed with the founder to relax it —
+`supabase/migrations/0004_activity_events_deletable.sql` adds a delete policy.
+**This migration needs to be run in the Supabase SQL editor before the reset
+button will fully clear that table on the live account** — everything else
+(profile, plans, sessions, logs, chat, memories) resets without it.
+
+Added a `deleteAllUserData` case to the shared repository contract suite
+(`tests/data/repository-contract.ts`) — proves every table is cleared for the
+target user and nothing leaks to/from another user. Verified live end-to-end
+against the dev-fallback repo: onboarded, sent a chat message, called
+`DELETE /api/profile`, confirmed `/api/home` and `/api/knows` both return
+`null` afterward and a reload lands back on Onboarding.
+
+### Consistent 32px left/right/top offset across all tabs (2026-09-15) ✅
+Founder noticed the Week tab's title and its day-cards didn't line up — measured
+it: "Week" sat 16px from the screen edge, but the day-cards below sat 32px in.
+Root cause: `WeekView.tsx`'s own `.week` wrapper had its own left/right/top
+padding, nested inside the shared `.home` wrapper that already supplies that
+padding — the two stacked instead of one superseding the other. Every other
+tab (Home, You, Memory) doesn't have this extra nested wrapper, so their
+titles and cards already lined up with each other, just at the narrower 16px.
+
+Asked the founder which value should become the standard: fix Week to match
+everyone else at 16px, or widen everyone else to match Week's (accidentally
+doubled) 32px. Founder chose 32px everywhere — more breathing room on every
+screen. Changes: `.home` and `.knows` (the shared wrapper `HomeTab`/`WeekView`/
+`YouTab`/`KnowsView` all render into) went from 16px to 32px left/right;
+`.week` had its own redundant left/right/top padding removed entirely (bottom
+padding left as-is, out of scope — the founder only asked about left, right,
+top); Chat's `.header`/`.thread`/`.composer` (previously 20px/20px/16px, its
+own inconsistent set) moved to 32px too, and `.header`'s top padding moved
+from 16px to 20px to match the `.home` family's top offset. `ProfileOverlay`
+and `CheckinDialog` are overlays, not tabs, and were left untouched — out of
+what was asked. Verified live at 375px: measured `getBoundingClientRect()` /
+`paddingLeft` on all five tabs post-fix — title and content both sit at
+`x: 32` everywhere, confirmed by screenshot too.
+
+### Client-side tab cache (2026-09-14) ✅
+Founder flagged tab switches feeling laggy. Root cause: `AppShell.tsx` keys
+its active tab's wrapper on `tab` (`key={tab}`), so switching Home ↔ Chat ↔
+Week ↔ Memory ↔ You fully unmounts/remounts the tab component every time —
+each revisit re-showed a "Loading…" spinner and refetched data that hadn't
+changed since the last visit. Not a database performance problem (the whole
+app is one user's own data over a fast local Supabase query), so no
+server-side cache was warranted — just a redundant-refetch-on-remount
+problem.
+
+Fix: `app/data-cache.ts`, a module-level `Map` (survives the remount because
+it isn't React state — cleared only on a real page reload, e.g. sign-out's
+`window.location.assign`, so nothing carries across accounts). `HomeTab`,
+`WeekView`, `KnowsView`, `YouTab` now seed their initial `data`/`loaded`
+state from the cache before their fetch effect runs, then always fetch fresh
+in the background and overwrite the cache (stale-while-revalidate) — so a
+revisited tab paints instantly with last-known data instead of blanking to a
+spinner, while still self-correcting the moment the fresh response lands.
+`HomeTab` caches only the no-date default load (keyed by `profileVersion`,
+since a remount always lands back on today) — a day-pill tap already updates
+in place without a spinner, so caching per-date would add complexity for no
+visible benefit. `YouTab` keys on `profileVersion` too, so a profile save
+still forces a fresh paint rather than showing stale goal/name data. Chat
+was deliberately left uncached — its message thread is mutable mid-session
+(edits, in-flight sends) and stale caching risk there outweighs the win.
+Verified live: `Loading…` shows the first time a tab is visited each
+session; every revisit after that repaints with zero network wait (confirmed
+by reading the DOM on the very next microtask after the nav click — faster
+than any real fetch could resolve).
+
+### M26 — "You": Arc progression + Direction B reskin (2026-09-14) ✅
+Founder ran a redesign concept through Claude Design and got back
+`Kona You Screen.dc.html` ("Direction B — Companion/Identity"), then
+explicitly approved (via direct confirmation, not inferred) two reversals of
+standing constraints: `PRODUCT_VISION.md`'s "Gamification / XP / avatar
+cosmetics — NOT in scope; do not build," and its "no major visual redesign"
+line. Both docs updated accordingly.
+
+- **Theme**: `app/globals.css` went dark-only (collapsed the old
+  light-default + `prefers-color-scheme: dark` override into a single
+  `:root` token block) — near-black background with purple/orange radial
+  gradients, translucent "frosted glass" cards (`backdrop-filter: blur`,
+  new `.glass` utility + `@supports` fallback for engines without blur),
+  three new gradient tokens (`--grad-performance/recovery/vital`) for the
+  progression surface only. `--accent` (lime) untouched — nav/CTAs/day-pill
+  unchanged. Font swapped app-wide, Manrope → Urbanist (`app/layout.tsx`).
+  Because the existing token layer was already clean (only 3 hardcoded
+  color literals in the whole 2467-line file, confirmed by grep before
+  starting), the reskin cascaded through nearly every screen — Home, Chat,
+  Week, Memory, dialogs, Profile — from the token swap alone; blur was added
+  explicitly to ~10 card/scrim selectors.
+- **New "You" tab** (`app/YouTab.tsx`, third bottom-nav tab in
+  `app/AppShell.tsx`): progression/identity content only — an avatar ring
+  showing real Arc-stage progress (not a fabricated "sport mix" breakdown —
+  we don't have that data), the Arc bar, a goal card (reuses the existing
+  `Profile.goal`/`goalContext()` — no new data model needed), a "Kona
+  learned" card (reuses `deriveInsights()`), and milestone cards.
+  Account-settings Profile stayed a *separate*, unchanged overlay — lifted
+  out of `HomeTab.tsx` into `app/ProfileOverlay.tsx` so both Home's avatar
+  and You's new settings icon open the same screen.
+- **`src/agent/progression.ts`** (new, deterministic, no LLM): `computeMilestones()`
+  scans full session history for the earliest qualifying session per
+  milestone (first 5K/10K/half-marathon/triathlon) — never invents a date.
+  `computeArcProgress()` places the athlete on a 5-stage Arc (Foundation →
+  Rhythm → Judgment → Composure → Command) using **only** behaviour/
+  engagement counts — consistent weeks trained, check-ins logged,
+  recommendations adapted — never pace/PR/outcome quality, per
+  PRODUCT_VISION's un-reversed reward-behaviours-only guardrail. New
+  `getYou()` in `lib/kona-server.ts` + `GET /api/you`.
+- Verified live (dev-fallback, mobile viewport): onboarded a fresh athlete
+  with a goal ("First Olympic triathlon in 11 weeks") — You correctly showed
+  the honest early state (Foundation, "Still learning," all milestones "Not
+  yet"). Logged a 6km run via chat (real tool call, `log_actual`) and
+  confirmed live: "First 5K" milestone flipped to achieved with today's real
+  date, Arc bar showed real partial progress — full pipeline (chat → tool →
+  stored session → `progression.ts` → `/api/you` → UI) confirmed working
+  end-to-end, not just unit-tested.
+- 10 new unit tests (`tests/agent/progression.test.ts`) covering milestone
+  earliest-wins-not-latest, threshold edges, monotonic Arc-stage placement.
+  `tsc`/`eslint`/`vitest` (281 passed)/`next build` all clean.
+- **Fidelity pass (same day)**: founder compared the first pass against the
+  actual Claude Design screenshots and flagged two gaps — the avatar mark
+  read as a flat lime pie-chart, not the mockup's frosted-glass faceplate
+  with a masked progress *arc* and a glowing chevron core; and the bottom
+  nav only had 3 icons (Home/Chat/You) against the mockup's 5. Confirmed
+  with the founder before restructuring nav (a real IA change, not styling)
+  and then matched it exactly: **Week** is a persistent tab again (was a
+  Home preview card with an overlay), **Profile** is a persistent tab (was
+  an overlay opened from an avatar button, now `app/ProfileTab.tsx`), and
+  "What Kona knows about you" moved from Profile onto the You tab (now
+  reached via a link at the bottom of You, not a settings icon — deleted).
+  `app/WeekView.tsx` lost its `onClose`/overlay chrome to become a plain
+  tab. Avatar ring rebuilt as a true masked annulus (`mask: radial-gradient`
+  cutting the middle out of a `conic-gradient`, matching the mockup's own
+  technique) over a frosted-glass disc with a CSS-triangle glowing chevron;
+  "Kona learned" recolored to a distinct violet/purple tint (was reusing the
+  Arc card's green); the goal card became an actual orange-tinted/bordered
+  container instead of gradient-clipped text. Re-verified live: all 5 tabs
+  render and navigate correctly, Memory reachable from You, `tsc`/`eslint`/
+  `vitest` (281 passed)/`next build` still clean.
+- **Second fidelity pass (same day)**: founder flagged that onboarding,
+  landing, and other pages still read as "neon" — flat solid `--accent`
+  fills on large surfaces (CTA buttons, avatars, active nav pill, selected
+  day-pill, selected sport chips). Root cause: `--accent` was still the
+  pre-M26 brand lime (`#d7fa4e`), and it was reused as a flat block fill in
+  ~20 places the mockup never fills solid that way. Fixed by (a) changing
+  `--accent`/`--accent-text` to the mockup's actual green
+  (`#7cff3b`/`#0f2406`); (b) primary buttons/avatars (`.cta`,
+  `.onboard-avatar`, `.home-avatar`, `.profile-head-avatar`, `.composer
+  button`, `.edit-save`, `.day-pill.on`, `.week-day.is-today`,
+  `.icon-btn.accent`) now use `var(--grad-recovery)` (the green gradient)
+  with a soft glow instead of a flat fill; (c) the active bottom-nav tab now
+  matches the mockup exactly — a subtle `rgba(255,255,255,0.08)` glass
+  highlight with an accent-colored icon/label, not a solid pill; (d)
+  selection toggles (`.chip.on`, `.choice.on`, `.scale button.on`, `.opts
+  button.on` — sport chips, check-in feel picker, chat quick-replies) now
+  use a tinted translucent background + accent border/text instead of a
+  solid block. Small badges that genuinely are solid in the mockup (Today
+  dot, pattern-card dot, timeline dot) were left alone. Re-verified live —
+  including on a real signed-in account, not just the in-memory dev
+  fallback — Home, Profile (avatar, sport chips, Save-changes button), and
+  the nav all confirmed matching the restrained mockup treatment.
+  `tsc`/`eslint`/`vitest`/`next build` still clean.
+- **Third fidelity pass — nav order was wrong (same day)**: founder caught
+  that the bottom nav didn't match the mockup's own stated order. Re-derived
+  it directly from the mockup's raw nav markup (which icon is highlighted on
+  which screen, across all 6 panel mockups) instead of guessing again:
+  **Home, Chat, Week, Memory ("What Kona knows"), You** — 5 persistent tabs.
+  Two things were backwards in the previous pass: (1) Memory had been merged
+  into the You tab; the mockup's own copy is explicit — *"A fifth bottom-nav
+  item, level with Home, Chat, Week and Memory... Home keeps its own small
+  avatar button, which still opens account settings"* — Memory is its own
+  tab, and (2) "Profile" was never supposed to be a tab at all; that same
+  sentence says account settings stay behind Home's avatar button. Fixed:
+  restored `app/ProfileOverlay.tsx` (deleted `app/ProfileTab.tsx`), added
+  Memory back as its own tab (`<KnowsView />`, no `onBack` needed — it's
+  self-contained), removed the "What Kona knows about you" link from
+  `app/YouTab.tsx` (redundant now), and swapped the nav icons — a person
+  icon for You (was a made-up chevron-in-circle), a new circle-with-a-dot
+  icon for Memory. Re-verified live end-to-end (onboarding → Home → avatar
+  opens Profile overlay → Memory and You both render as real tabs with
+  correct icons); `tsc`/`eslint`/`vitest`/`next build` still clean.
+- **Fourth fidelity pass — 6 detail fixes (same day)**: (1) Home's goal pill
+  (`.home-goal`) was green; switched to Performance Orange (`--grad-performance`),
+  matching the mockup's goal card exactly. (2)+(5) "Your week" day cards only
+  ever distinguished today (green) vs. everything else — `is_key_day` was
+  computed server-side (`buildDashboard`) but never reached the client. Threaded
+  it through `HomeWeekPreviewDay`/`WeekDayView` end-to-end; key/double days now
+  get the orange-tinted card + a "Key"/"Double" badge in `--grad-performance`,
+  separate from the green "Today" treatment (`app/HomeTab.tsx`, `app/WeekView.tsx`,
+  `src/agent/home.ts`). (3) "Kona remembers" was hidden entirely with no
+  evidence yet; now always shown with an honest "Still getting to know you"
+  fallback, matching the mockup's always-present card. (4) Chat's user message
+  bubble (`--user-bubble`) was a plain white tint; now a green tint with a
+  green border, matching the mockup's user bubble exactly. (6) The bottom nav
+  no longer ever shows label text (removed the dead `.nav-item.on span` rule
+  and the `<span>` itself, replaced with a plain `aria-label` for
+  accessibility) — the active tab's icon switches outline → filled via
+  `.nav-item.on svg { fill: currentColor }` instead. Verified live: set up a
+  real weekly plan via chat (a hard Wednesday long run, a weekend brick) and
+  confirmed the key-day orange styling, the "Key" badge, the orange goal pill,
+  the green user bubble, and label-free filled nav icons all render correctly
+  together. `tsc`/`eslint`/`vitest` (281 passed)/`next build` still clean.
+- **Fifth fidelity pass — 7 detail fixes (same day)**: founder review of the
+  fourth pass caught that "Today" had become an opaque green *fill*
+  (`--grad-recovery`) instead of the mockup's translucent light-green tint
+  (`rgba(124,255,59,0.08)` + a matching border) — fixed, with today's title
+  now the only bold one (non-today `.week-day-title` dropped from 700 to
+  500 weight). Also: key/double days no longer get a background tint at all
+  per review — just the orange label + badge, background removed entirely.
+  Day-strip pills (`.day-pill`) went from an 18px radius to a full 999px —
+  genuinely pill-shaped now. Added breathing room between the date line and
+  the goal pill on Home (`.home-goal` margin-top 5px → 12px). Day titles
+  (`titleFor()` in `src/agent/home.ts`) now prefer the athlete's own short
+  session description (`notes`, when ≤60 chars) over a generic sport label
+  — "Morning interval run" instead of "Morning run" when Kona captured that
+  detail. The You tab's goal card was one combined sentence ("11 weeks to
+  your Olympic triathlon.") where the mockup shows three separate lines —
+  added `short_text`/`countdown` to `GoalContext` (`src/domain/goal.ts`) and
+  `goal_name`/`goal_countdown` to `YouView` (replacing `goal_line`) so the
+  card now renders "CURRENT GOAL" / "Olympic triathlon" / "11 weeks away" as
+  the mockup does. Verified live end-to-end again (fresh onboarding, a real
+  weekly plan through chat) — translucent today row, background-free key
+  row with its badge, pill-shaped day-strip, and the 3-line goal card all
+  confirmed. `tsc`/`eslint`/`vitest` (281 passed)/`next build` still clean.
+- **Root-caused the "notes" gap (same day)**: founder tested the fifth pass's
+  title-detail fix live and it didn't fire — "Morning run" / "Morning gym" /
+  "Gym and ride" instead of the detail they'd actually typed ("interval
+  run", "cardio core + lower body strength"). Traced it: `titleFor()`
+  preferring `notes` was correct, but there was nowhere for the real LLM to
+  put that detail — `save_weekly_plan`'s per-session schema and
+  `update_planned_sessions` had no `notes` parameter at all (only the
+  single-session `save_planned_session` tool did), and a whole week is
+  always saved through `save_weekly_plan`. Fixed at the root: added `notes`
+  to both tool schemas *and* their `run()` handlers
+  (`src/agent/tools.ts`), plus an explicit line in the interpret system
+  prompt (`src/agent/anthropic-llm.ts`) telling the model to use it whenever
+  the athlete describes a session as more than a sport. Also fixed
+  `dayTitle()`'s multi-session (brick/double-day) branch, which previously
+  joined bare sport labels regardless of notes — it now joins each
+  session's own `titleFor()` output, so a Friday double reads "Morning
+  cardio core + upper body strength and Evening ride" instead of "Gym and
+  ride". 4 new unit tests (`tests/agent/home.test.ts`). Re-verified live:
+  resent the exact plan from the failed test and confirmed every title
+  (including the Friday double) now matches word-for-word what the athlete
+  typed. `tsc`/`eslint`/`vitest` (285 passed)/`next build` clean. Note:
+  this doesn't retroactively fix sessions saved before the schema change —
+  editing server code resets the in-memory dev store anyway, so there was
+  nothing to migrate this time, but a production week saved before this fix
+  would keep its generic titles until re-described.
+- **Time-of-day always leads the title, and a 4th bucket ("night") (same
+  day)**: `titleFor()` put the time-of-day word first only in some branches
+  ("Morning interval run") but not others — the distance-based and
+  `is_long` branches put the detail first instead ("13-14 km morning run",
+  "Long morning run"). Made the ordering consistent everywhere: time of day
+  is always the first word, so it reads the same regardless of which detail
+  follows, and — since `titleFor()` is recomputed fresh from the stored
+  session each time rather than cached — a later edit to just the time
+  updates the title automatically with no extra code. Also added `'night'`
+  as a fourth `TimeOfDay` value end-to-end (`src/domain/types.ts`,
+  `src/agent/tools.ts`'s enum/HHMM map, `src/agent/parse.ts`'s hour-bucket
+  fallback — evening 17–20, night 21–3 — and word-extraction, the "Night"
+  option in the chat's time-of-day quick-picks in `src/engine/week.ts`,
+  and `home.ts`'s pre-fuel note). 5 new unit tests. Verified live: a
+  "night session" chat message correctly saved and displayed as `night`.
+- **Simulated the evening check-in live**: walked the full loop in the
+  browser — a plan for today with nothing logged yet correctly showed the
+  "Evening check-in" nudge (`checkin.today_due` requires a *planned*
+  session for today with no recovery log yet, confirmed by reading
+  `buildHome()`'s `todayDue` logic — an unplanned/spontaneous actual-only
+  log doesn't trigger it, which is correct: that already gets its own
+  reflection in the chat reply), opened `CheckinDialog`, filled it in
+  (Feeling great! / As planned: Yes / Pains: No), submitted, got Kona's
+  reflection ("Recovery looks on track"), and confirmed the nudge
+  correctly disappeared afterward. No code changes — this was a live
+  walkthrough to answer "can we see this flow," not a bug fix.
+- **Not in this milestone** (flagged, not silently dropped): a spendable XP
+  currency or purchasable/unlockable cosmetics — `PRODUCT_VISION.md` still
+  marks those out of scope. Arc-stage thresholds are a first defensible
+  pass, explicitly tunable after alpha feedback.
+
+### M25.1 — Kona's judgment as the primary product experience (2026-09-14) ✅
+*(Retroactively documented — built and verified live in the prior session,
+but the entry was lost before it reached this file.)* Audit found M24's
+`buildKonaBriefing` only ever spoke on days building up to something big
+(long/hard/race/double session within 7 days) — a flat "nothing meaningful"
+on most ordinary days, failing the "what does Kona think matters today?"
+5-second test. Rebuilt `src/agent/briefing.ts` around a 5-tier signal
+cascade (`recentOutcomeSignal ?? unacknowledgedSignal ?? patternSignal ??
+upcomingSessionSignal ?? HONEST_DEFAULT`), reusing existing evidence
+machinery (`recentSessionRead`, `deriveInsights`, planned/actual linkage) —
+no new analytics engine. `KonaBriefing.headline` became the verdict itself
+("Keep today easy") rather than a plain session name; new `session_label`/
+`deviation` fields; `has_target` dropped. `app/HomeTab.tsx`'s Kona's Call
+card restructured around the dominant headline. Found and fixed a live
+regex gap (`TROUBLE_RE` didn't match "gassed") during testing. 21 new tests
+in `tests/agent/briefing.test.ts` proving cascade priority order.
+
+### M25.0 — Mobile UX hardening (2026-09-14) ✅
+Founder reported the bottom nav "feels too insensitive" after several days of
+real phone use. Audit before any change found the nav was only one symptom of
+a broader gap — this was a UX pass, not a redesign; no visual identity change.
+- **Root cause of the nav complaint:** `app/layout.tsx` had no `viewport`
+  export, so no `viewport-fit=cover` — every `env(safe-area-inset-*)` in the
+  CSS (8 call sites: bottom nav, composer, dialogs) silently resolved to
+  `0px` on iPhone. Fixed with one `viewport` export; reactivates all of them.
+- **Bottom nav** (`app/globals.css`, `app/AppShell.tsx`): `.nav-item` was a
+  48×48px circle floating in dead bar space with no `:active` feedback
+  anywhere in the stylesheet. Restructured so each tab is a `flex:1` column
+  spanning its full share of the bar (~170px wide at 375px, verified by
+  tapping the tab's edge, not its icon) — same icon/label size, just a much
+  larger real hit area — capped at max-width 420px so it doesn't stretch
+  absurdly wide on desktop (verified both).
+- **Touch-target sweep:** `.choice` (check-in picks), `.opts button` (chat's
+  intensity/size/time chips), `.profile-close`, `.menu-btn`/`.icon-btn`,
+  `.back-btn`, `.home-link`, `.edit-cancel`/`.edit-save` were all below the
+  ~44px guideline — raised via padding/min-height (not font-size), several
+  using a padding+negative-margin trick to grow the tap zone without
+  shifting the visible text. Added `:active` states throughout (there were
+  none at all before) plus a global tap-highlight reset.
+- **Chat's "Edit" button was undiscoverable on touch** — `opacity:0` revealed
+  only via `:hover`, which doesn't meaningfully exist on a touchscreen. Now
+  always visible on touch, hover-reveal preserved behind
+  `@media (hover: hover) and (pointer: fine)` for mouse users.
+- Verified live at 375/390/430px and desktop: no horizontal overflow found
+  anywhere (including a deliberately long unbroken word in a chat bubble),
+  chat composer/keyboard layout already correctly flex-based (not
+  `position:fixed`) so it wasn't restructured. Real iOS safe-area insets
+  can't be verified in the Chromium-based preview tool — the fix is
+  standard/correct but wants a real-device or Safari-simulator check.
+- No new tabs, no gamification, no dashboard sections, no color changes —
+  scope stayed to interaction quality, as directed.
+
+### M24 — The Kona Briefing (2026-09-14) ✅
+Product Thesis 2.0 audit (same day) found Kona's judgment layer
+(`src/agent/insights.ts`) was real and honest but only reached the user when
+they typed something — Home's "Your day" card and the chat opener were both
+template-only, never touching `insights`. M24 closes that gap: proves
+**memory → judgment → action**, not just "Home is more personalized."
+- **`src/agent/briefing.ts`** (new) — `buildKonaBriefing()`: finds the next
+  *genuinely meaningful* session (long / hard·race / a double day — not every
+  planned session) within a 7-day horizon, today included, then asks for one
+  piece of comparable evidence. Deterministic, no LLM call. Returns an honest
+  default ("nothing special to prepare" / "nothing meaningful coming up") when
+  no evidence or no target exists — never fabricates.
+- **`similarSessionFlag()`** (`src/agent/insights.ts`) — a new, narrower kind
+  of evidence than the file's existing aggregate reads: the single most
+  recent *genuinely comparable* past session (same sport **and** matching
+  shape — same-sport-alone is never enough) and whether it had something
+  concrete to report (thirst/GI/cramp/stopped-early). `basis: 'reported'`
+  always — one instance is never `outcome` or `repeated`. Comparable-but-
+  uneventful yields no insight.
+- **`effectiveIsLong()`** (`src/agent/insights.ts`) — found live, same day:
+  an 18km run the athlete called "long" in chat wasn't recognised as
+  meaningful because the LLM's tool call hadn't set `is_long: true`. Fixed by
+  classifying via the same deterministic engine the fueling calc already uses
+  (`classifySession` → LONG/VERY_LONG from distance+pace), not just the raw
+  flag — an 18km run is long regardless of what one chat turn happened to set.
+- Home: the evidence-backed briefing replaces "One thing to think about" as
+  the top card; "Your day" is demoted to the plain factual/fueling-numbers
+  card beneath it. Chat's opener (`getStarter`) now calls the *same*
+  `buildKonaBriefing` Home does — literally the same function, not a second
+  drifting implementation (retired `starter.ts`'s own `nextNotable()`).
+- Check-in closes the loop (M24.5), kept deliberately lightweight: no new
+  table, no new activity-event type. `CheckinDialog` reuses the
+  `kona_briefing` Home already fetched — when it's a real, evidence-backed
+  action for *today* specifically, one optional extra question ("did you
+  follow it, better/worse/same?") appends a clause to the check-in's free
+  text, phrased to trip the *existing* `positiveFeel`/`TROUBLE_RE` wording in
+  `insights.ts` — so the next `similarSessionFlag` lookup picks it up through
+  the same evidence path as everything else, no widened data surface.
+- Copy (M24.6): reframed from "tell Kona your week" to "bring your training
+  plan," and made explicit everywhere relevant that Kona doesn't sync
+  Strava/Garmin/a watch — manual narration is the point, not a gap.
+  `PRODUCT_VISION.md`'s stale "fuelling is the initial wedge" line updated to
+  match — session judgment is the wedge now, fuelling is one input to it.
+- Verified live end-to-end (dev-fallback server, real model): logged a past
+  18km run with a reported hydration flag, planned a matching future 18km
+  run — Home's briefing showed *"Bring extra fluid — your second bottle if
+  you have one. Last time you did a similar long run (7 Sep), you said:
+  'Felt fine otherwise, just that thirst issue in the last third'."* —
+  matching the brief's own worked example almost verbatim.
+- Explicit non-goals held: no wearable integration, no AI-generated plans, no
+  macro tracking, no dashboards/scores, no push notifications, no second
+  agent. `recommendations` (a dormant table reserved for this) deliberately
+  left unused — noted as a conscious deferral if a future milestone wants a
+  literal persisted record rather than the current recompute-from-Home
+  approach.
+
+### Home: "Your week" preview card + a missed check-in survives past midnight (2026-09-14) ✅
+Two of three founder asks from the same message; the third (daily carb/water/
+salt targets on "Your week") conflicted with a documented product decision —
+flagged back to the founder rather than built. See `CALCULATION_ENGINE_SPEC.md`
+§23: a whole-day nutrition estimate was deliberately removed in the 2026 reset
+for making Kona feel like a generic macro tracker; only protein has a real
+*daily* number (§8.1) — fluid/carb/sodium are session references by design
+(`src/engine/profile-baseline.ts`, `buildWeek`'s footnote). **Founder decision:
+leave as-is** — no daily fluid/carb/sodium targets; the §23 reasoning stands.
+- Home's "Your week →" hyperlink replaced with an actual preview card (today
+  first, then the next 3 days, real per-day titles) below the "Your day" card
+  — tapping through still opens the full "Your week" page. `buildHome` gained
+  `week_preview`; the per-day title logic ("Rest" / joined sports for a
+  double day / the session title / null for an open day) was pulled out of
+  `buildWeek` into a shared `dayTitle()` in `src/agent/home.ts` so Home and
+  the full week page can't drift.
+- A training day's end-of-day check-in that never happened no longer
+  disappears when the day rolls over — `checkin.missed_date` is the most
+  recent past day (in the rolling window) with a session and no matching
+  recovery log, computed the same tz-aware way as `checkinDoneToday`
+  (`localDateOf`, not a naive UTC slice — the exact bug class §"Today"
+  above just fixed). The profile-avatar dot and the check-in nudge now cover
+  both "today's check-in is due" and "a past day's check-in was missed";
+  tapping either opens the check-in dialog with honest copy ("How did Sunday
+  go?", not "today"). Because a late check-in always saves against *today*
+  (the log has no way to backdate itself to the day it's catching up on), a
+  resolved missed day is tracked client-side (`localStorage`) rather than
+  re-derived from the log — the server keeps reporting the raw missed date
+  forever, same as before.
+- Caught in testing (not by inspection): computing the "resolved" flag in a
+  `useEffect` + its own `useState` lagged one render behind `data`, so a
+  just-resolved day's auto-popup could fire once more before the resolution
+  "caught up" — fixed by computing it inline during render instead.
+
+### "Today" now resolves against the athlete's timezone, not the server's (2026-09-14) ✅
+_Found live the same day, while testing the session-recap feature just after
+local midnight; fixed immediately after on explicit go-ahead. Root cause:
+nothing in the app stored or knew the athlete's timezone, so every "what day
+is it" computation guessed from the server's own clock — harmless
+coincidence in local dev (server = founder's own machine), wrong on Vercel
+(server timezone is UTC) for however many hours the athlete's offset spans
+each day (~8/day for Singapore): a chat message near local midnight got its
+new session, or a check-in note, attributed to the wrong calendar day._
+- New `src/domain/time.ts`: `athleteNow(tz, real)` returns a `Date` whose
+  LOCAL getters read back the athlete's wall clock for a real instant —
+  every existing "now" consumer (`buildHome`/`buildWeek`/`buildStarter`)
+  already reads local getters, so passing this in place of `new Date()`
+  fixed them with no further changes needed there. `localDateOf`/
+  `localTimeOf` do the same for bucketing already-stored UTC instants
+  (recovery/fuel `logged_at`) onto a local calendar day — needed so the
+  new recap screen's log-matching stays correct too, not just new saves.
+  `localIsoString` formats via local getters instead of `.toISOString()`,
+  which — caught by a failing test, not by inspection — always renders the
+  true UTC instant regardless of how the `Date` was built, silently
+  undoing `athleteNow()`'s entire point when `orchestrator.ts` used it for
+  `now_iso` (what the chat LLM resolves "today"/"tomorrow" against).
+- `app/client-tz.ts` sends the browser's IANA zone as an `x-kona-tz` header
+  on every request that resolves "today" (chat, home, week, recap);
+  `lib/route-helpers.ts`'s `requestTimezone()` reads + validates it,
+  falling back to UTC (the old behaviour) if a client hasn't sent one yet.
+- `created_at`/`logged_at` were never the problem and didn't change — they
+  stay real, unambiguous UTC instants in storage. Only how "now"/"today"
+  get *derived* from them changed.
+- Tests: direct coverage for `time.ts` at the exact real-world instant the
+  bug was found at; a prompt-content test proving `now_iso` reaches the LLM
+  as the athlete's local date (the test that caught the `toISOString()`
+  regression above); fake-timer integration tests for `getHome`/`getWeek`.
+  Live-verified end-to-end against the real model at the reproducing
+  instant: a "10km run today" message now lands on the right local date,
+  and a follow-up recovery/fuel message correctly correlates onto that
+  session in the recap screen (previously null — the second half of the
+  same bug).
+
+### Delete capability, rolling windows, Memory→Profile, session recap (2026-09-14) ✅
+Five related asks from live founder testing, built together since they touch
+the same screens:
+- `delete_planned_session` / `delete_actual_session` tools — Kona can now
+  actually remove a record instead of the only path being "log it as
+  skipped," which was creating false negative outcomes that fed the insight
+  engine (the exact "repeatedly run into problems" bug reported).
+- Home's day-strip and "Your week" are both now a rolling, today-anchored
+  14-day window (today − 6 … today + 7) instead of a fixed Monday–Sunday,
+  and Home auto-scrolls so today is the first visible day on open. Also
+  fixed: Week's `has_plan` flag only checked planned sessions, so a day
+  with just a logged actual session (no plan) wrongly showed the empty state.
+- Memory moved out of the bottom nav (now just Home/Chat) into Profile, as
+  a nested screen with a back button.
+- New post-session recap screen, opened by tapping a logged day in Your
+  week — distance/time, the planned fuelling target (not a fabricated
+  actual-consumption number — nothing computes that), what was logged, a
+  grounded Kona note (never inventing detail like pace splits the app
+  doesn't track), a chat hand-off button, and a link into the insight it
+  contributed to, when there is one.
+- Also fixed two more instances of the is-today CSS specificity bug from
+  earlier this week (a day that's both today and empty/rest lost its
+  dark-on-accent text to a same-specificity rule declared later; the
+  "Today" badge was lime-on-lime and invisible in dark mode).
+
+### Deployment + live alpha fixes (2026-09-12) ✅
+Deployed to Vercel (`https://kona-livid.vercel.app`, project
+`jo-youngs-projects/kona`, auto-deploys from GitHub `main`) and Supabase Auth
+wired up. Three real bugs found and fixed during the founder's first live
+testing pass, each deployed immediately:
+
+1. **Magic-link sign-in unreliable on Outlook/Live mail** — those providers
+   pre-fetch links in incoming email to scan them, which silently burns
+   Supabase's single-use magic-link token before the athlete ever clicks it.
+   Fixed by adding a 6-digit code fallback to `app/login/page.tsx`
+   (`supabase.auth.verifyOtp({ email, token, type: 'email' })`) alongside the
+   link — requires `{{ .Token }}` in Supabase's Magic Link email template.
+2. **Tool failures were invisible server-side** — `runTool`'s catch block
+   folded a failed tool call into an honest `ok:false` result (correct — no
+   fabrication, no crash) but logged nothing, so a real "couldn't save that"
+   report had no diagnosable cause. Added `console.error` there, and gave
+   `/api/chat` an explicit `maxDuration = 60` (a turn can make two sequential
+   Claude calls + a DB write; Vercel's platform default was tighter than that).
+   Deliberately did **not** add automatic retries — without an idempotency key
+   on tool calls, retrying a call that actually succeeded but whose response
+   timed out would silently create a duplicate record.
+3. **Standalone planned sessions invisible on Home** — "tomorrow I'm running
+   14km" (via `save_planned_session`, no `weekly_plan_id`) never showed up,
+   because `getHome`/`getWeek`/`getStarter` only ever fetched the latest
+   weekly plan's sessions. Not a timezone bug (my first, wrong guess — logged
+   here so it isn't re-suspected next time). Fixed by fetching every planned
+   session for the user (`listPlannedSessions`) instead; `buildHome`/`buildWeek`
+   already index by date so nothing outside the displayed range leaks in.
+   Regression test added (`tests/server/kona-server-home.test.ts`) — verified
+   it fails against the old code, passes against the fix.
+   Also, per a live product ask: Home's day-strip now shows 14 days (this week
+   + next) instead of 7, since a session more than a few days out had nowhere
+   to appear.
+4. **A stated distance range was silently averaged** — "13-14km" saved as
+   `distance_km: 13.5`, a defensible number for the fueling math but one the
+   athlete never said, which is exactly the kind of invented precision the
+   product is supposed to avoid. Added an optional `distance_label` (new
+   column, `supabase/migrations/0003_distance_label.sql`, run on the Supabase
+   project same as 0001/0002) carrying the athlete's own words; Home/Week show
+   that instead of the number wherever the interpreter sets it. Threaded
+   through every tool that can set a distance (`save_planned_session`,
+   `save_weekly_plan`, `update_planned_sessions`).
+
+### UI/product experience pass ✅
+_Founder-approved reference screens (companion-first, dark, lime accent) turned
+into the visual direction for the real UI, ahead of alpha. Explicitly scoped as
+a product + UI refinement pass: no new backend architecture, persistence
+features, integrations, gamification, avatars, social features, or native
+mobile code._
+- **Design system** (`app/globals.css`, `app/layout.tsx`): new token set (dark
+  near-black ground + lime/chartreuse accent as the primary look, with a
+  matching light-mode palette for `prefers-color-scheme: light`), Manrope via
+  `next/font/google` for real typographic weight, pill-shaped buttons/nav/chips,
+  18–26px card radii throughout. Bottom nav now reads as pill (active tab) +
+  icon-only circles (inactive), matching the reference.
+- **Home** (`app/HomeTab.tsx`): the daily-briefing card gets a distinct
+  "Kona · —" tinted treatment (`.kona-card`/`.kona-eyebrow`) so companion
+  speech reads as visually distinct from plain data cards, per the "Kona
+  should feel like it's speaking" principle. Fuel numbers stay labelled
+  "references, not targets."
+- **"Your week"** (`src/agent/week.ts`, new `app/api/week/route.ts`,
+  `app/WeekView.tsx`) — new read-only screen, opened from a link under the
+  day-strip. Every field is derived from the same `buildDashboard()` already
+  used by Home/the old dashboard — no new persistence, no new calculation,
+  just a week-shaped read of data Kona already has (per-day fuel ranges,
+  `is_key_day`, daily protein baseline). Today's session renders as a filled
+  card; a double-session day renders as an outlined "Double" card — implements
+  founder principle 7 ("keep the week plan, but keep sessions/key-days visually
+  dominant, not a dense dashboard") which the day-strip alone didn't satisfy.
+- **Chat** (`app/Chat.tsx`, `app/Workspace.tsx`): added a "+" new-chat button in
+  the header (previously only reachable via the sidebar), circular send button,
+  starters render as full-width stacked rows instead of wrapped chips — matches
+  the reference chat screen exactly.
+- **Evening check-in** (`app/CheckinDialog.tsx`): restyled as a bottom sheet
+  (drag handle, slides from the bottom on mobile, centered modal ≥560px);
+  "As planned?" / "Pains?" now sit side by side.
+- **Onboarding** (`app/Onboarding.tsx`) / **Profile** (`app/HomeTab.tsx`
+  profile overlay): added the lime "K" avatar mark on onboarding and a
+  name/sports/sessions-per-week summary header on the profile overlay; numeric
+  profile fields (weight, bottle, sessions/week, age) read as tiles.
+- **Not built this pass** (flagged, not silently dropped): a computed
+  "last N check-ins" trend strip on Home — the reference screenshot implies new
+  per-day pass/fail/mixed derivation logic that doesn't exist yet anywhere in
+  the app (unlike the week view, which reused `buildDashboard()` wholesale).
+  Worth a small follow-up milestone if the founder wants it; scoped out here to
+  keep this pass to a refinement of what already exists.
+- Verified live in the browser (mobile viewport, dev-fallback in-memory user)
+  through onboarding → Home → Chat → weekly-plan tool-call flow → Your week →
+  Memory → Profile → evening check-in submit, screen by screen against the
+  reference set. Found and fixed one real bug in the process: a day that is
+  both "today" and a double-session got the double-session's outline styling
+  layered over the today fill, making its text unreadable — fixed with a
+  `:not(.is-today)` guard so "today" always wins visually.
+  `tsc` / `eslint` / `vitest` (194 pass, 4 skipped) / `next build` all clean.
+
+### M23.2 — say the "because": memory that visibly changes advice ✅
+_Product memos 01/02 (Kona's Emotional Hook, The Judgment Loop) proposed that the
+hook isn't "Kona remembers me" but "Kona's advice is better because of what it
+remembers." This is the smallest testable slice of that — no new personal-rule
+system, no gamification._
+- **`COMPOSE_SYSTEM`** (`src/agent/anthropic-llm.ts`) gained one instruction:
+  most replies let `CONTEXT.insights` / `CONTEXT.history` shape the
+  recommendation silently (the default); only make the "because" explicit — in
+  natural words, never the stock phrase "Because you told me…" — when it's
+  genuinely useful, grounded in real evidence, and preferring moderate/high
+  certainty. `contextForPrompt` now also sends each insight's `certainty` and
+  `evidence` array (previously only `kind`/`basis`/`text`) so an explicit
+  callback can point at something real instead of the headline alone.
+- No change to `recommendation_adapted` / `insight_formed` detection
+  (`src/agent/activity.ts`) — that machinery is correct as built and untouched;
+  this milestone only makes what `context.insights` already carries (always
+  computed from *before* this turn — verified in `buildContext`/`orchestrator.ts`,
+  so "never same-turn" holds structurally, no new code needed for it) reach the
+  reply itself instead of sitting silently in the activity log.
+- **Memory tab** (`src/agent/knows.ts`, `app/KnowsView.tsx`): each insight now
+  carries a `tier` — `watching` (`certainty: 'low'`) vs `acting_on` (moderate/high)
+  — derived from the existing certainty field, not a new dimension. Rendered as
+  one small muted line per insight card ("Still watching — not enough yet to
+  lean on." / "Confident enough to factor into today's advice."), reusing the
+  existing card/typography pattern. "What you've told Kona" was already a
+  separate strand — the three-way told/watching/acting-on distinction the memo
+  asked for didn't need a fourth section.
+- Tests: +1 `anthropic-llm.test.ts` (evidence/certainty reach the compose
+  prompt), +1 `knows.test.ts` (tier assignment, both directions). **198 tests:
+  194 pass, 4 skipped (live);** `tsc` / `eslint` / `next build` clean.
+  Live-verified against the real model (`npm run chat -- --llm=anthropic`):
+  two GI-after-heavy-breakfast mentions, then a third turn planning a similar
+  run with a heavy breakfast planned → the reply named the two prior mentions
+  and suggested going lighter, unprompted, non-diagnostically. A same-session
+  unrelated question (weekend ride hydration) got a clean reply with **no**
+  forced insight mention — confirming silence-by-default holds.
+- **Not built** (deliberately): a personal-rule object/table, an LLM-propose-
+  and-approve pipeline, contradiction/retirement UI, new deterministic
+  detectors, numeric confidence scores, avatar/XP/points/cosmetics/streaks/
+  social. See product memos 01/02 for the fuller reasoning.
+
+### M23.1 — turn attribution + edit reconciliation ✅
+_Close the M23 §6b gap before alpha: structured records created by a chat turn
+are attributable to that turn and reconciled when the turn is edited/regenerated;
+earlier turns' records are preserved. No UI, no new features._
+- **`origin_message_id`** on `planned_sessions` / `sessions` / `weekly_plans` /
+  `fuel_logs` / `recovery_logs` / `personal_memories` / `activity_events` (domain
+  types + `New*` inputs + both repos + migration `0002_origin_message_id.sql`,
+  FK `ON DELETE CASCADE`). The orchestrator passes the turn's **user message id**
+  into the tool context; each writing tool stamps it; `deriveTurnEvents` stamps
+  the activity events. Records made outside a chat turn (check-ins) → null origin.
+- **`Repository`** gains `listMessageIdsFrom(userId, conv, messageId)` and
+  `deleteRecordsForMessages(userId, messageIds) → EditReconciliation` (counts +
+  `nulled_links`). Implemented for in-memory and Supabase.
+- **`editMessage`** now: list removed message ids → `deleteRecordsForMessages`
+  (delete by origin; a deleted weekly plan takes its planned sessions; null any
+  dangling FK on a *surviving* row) → delete messages → regenerate (new records
+  get the new origin). Result surfaced as `reconciled` on the chat API response
+  (metadata, no UI).
+- **Deliberate limitations** (documented, fine for alpha — `ARCHITECTURE.md` §6b):
+  a memory *updated* by the edited turn reverts to unset (no revision history);
+  chat-set profile facts are one row per user with no per-fact provenance so are
+  not reverted; `update_planned_sessions` field changes are not reverted; the
+  transcript is linear so "preserve a later dependent record" only fires as the
+  FK-null safety net.
+- **Tests**: +`tests/agent/edit-reconcile.test.ts` (attribution, cascade of the
+  edited turn, earlier turns preserved, memory delete+recreate, idempotent),
+  +5 contract cases (`repository-contract.ts`: round-trip, `listMessageIdsFrom`
+  scoping, delete-by-origin + null-dangling, weekly-plan child cascade, never
+  touches another user), +2 activity, +edit-message assertions, +1 live-Supabase
+  case (env-gated). **196 tests: 192 pass, 4 skipped (live);** `tsc` / `eslint`
+  / `next build` clean. Verified in dev-fallback: editing a plan turn returned
+  `reconciled: { planned_sessions: 1, fuel_logs: 1, activity_events: 3 }`, the
+  timeline cleared, and the regenerated turn's plan carried the new origin.
+
+### M23 — production persistence + real user identity ✅
+_Make "Kona remembers me" real: Supabase Postgres + magic-link auth + per-user
+RLS, behind the existing repository boundary. No visual redesign._
+- **Schema**: `supabase/migrations/0001_init.sql` — `profiles`, `weekly_plans`,
+  `planned_sessions`, `sessions`, `fuel_logs`, `recovery_logs`, `messages`,
+  `personal_memories`, `recommendations` (reserved), `activity_events`, plus a
+  `conversation_summaries` VIEW (a conversation is derived from its messages —
+  no physical table, per "don't persist derived state"). Insights are never
+  stored; `deriveInsights()` recomputes from source rows.
+- **RLS** on every table: `auth.uid() = user_id` for full CRUD;
+  `activity_events` gets select+insert only → append-only at the DB level. The
+  app uses a **user-scoped anon client**, never the service-role key.
+- **`SupabaseRepository`** (`src/data/supabase-repository.ts`) implements the
+  unchanged `Repository` interface. `InMemoryRepository` stays for tests + the
+  dev fallback. Only interface change: message methods are user-scoped
+  (`ChatMessage.user_id`, `listMessages(userId, …)`, `deleteMessagesFrom(userId, …)`).
+- **Identity threading**: `lib/server-context.ts` resolves the per-request
+  `{ repo, userId, llm }`. `lib/kona-server.ts` use-cases now take that context
+  — no module-level `DEMO_USER_ID`. Every API route starts with
+  `requireContext()` → 401 (no session) / 500 (misconfigured in prod).
+- **Auth**: Supabase magic link. `middleware.ts` (session refresh + route
+  gating), `/login`, `/auth/callback`, `/api/auth/signout`, a "Sign out" link in
+  the profile overlay. Onboarding still runs after sign-in.
+- **Config**: `.env.example` + `DEPLOYMENT.md`. No Supabase env → dev-only
+  in-memory single-user fallback (loud warning), **refused when
+  NODE_ENV=production**.
+- **Tests**: +`tests/data/repository-contract.ts` (shared CRUD + cross-user
+  isolation + append-only + memory-upsert, run against in-memory),
+  +`tests/server/server-context.test.ts` (dev / prod-refuse / 401 / authed),
+  +`tests/server/routes-auth.test.ts` (every route 401s unauthenticated),
+  +`tests/data/supabase-repository.live.test.ts` (real RLS + persistence-across-
+  fresh-client + immutable activity_events — `skipIf` no `KONA_TEST_SUPABASE_*`).
+  All existing tests kept. **185 tests: 182 pass, 3 skipped (live);**
+  `tsc` / `eslint` / `next build` clean. Verified locally in dev-fallback: the
+  full journey (onboard → chat turn → profile fact saved → messages persisted &
+  scoped → conversation summary) works end to end.
+- **Edit-turn rollback**: closed by **M23.1** (below) — structured records are
+  now attributed to their turn and reconciled on edit.
+- **Founder step to go live**: create a Supabase project, run `0001_init.sql`
+  then `0002_origin_message_id.sql`, set `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY`
+  (+ deploy env). Full journey on a
+  real project is the founder-review verification.
+
+### M22 — Product Truth Audit ✅
+_Strengthen the line between what the athlete **reported**, what Kona has seen
+**repeated**, what Kona has learned from **outcomes**, and what Kona has actually
+**adapted**. No new UI, no persistence._
+- **`Insight.basis`** (`reported` / `repeated` / `outcome` / `adaptation`) added
+  alongside `kind`. Every detector sets it; it's in the chat context and drives
+  `COMPOSE_SYSTEM`. Documented in `insights.ts`, `ARCHITECTURE.md` §5a,
+  `CALCULATION_ENGINE_SPEC.md` §6.5, `PRODUCT_VISION.md`.
+- **`workingSetup` removed.** It fired a "your routine is working — keep it"
+  recommendation from **frequency alone** (≥3 completed, same sport). Replaced by
+  `sportReads`, which for a per-sport window emits at most:
+  - a **frequency fact** (`basis: 'repeated'`) — "completed your last N as
+    planned". A count. Never "it works".
+  - then exactly one outcome read, only when there's a real result signal
+    (session status + same-session/day recovery note):
+    · **working setup** (`outcome` pattern + recommendation) — every recent one
+      completed, ≥2⁄3 felt good, none went badly.
+    · **condition-dependent** (`outcome` pattern, low certainty) — good vs bad
+      split cleanly on one variable (fed/fasted · time of day · heat); names the
+      condition, asserts no cause, gives no "keep it".
+    · **repeated trouble** (`outcome` fact, high) — window dominated by flagged
+      bad sessions (≥2, ≤1 ok); non-diagnostic, no blame, no recommendation.
+    · **mixed / inconclusive** (`outcome` fact, low) — good and bad, no clean
+      reason → "not enough to change anything on"; **no recommendation**.
+  - `unprovenSetup` — one session with an outcome note → "once so far — not
+    enough" (`repeated`, low). Resists over-reading a single data point.
+- **`recommendation_adapted` is now evidence-based.** The old code emitted it the
+  instant an insight formed ("Kona will factor this in from now on") — a promise.
+  Now: a new outcome recommendation is recorded as `insight_formed` ("Kona's
+  take — …"); `recommendation_adapted` fires only on a **later** turn where that
+  recommendation was already on file **and** the turn actually produced advice
+  (fuelling calc / week plan). Once per insight. Never for a pattern/fact.
+  `orchestrator` passes `adviceProducedThisTurn` + `alreadyAdaptedFrom`.
+- `home.ts` `buildNextKey` now only borrows a pattern that is `basis: 'outcome'`
+  and not low-certainty — never the bare frequency line, never the mixed read.
+- Tests: new `tests/agent/product-truth.test.ts` (11) — successful repetition
+  (with/without outcome), repeated failure, conflicting evidence, unproven
+  setup, condition split (fed/fasted + heat), and real recommendation
+  adaptation. `insights` / `activity` / `home` / `knows` tests updated to the
+  honest shapes. **165 total**; `tsc` / `eslint` / `next build` clean.
+  Live-checked against the real model: given 2-of-4 "hit the wall" on an
+  identical route it declined a "your fuelling works, keep it" verdict, named
+  other possible variables without asserting a cause, and asked to log more.
+
+### M21 — stop demanding every detail up front + a chat that opens with context ✅
+_A companion doesn't hand you a form. It chases the 1–2 things that matter now
+and opens the conversation already knowing what's coming up._
+- **Focus prompts.** `SessionPrompt` gained `is_key` (on a long / hard / double
+  day) and `in_focus`. `buildSessionPrompts` ranks the under-specified sessions
+  — key days first, then soonest — and flags only the next `FOCUS_PROMPT_LIMIT`
+  (2) as `in_focus`. The engine still emits a prompt for **every** gap (nothing
+  is lost); the rest are just deferred.
+  - `kona-server.sendMessage` returns only the `in_focus` prompts, so the chat
+    renders 1–2 button groups, not six.
+  - The deterministic composer now says "Let's pin down the 2 sessions that
+    matter most first — Fri cycling (1st) and Fri running (2nd) … The other 4
+    we can sort a day or two out, when they matter."
+  - `COMPOSE_SYSTEM` tells the real model to ask only about the `in_focus`
+    sessions and say the rest can wait. Live-verified: a 6-session week →
+    "that Friday bike-then-run and the Sunday long run are the two that matter
+    most … the rest of the week can wait until you're closer."
+  - The per-day "needs" list on Home already surfaces a day's own gaps a day
+    out, so deferring costs nothing.
+- **Chat opens with context.** `buildStarter` takes an optional
+  `StarterContext { now, sessions }`. When a notable session is within 3 days
+  (long / hard / part of a double day wins; else the soonest), the opener leads
+  with it — "Coming up on Friday: your cycling. That's a session worth getting
+  right — tell me the details and we'll sort the fuelling." Falls back to the
+  plain intro when nothing is close or there's no plan. `getStarter` loads the
+  current week's sessions and passes them in.
+- Tests: +1 `week.test.ts` (focus / defer), +3 `starter.test.ts` (key opener,
+  light opener, generic fallback), `week-plan.test.ts` assertions updated to the
+  new "pin down the 2 that matter" wording. **153 total**; `tsc` / `eslint` /
+  `next build` clean. Live-verified end to end against the real model.
+
+### M20 — goal/race context, surfaced naturally ✅
+_The goal is context for the assistant, not a periodised training plan. It should
+show up quietly where it matters — on Home and in chat — never as a countdown app._
+- `src/domain/goal.ts` — pure helpers. `parseGoalDate(text, now)` reads a date
+  out of free-text goal text: an explicit ISO date, "`<Month> <day>`" /
+  "`<day> <Month> <year>`" (next future year when no year given), "in N weeks",
+  or a bare "in `<Month>`" (→ the 1st, so we never say "race week" prematurely);
+  `undefined` when nothing dateable is stated. `goalContext(goal, now)` →
+  `{ text, event_date, days_until, weeks_until, phrase }` — `phrase` is the one
+  ready-to-show line, tightening as the day approaches: "11 weeks to your
+  `<goal>`." → "`N` days to your `<goal>`." (≤21) → "Race week — `<goal>` in
+  `N` days." (≤7) → "Race day — `<goal>`." → `null` once it's passed. The goal
+  text is stripped of its trailing date clause for display.
+- `parseGoal` in `profile-input.ts` now stores a derived `event_date` on the
+  `TrainingGoal` when onboarding text contains one.
+- `buildHome` returns `goal_line` (= `goalContext(...).phrase`); `HomeTab.tsx`
+  renders it as one slim accent line under the date. No new card.
+- `contextForPrompt` enriches `profile.goal` with `event_date` / `weeks_until` /
+  `context_line`; `COMPOSE_SYSTEM` says to weave the timing in where it matters
+  and explicitly **not** to behave like a periodised plan; `INTERPRET_SYSTEM`
+  lets `save_profile_fact` capture a goal / event-date change stated in passing.
+- `save_profile_fact` tool + schema gained `goal_text` / `goal_event_date`
+  (date validated `YYYY-MM-DD`, may update the date alone); `activity.ts`
+  `fact_learned` summary now mentions the goal.
+- Deliberately **not** done: "Week X of Y" — needs a periodised-block model we
+  don't have and would pull toward a plan app. Noted for later.
+- Tests: +11 (`tests/domain/goal.test.ts`), +1 `home.test.ts` (`goal_line`),
+  +1 `profile-fact.test.ts` (`save_profile_fact` goal). **149 total**;
+  `tsc` / `eslint` / `next build` clean. Live-tested: seeded "First
+  Olympic-distance triathlon in June" → Home shows "40 weeks to your First
+  Olympic-distance triathlon."; "My triathlon is on June 14th this year." →
+  model updates the goal + date and replies in-voice without turning into a
+  countdown.
+
+### M19 — the feedback loop made visible ✅
+_"I told Kona → Kona remembered → it became relevant → Kona changed a future
+recommendation." The founder called this one of the most important product
+experiences._
+- **`activity_events`** — a typed, append-only stream. New `ActivityEvent`
+  domain type + `repo.appendActivityEvent` / `listActivityEvents`. Types:
+  `plan_saved / plan_updated / session_logged / fuel_logged / recovery_logged /
+  checkin_done / fact_learned / insight_formed / recommendation_adapted`. Each
+  carries a pre-computed human `summary`.
+- `src/agent/activity.ts` — `deriveTurnEvents({ toolResults, knownInsightTexts,
+  insightsAfter })`: action events from the turn's tool results, plus — for any
+  **new** pattern / fact that just crossed its evidence threshold —
+  `insight_formed` ("Kona spotted — …") and, for patterns and fuelling facts,
+  `recommendation_adapted` ("Kona will factor this into your … advice from now
+  on"). Recommendation-kind insights emit nothing (downstream advice). Emitted
+  once per insight (dedup against prior `insight_formed` summaries).
+- `orchestrator.recordTurnActivity()` runs after a turn's tools; `submitCheckin`
+  runs the insight-detection pass too. Best-effort, never throws.
+- Memory tab gains a **"How Kona's been learning"** timeline (newest first) —
+  grey markers for "you did/told", accent markers for the Kona-side steps.
+  `buildKnows` takes `events`, hides plan noise, caps 14.
+- `ARCHITECTURE.md` §6a documents the log as the seam a future XP layer consumes.
+- Tests: +4 (`activity.test.ts`), +1 repo, +1 knows timeline. **136 total**;
+  `tsc` / `eslint` / `next build` clean. Live-tested: logging 3 rides →
+  timeline shows "You logged 60/45/50 km" → "Kona spotted — your last 3 cycling
+  sessions all went to plan" → "Kona will factor this into your training advice".
+
+### M18 — Home is a daily briefing ✅
+_"I've looked at your day, your history and your goal — here's what you should
+know." Same dark cards, no redesign._
+- `HomeView.selected.fuel` / `methodology` replaced by `HomeView.briefing`:
+  - **YOUR DAY** — `{ headline, line, fuelling|null, needs[] }`. Plain-language
+    line ("Nothing unusual today. Keep it easy and eat normally."); the
+    during-/around-session numbers appear only when the session is big enough to
+    earn them; `needs` lists unset details and the line nudges to chat.
+  - **ONE THING TO THINK ABOUT** — `{ when, headline, line } | null`. The next
+    key day (long / double / hard) after today; the line is the prep note plus a
+    *real* "this worked before" pattern from `deriveInsights` ("Your last 3
+    cycling sessions all went to plan… I'd keep your usual setup"), never
+    fabricated. Null when nothing notable is coming up → section hidden.
+  - **KONA REMEMBERS** — 0–2 lines: recurring-symptom / hydration FACTs, then a
+    pattern not already shown, then a stated preference. Empty → section hidden.
+- New `hydrationFlag` insight detector (early thirst / low on fluid ≥2× → FACT).
+- `buildHome` now takes `actualSessions / recoveryLogs / fuelLogs / memories`
+  and runs `deriveInsights`; `getHome()` fetches them.
+- `HomeTab.tsx` rewritten to render the three sections; day strip, check-in dot
+  + banner + dialog, and the profile overlay are unchanged.
+- Tests: `home.test.ts` reworked to the briefing shape (12 tests, +hydration
+  detector). **130 total**; `tsc` / `eslint` / `next build` clean. Verified in
+  the browser against the founder's example (easy day → prose only; long ride
+  tomorrow → "ONE THING" with the pattern line; two thirst mentions → "KONA
+  REMEMBERS").
+
+### M17 — "What Kona knows about you" (replaces the chart Dashboard) ✅
+_Show evidence of learning, not raw DB fields. No visual redesign — reuses the
+existing dark cards._
+- Removed `app/DashboardView.tsx`, `app/dashboard/`, `app/api/dashboard/route.ts`,
+  `getDashboard()`. `buildDashboard` stays (Home still uses it for during-session
+  numbers). Nav is now **Home · Memory · Chat** (`kona.tab` migrates
+  `dashboard` → `memory`).
+- `src/agent/knows.ts` — `buildKnows()` → `KnowsView` with three honest strands:
+  **what Kona's worked out** (the M16 `Insight[]`, each with an expandable
+  "Why Kona thinks this" listing the supporting observations), **what you've told
+  Kona** (`profile.goal` + durable memories, keys turned into readable labels),
+  **recent training on record** (last 6 actual sessions + a same-day "felt"
+  snippet). `has_anything=false` → an honest empty state, never invented content.
+- `Insight` gained `evidence: string[]` — populated by every detector ("9 Sep ·
+  50 km easy cycling", `"5 Sep · \"calf sore\" (felt significant)"`).
+- `GET /api/knows`; `KnowsView.tsx` renders it.
+- Tests: +4 (`tests/agent/knows.test.ts`), updated insights tests for `evidence`.
+  **127 total**; `tsc` / `eslint` / `next build` clean. Live-tested: after a few
+  ride + calf logs the view shows the cycling PATTERN, the calf FACT with quoted
+  evidence, the two SUGGESTIONs, the goal + an auto-remembered "recurring calf
+  issue", and the recent rides.
+
+### M16 — deterministic pattern layer ✅
+_The half of the loop that makes Kona "know" the athlete: turn accumulated
+history into a few honest, labelled observations — computed in code, not
+invented by the model._
+- `src/agent/insights.ts` — `deriveInsights({ actualSessions, recoveryLogs,
+  fuelLogs, memories })` → `Insight[]`. Each carries `kind`
+  (**fact / pattern / hypothesis / recommendation**), `text` (ready to show),
+  `certainty` (high / moderate / low), `evidence_count`, `topic`, `as_of`.
+  Four conservative detectors: a per-sport routine that keeps going to plan
+  (PATTERN + "keep it" RECOMMENDATION); a body part / symptom mentioned ≥2×
+  (FACT — explicitly non-diagnostic; + a gentle "get it assessed" RECOMMENDATION
+  when a mention was moderate+); ≥3 of the last ≤6 sessions off-plan (FACT, no
+  cause implied); a fuel item logged ≥3× (FACT — "a staple"). HYPOTHESIS is not
+  auto-detected (premature with little data, risks implying causation) — that
+  stays the model's job in chat, guided by `COMPOSE_SYSTEM`. Empty history → `[]`.
+- Wired into `ContextPackage.insights` via `buildContext` (runs over the FULL
+  history every turn); `contextForPrompt()` passes `{kind, text}` to the model,
+  and `COMPOSE_SYSTEM` says to lean on them and keep each tag's meaning.
+- `GET /api/insights` + `getInsights()` in `kona-server.ts` (for M17).
+- `INTERPRET_SYSTEM` memory guidance broadened: propose memories for standing
+  preferences, constraints, go-to setups and recurring body flags — not just
+  `next_race` / `typical_week`.
+- Tests: +6 (`tests/agent/insights.test.ts` — every detector + the not-enough-
+  data case). **123 total**; `tsc`, `eslint`, `next build` clean. Live-tested:
+  after logging a couple of tight-calf notes, `/api/insights` returns the FACT +
+  RECOMMENDATION, and the chat reply weaves in "your right calf has come up
+  twice now… if it keeps recurring, worth getting it looked at" — non-diagnostic.
+
+### M15 — real model is the shipped path + full context wiring ✅
+_The Anthropic client existed but (a) the launch config forced the deterministic
+stub and (b) `context.history` was fetched and never serialized into the
+prompt — so the "companion that knows me" half of the loop was dead._
+- **`.claude/launch.json`** no longer forces `KONA_LLM=deterministic`. The real
+  model is used whenever `ANTHROPIC_API_KEY` is set (via a git-ignored
+  `.env.local`); the deterministic stub is the fallback for no-key / CI /
+  `KONA_LLM=deterministic`. `getLlm()` logs which client is active.
+- **`RelevantHistory` gained `recent_fuel_logs`**; `context.ts` requests recent
+  activity across all sports (limit 6, no sport filter — "what have you been
+  doing"). `get_relevant_history` stays for deeper sport-specific lookups.
+- **`contextForPrompt()` now serializes `history`** (recent_sessions /
+  recent_recovery / recent_fuel) and `profile.goal` into *both* the interpret
+  and compose prompts. `COMPOSE_SYSTEM` gained the FACT / PATTERN / HYPOTHESIS
+  distinction and "if a setup has repeatedly worked, keep it" guidance.
+- **`INTERPRET_SYSTEM` reworked**: when no tool is needed and the athlete asked
+  a question answerable from context ("what do you know about my long rides?",
+  "how's my week looking?"), the model writes the reply itself instead of
+  emitting reasoning like "no tool calls needed here". Also nudged to log fuel
+  and feelings mentioned *alongside* a session ("rode 60k, had porridge and two
+  gels, felt strong").
+- Docs: `ARCHITECTURE.md` context-package example updated (goal + history/fuel).
+- Live-tested against `claude-sonnet-5`: a session-log message logs
+  session+fuel+recovery; "what do you know about me" returns a real summary;
+  a repeat-ride planning question references the prior ride and says "that
+  worked once — keep it". 114 tests green (+1 asserting goal/history reach both
+  prompts); `tsc`, `eslint`, `next build` clean.
+
+### M14.2 — Slim onboarding + contextual weight + endurance-first ✅
+_2026 reset, step 2. The ~13-field intake form was the first impression and it
+read as "medical intake"; every field cut lifts first-conversation completion._
+- **Onboarding is 3 fields**: your name · which endurance sports (Running /
+  Cycling / Swimming / Triathlon / Strength) · "What are you working towards?"
+  (free text → `Profile.goal.text`). Removed height, activity level, the
+  14-option dietary restrictions, the 3× 1–5 self-perception sliders, and made
+  gender / age / weight all optional and not asked at onboarding.
+- **`body_weight_kg` is now optional.** `profileDailyBaseline` and
+  `calculateFuelingTargets` return `protein_daily_g` / `post_workout_protein_per_kg_g`
+  as `null` when weight is unknown; hydration / carb / sodium are unaffected
+  (weight-independent). `buildDashboard` + `DashboardView` handle the null.
+- **New `save_profile_fact` tool** ({ body_weight_kg?, usual_bottle_ml? } →
+  `upsertProfile` merge). Kona collects weight **contextually**: after a plan
+  when weight is unknown the reply asks once ("what do you weigh? … say 'I'm 68
+  kg'"), and "I'm 64 kg" / "my usual bottle is 750 ml" route to
+  `save_profile_fact` (deterministic + Anthropic paths). Intent
+  `note_profile_fact`.
+- **`ProfileForm` has `mode: 'onboard' | 'settings'`** — onboarding shows the 3
+  fields; the Home Profile overlay (settings) adds weight / bottle / sessions /
+  age / gender / injury note, all optional.
+- **`Profile.goal: TrainingGoal`** ({ text; event_date? }) — passed into the
+  Anthropic context; the starter greeting acknowledges it ("You're working
+  towards: …") instead of the old wall of protein/fluid/sodium numbers.
+- **Sports**: `ONBOARDING_SPORTS` = running / cycling / swimming / triathlon /
+  gym(strength). The `Sport` union keeps the wider set so free-text mentions of
+  other activities still parse.
+- Docs: `PRODUCT_VISION.md` target-customer section; header copy re-pointed
+  ("AI endurance companion") in `Chat.tsx`, `layout.tsx`, `starter.ts`.
+- 113 tests green (rewrote `profile-input` / `starter` suites for the new
+  contract; +5 `profile-fact` tests; +1 baseline null-weight test); `tsc`,
+  `eslint`, `next build` clean. Full onboard → greeting → plan → weight-nudge →
+  `save_profile_fact` flow verified in the browser.
+
+### Reset milestone plan
+UX north-star: every screen says _"I've looked at your situation, your history
+and your goal — here's what I think you should know"_, not "here is information
+about your training." **No major visual redesign** (keep dark theme, layout,
+palette, bottom nav, cards, typography). **Never fabricate insights / examples
+when real data is missing — honest empty states.** Persistence, gamification and
+integrations are out of this cycle. **Stop for a product review after M21.**
+
+- **M14.1** ✅ De-scope: remove the Daily tab + Mifflin–St Jeor energy model + food catalog; nav → Home/Dashboard/Chat; docs re-pointed.
+- **M14.2** ✅ Slim onboarding (name · endurance sports · what you're training for); weight optional + collected contextually via `save_profile_fact`; sports trimmed to run/bike/swim/tri + strength; goal captured.
+- **M15** ✅ Anthropic is the shipped conversational path; `history` + `goal` wired into the prompts; model answers no-tool questions directly.
+- **M15.1** ✅ Edit a sent chat message → regenerate the reply.
+- **M16** ✅ Deterministic pattern layer — `deriveInsights()` → `Insight[]` (fact / pattern / hypothesis / recommendation + certainty).
+- **M17** ✅ "What Kona knows about you" view replaces the chart Dashboard — insights with expandable "Why Kona thinks this" evidence, "what you’ve told Kona" (goal + memories), recent training on record; honest empty state.
+- **M18** ✅ Home is a daily briefing — YOUR DAY (prose; numbers only when the session earns them) / ONE THING TO THINK ABOUT (next key session + a real "this worked" pattern line, never fabricated) / KONA REMEMBERS (recurring facts). Day strip + check-in kept; no visual redesign.
+- **M19** ✅ Feedback loop made **visible** — a typed `activity_events` log + a "How Kona's been learning" timeline on Memory (you logged X → Kona remembered → spotted a pattern → advice adapts). The event log is the seam a future XP layer would consume.
+- **M20** ✅ Goal context surfaces naturally — a slim "N weeks to your <goal>" line on Home; `goalContext()` computes weeks/days-until from a parsed or stated `event_date`; the chat model gets `weeks_until` and a nudge to weave timing in without acting like a periodised plan; `save_profile_fact` can set/update the goal + date from chat.
+- **M21** ✅ Stop prompting for every session up front — the engine flags only the next 1–2 key sessions `in_focus` (key days first, then soonest), the composer + real model chase just those and say the rest can wait, and the chat opener leads with the nearest notable upcoming session instead of a generic greeting.
+- **M22** ✅ Product Truth Audit — `Insight.basis` (reported / repeated / outcome / adaptation); frequency no longer implies effectiveness (`workingSetup` removed → `sportReads`: frequency fact, then one honest outcome read — working / condition-dependent / repeated-trouble / mixed-inconclusive); `unprovenSetup` for a single data point; `recommendation_adapted` fires only once a *later* turn's advice actually used an earlier recommendation. No UI change, no persistence.
+- **M23** ✅ Production persistence + real user identity — Supabase Postgres behind the unchanged `Repository` interface (`SupabaseRepository` alongside `InMemoryRepository`), RLS isolating every user's rows, Supabase magic-link auth (`middleware.ts`, `/login`, `/auth/callback`, sign-out), `lib/server-context.ts` resolving `{repo, userId, llm}` per request instead of a module-level demo user. No Supabase env → dev-only in-memory single-user fallback, refused in production. No visual redesign.
+- **M23.1** ✅ Turn attribution + edit reconciliation — every structured record a chat turn creates carries `origin_message_id`; editing a turn now reconciles (deletes) the records it made and nulls dangling links on records that survive, instead of silently leaving orphaned data. Documented, acceptable-for-alpha limitations for memory updates / profile facts / plan field-edits (§6b). No UI, no new features.
+- **M23.2** ✅ Say the "because" — `COMPOSE_SYSTEM` now lets insights/history shape advice silently by default, and makes the connection explicit (grounded in real evidence, natural wording) only when genuinely useful; Memory tab labels each insight watching vs acting-on. No new data model, no gamification.
+
+**→ M14.1–M23.2 complete. STOP HERE for the founder product review before starting anything new.**
+
+## Completed work
+
+### M15.1 — edit a sent chat message → regenerate the reply ✅
+_User ask: fix a mis-typed message and have Kona re-answer._
+- **Backend**: `AgentTurn` now returns `user_message_id` / `assistant_message_id`
+  (the orchestrator was discarding the appended `ChatMessage`s). New
+  `repo.deleteMessagesFrom(conversationId, messageId)` removes that message and
+  everything after it in the conversation. `editMessage()` in `kona-server.ts` =
+  truncate + re-run `sendMessage`. `/api/chat` POST accepts `editMessageId`
+  (validated) and returns both message ids; GET returns `id` per message.
+- **UI** (`Chat.tsx`): each stored user bubble gets an "Edit" affordance (shows
+  on hover). Editing swaps the bubble for a textarea + "Save & resend"; on save
+  the transcript is truncated at that message and the turn re-runs — the edited
+  message and a fresh reply replace everything below.
+- **Known limitation** (documented, not fixed at the time): structured records a
+  replaced turn created (a saved `PlannedSession`, a memory) are **not** rolled
+  back — the transcript and replies are corrected, the side effects are not.
+  Fine for the in-memory iteration phase. **Closed in M23.1** (turn attribution
+  + reconciliation on edit).
+- Tests: +3 (`deleteMessagesFrom` scoping; turn returns message ids; truncate +
+  re-run replaces the transcript). 117 total; `tsc`, `eslint`, `next build`
+  clean. Verified in the browser against the live model.
+
+### M14.1 — De-scope: remove the Daily tab + daily energy model ✅
+_2026 reset, step 1. The daily energy/macro breakdown made Kona feel like a
+calorie tracker and forced onboarding to collect height / activity level /
+dietary restrictions purely to feed it._
+- **Deleted:** `app/DailyTab.tsx`, `app/api/daily/route.ts`, `src/agent/daily.ts`,
+  `src/engine/daily-nutrition.ts`, `src/rules/daily_v0_2_0.ts`, `src/data/foods.ts`,
+  and their tests. Dropped the `buildDaily` / `dailyNutrition` / `getDailyRules`
+  exports and `getDaily()`.
+- **Nav:** Home / Dashboard / Chat (was Home / Daily / Dashboard / Chat);
+  `kona.tab === 'daily'` migrates to `home`.
+- **Home fuelling card** no longer shows a daily energy / protein / carb / fluid
+  grid. It shows only what the day warrants: during-session carb / fluid / sodium
+  references (v0.1.0 engine) for classifiable sessions, a post-session protein
+  line, and the morning/evening pre-fuel note. A rest or easy day just says
+  "nothing to prepare — normal meals and fluids". The pre-fuel snack list is now
+  a static phrasing (no restriction filtering, since the food catalog is gone).
+- **Docs:** `PRODUCT_VISION.md` re-pointed to "AI endurance companion" with the
+  2026 thesis + target-customer section; `CALCULATION_ENGINE_SPEC.md` §23 marked
+  REMOVED; the §9 pre-fuel note ref updated.
+- 108 tests green (was 116 — the two daily-nutrition suites removed);
+  `tsc`, `eslint`, `next build` clean. Home verified in the browser (no energy
+  grid; earned during-session numbers on a long-run day).
+
+### M13 — time-of-day, focused day updates, end-of-day check-in ✅
+_From user feedback: single-day edits shouldn't echo the whole week; sessions
+need a time of day (drives pre-fuel advice — a morning session is likely done
+before breakfast); add an end-of-day check-in._
+
+- **`time_of_day` on every session** (`morning` / `afternoon` / `evening`).
+  New `TimeOfDay` domain type; `MissingDetail` gains `'time_of_day'`. Derived
+  from a stated clock time (`extractTime` → hour bucket) or an explicit word
+  (`extractTimeOfDay`), and **prompted for when missing** alongside type,
+  intensity and distance-or-duration — the weekly-plan option panel gained a
+  Morning/Afternoon/Evening row (`SessionPrompt.ask_time` / `time_options`).
+  `save_weekly_plan` / `save_planned_session` / `update_planned_sessions` all
+  accept and store it; a stored session's `start_at` hour is realigned to the
+  bucket (07:00 / 13:00 / 18:30) so Home & the dashboard show a consistent time.
+  Sessions now read "6 km easy **morning** running".
+- **Morning / evening pre-fuel advice.** `week.ts` prep lines gain a
+  time-of-day clause: a morning session → "have something light 20–30 min
+  before (a banana, a few dates, toast with jam/honey) rather than a full
+  breakfast"; an evening session → "a small carb snack ~1 h before is enough".
+  Qualitative only — no new numbers. `src/data/foods.ts` → `PRE_FUEL_SNACKS`
+  (restriction-filtered on the Home fuelling card). Documented in
+  `CALCULATION_ENGINE_SPEC.md` §9.
+- **Single-day updates stay focused.** `composeClarifyPlanDetail` now echoes
+  only the day(s) the turn actually touched — the updated session line, that
+  day's prep, and any gap still open for that day — instead of re-printing the
+  whole week + "Day by day". The full-week echo is kept for a new/replaced
+  `plan_week`.
+- **End-of-day check-in.** `src/agent/checkin.ts` (`buildCheckinLog` +
+  `checkinReflection`) turns a 4-field popup (feel · went-as-planned ·
+  injuries/pains · free text) into a normal recovery log; it runs through the
+  **same `screenForEscalation` safety screen** as any recovery message.
+  `POST /api/checkin` (validated at the boundary). It is a **quiet log** — the
+  reflection shows in the popup, nothing is added to the Chat thread; "plan
+  didn't go as planned" / pains → record + nudge to chat, never a diagnosis or
+  an overwrite of the planned session. `getHome` returns `checkin: { due, done }`
+  (due = today is a training day with no check-in yet); HomeTab shows a red dot
+  on the profile avatar, a re-entry banner, and auto-opens the popup once after
+  ~22:00 (dismiss remembered per browser session).
+- Tests: +10 (`tests/agent/checkin.test.ts` ×7, `home.test.ts` +3 for
+  time-in-title / pre-fuel note / check-in-due); `week-plan.test.ts` updated for
+  the new `time_of_day` gap + focused single-day reply, +1 test for a
+  time-of-day answer clearing the last gap with a morning pre-fuel note.
+  **116 total**, all green; `tsc`, `eslint`, `next build` clean. Verified in
+  the browser (time row in the option panel, focused single-day reply, morning
+  pre-fuel note on Home, check-in popup + dot lifecycle).
+
+### M12 — Home tab + nav restructure ✅
+_User wanted a proper landing page: time-based greeting, a Mon–Sun day strip
+(bento style, Kona palette — teal accent, not the reference's lime), what's
+planned for the selected day, and the fuelling to aim for. Profile moved off the
+nav into an avatar-triggered overlay._
+
+- `src/agent/home.ts` — `buildHome({ profile, weeklyPlan, sessions, now, selectedDate })`
+  → `HomeView`: the current calendar week laid out Mon–Sun (today + selected
+  flagged, a dot per day that has a session), the selected day's sessions
+  (title + **stated** effort + **estimated** length — `"18 km"` / `"45 min"` /
+  `"length not set"`, never a guessed number), and fuelling. Fuelling = the
+  profile's daily average (energy / protein / carb / fluid from the v0.2.0
+  engine) **plus** the during-session carb / fluid / sodium targets on days the
+  engine can classify the session (reuses `buildDashboard`). A rest day or an
+  unclassifiable day is a "normal day" — daily average only. No new numbers:
+  everything is `buildDaily` + `buildDashboard` reshaped.
+- `GET /api/home?date=YYYY-MM-DD` + `getHome()` in `lib/kona-server.ts` (bad
+  `date` param ignored → today).
+- `app/HomeTab.tsx` — greeting (`Good morning/afternoon/evening, <name>`) + date,
+  a scrollable day-strip (tap a day → refetch for that date), the "What's
+  planned" card (effort / length chips; a CTA that jumps to **Chat** with the
+  composer pre-filled — `"On Wednesday I'm doing "` / `"Change my Sunday session
+  to "` — so plan edits still flow through the chat orchestrator, no parallel
+  editor), and the "Recommended fuelling" card (daily-average stat grid + a
+  "During the session" sub-grid when relevant, else "Normal day — the daily
+  average above is all you need"). A "Full breakdown & food ideas →" link opens
+  the Daily tab.
+- Profile is no longer a nav tab. The Home avatar (top-right) opens a
+  full-screen overlay hosting the existing `ProfileForm` (edit mode); saving
+  updates the greeting name and refetches Home. `app/ProfileTab.tsx` removed
+  (its job is now the overlay). Old `kona.tab === 'profile'` in localStorage
+  migrates to `'home'`.
+- Nav is now **Home · Daily · Dashboard · Chat**; Home is first and the default
+  landing tab. Chat gained an `initialPrefill` prop (consumed once, then the
+  parent clears it) threaded through `Workspace`.
+- Tests: +6 (`tests/agent/home.test.ts` — week layout + today default, planned
+  session surfaced with length/effort + during-session fuel, rest day is a
+  normal day, effort/length "not set" flags, no-plan still returns a week +
+  daily average, malformed `selectedDate` falls back to today). **105 total**,
+  all green; `tsc`, `eslint`, `next build` clean. Verified in the browser
+  (day-switching, profile overlay, chat prefill, mobile + light/dark).
+
+### M11 — Daily nutrition + app shell + dashboard rework ✅
+_From user feedback on the dashboard and a request for a per-day intake summary.
+The user explicitly approved adding a full energy model, food suggestions as
+illustrative examples only, and unifying the dashboard panels (AskUserQuestion)._
+
+- **Daily-nutrition engine (methodology v0.2.0, separately versioned).**
+  `src/rules/daily_v0_2_0.ts` (`DAILY_RULES`) + `src/engine/daily-nutrition.ts`
+  (`dailyNutrition()`): resting energy via **Mifflin–St Jeor** (PMID 2305711),
+  × an activity factor (1.2–1.9), ±8% → daily energy range. Protein
+  1.4–2.0 g/kg (ISSN 2017), carbohydrate 3–10 g/kg by activity (ACSM/AND/DC
+  2016), fat 20–35% of energy, fibre 14 g/1000 kcal, fluid from EFSA 2010
+  adequate intakes. Sodium stays **guidance, not a computed target** (spec §6.4).
+  `confidence` drops to `low` and `assumptions[]` records every gap when
+  height / age / sex / activity aren't all known.
+- **Food suggestions as illustrative examples.** `src/data/foods.ts` — ~33
+  curated reference foods with rounded nutrition and `excluded_by` dietary tags;
+  `foodsFor(role, restrictions)` filters. `src/agent/daily.ts` (`buildDaily`)
+  turns the engine ranges into per-macro target + a rotating sample of example
+  foods, plus fluid / sodium as prose. Framed throughout as "examples of what
+  the target looks like, not a meal plan".
+- **Form fields.** Workout types gained `skating` + `combat_sports` (+ `hyrox`
+  already added). New required **height** and **activity level** questions (the
+  energy model needs them) and an optional 14-option **dietary restrictions**
+  multi-select. `Profile`, `profile-input.ts` validation, tools enum, and the
+  starter sport labels all updated.
+- **Bottom-nav app shell.** `app/AppShell.tsx` — four tabs with icons in order
+  **Profile · Daily · Dashboard · Chat**, active tab persisted to
+  `localStorage` (`kona.tab`). `height: 100dvh; overflow: hidden` shell so the
+  tab content scrolls internally and the nav stays pinned; mobile-safe-area
+  padding. `ProfileForm` extracted as a reusable component used by both
+  onboarding and the **Profile** tab (edit mode, pre-filled, "Save changes").
+  New **Daily** tab (`DailyTab` + `GET /api/daily`) renders the energy KPI,
+  per-macro sections with example foods, and fluid / sodium callouts.
+- **Dashboard rework (the "consistency" feedback).** Four visually-identical
+  `RangeChart` panels (was: 1 stat tile + 2 charts + 1 note). Rest days now
+  appear — they carry the **daily protein target** (same every day, weight-based)
+  in the protein panel and the table. A `⚑ prep for <day>` flag marks the day
+  before a long or double-session day (qualitative — no invented carb-loading
+  number). The confusing "not needed for this session" wording is explained in a
+  lead paragraph that is honest that the carb / fluid / sodium ranges repeat
+  because the engine has no measured personal data yet.
+- Docs: `CALCULATION_ENGINE_SPEC.md` §23 documents the v0.2.0 daily methodology
+  and its sources; `PRODUCT_VISION.md` "What Kona is NOT" reworded + a post-v0.1
+  scope note on the daily estimate.
+- Tests: +11 (`daily-nutrition` ×5, `daily` ×3, dashboard rest-day + prep-flag,
+  profile-input height/activity/restrictions). **99 total**, all green;
+  `tsc --noEmit`, `eslint .`, `next build` all clean. Full 4-tab flow
+  (onboard → Profile edit → Daily → Dashboard → Chat) verified in the browser.
+
+### M1 — Deterministic calculation core ✅
+- Scaffold: TypeScript strict (`noUncheckedIndexedAccess`), Vitest, ESLint flat config, `tsx`. No web stack yet.
+- `src/rules/` — **versioned rules/config table**. `RulesConfig` + `RULES_V0_1_0` (spec placeholders) + `getRules(version)`. Every engine number traces to a field here; a numeric change bumps `methodology_version`.
+- `src/engine/classify.ts` — session classification; estimates duration from distance via a configurable pace table and flags it; throws when it has neither duration nor distance.
+- `src/engine/calculate.ts` — `calculateFuelingTargets()` → §20 MVP output contract: priorities, hydration/carb/sodium estimates, protein/recovery, structured `recommendation_inputs` (§17), warnings, confidence (§16), methodology stamp (§19).
+
+### M2 — Data layer ✅
+- `Repository` interface + `InMemoryRepository` (injectable clock).
+- Planned vs actual sessions = separate linked records; reason stored apart.
+- `src/data/products.ts` — known-product catalog: **label values only, `null` where not on file** (SIS gel ships with no nutrition — deliberately not invented). Bottle volume + 24 g shake protein are genuine known values.
+- Demo profile seed (64 kg, 750 ml bottle, no measured sweat data).
+
+### M3 — Agent orchestration + conversation slice ✅
+- `src/agent/llm-client.ts` — `LlmClient` interface (`interpret` → tool calls, `compose` → reply) + `ContextPackage`.
+- `src/agent/safety.ts` — hard escalation screen that runs **before** the LLM (§18); conservative red-flag patterns; ordinary soreness does not trip it.
+- `src/agent/tools.ts` — tool registry: `get_user_profile`, `save_planned_session`, `save_actual_session`, `calculate_fueling_targets` (the only source of numbers), `log_fuel_intake`, `save_recovery`, `get_relevant_history`, `propose_memory_update`. Hand-rolled arg validation.
+- `src/agent/deterministic-llm.ts` + `parse.ts` + `responder.ts` — rule-based stand-in for the LLM so the slice runs with no API key. Never emits fueling numbers itself.
+- `src/agent/orchestrator.ts` — agent loop: persist message → safety screen → build compact context → interpret → run tools (`$last` id substitution) → compose → persist reply.
+- `src/cli/chat.ts` — `npm run chat` REPL, `-- --demo` runs the four canonical messages.
+- Tests: 33 total. `tests/agent/acceptance.test.ts` drives the full four-message conversation + safety layer. `tests/acceptance-scenarios.md` is the structured acceptance file.
+- `typecheck`, `test` (33), `lint` all green. `npm run chat -- --demo` verified manually.
+
+### M4 — Real Anthropic LLM client ✅
+- `@anthropic-ai/sdk` added (only runtime dep). `src/agent/anthropic-llm.ts` — `AnthropicLlmClient implements LlmClient`.
+  - `interpret()`: one Messages API call with the tool schemas + `tool_choice: auto`; returns the model's `tool_use` blocks as `PlannedToolCall[]` (orchestrator still executes them). System prompt forbids the model from stating any fueling numbers.
+  - `compose()`: second call given the tool results as the only number source; system prompt enforces Kona's voice + no-diagnosis + planned-vs-actual rules.
+  - Transport is injectable (`AnthropicLike`) so tests use a fake with no network/key.
+  - `toInterpretResult()` extracted as a pure, unit-tested mapper.
+- Tool definitions gained JSON `input_schema`s (`TOOL_INPUT_SCHEMAS` in `tools.ts`); deterministic client ignores them.
+- Model default `claude-opus-5`, override `KONA_LLM_MODEL`. Auth via `ANTHROPIC_API_KEY` / `ant` profile (SDK default resolution).
+- CLI: `npm run chat -- --llm=anthropic` (or `KONA_LLM=anthropic`, or auto when `ANTHROPIC_API_KEY` is set). `.env.example` added.
+- Tests: +5 (`tests/agent/anthropic-llm.test.ts`) — mapper + full plan turn through `handleMessage` with a fake transport + safety-never-reaches-model. 38 total, all green; typecheck + lint clean.
+
+### M5 — Thin Next.js chat UI ✅
+- `next`/`react`/`react-dom` added; co-located in this repo (no workspace split). `app/` router: `layout.tsx`, `page.tsx` (client chat component, plain CSS in `globals.css`, light/dark), `api/chat/route.ts` (Node runtime).
+- `lib/kona-server.ts` — process-wide singleton: the M2 in-memory repo + `AnthropicLlmClient` when `ANTHROPIC_API_KEY` is set, else `DeterministicLlmClient`. State resets on server restart (documented; a persistence backend is a later decision).
+- `POST /api/chat` `{ message, conversationId? }` → `{ reply, intent, safety_escalated, clarifying_question }`, with boundary validation (non-empty, ≤2000 chars, `conversationId` charset). `GET /api/chat?conversationId=` → prior messages so a reload restores the thread within a server session.
+- Verified: `next build` passes; dev server smoke-tested via curl (plan → actual with plan preserved → history restore → 400 on bad input) and in the browser (bubbles, intent tags, Enter-to-send, multi-turn).
+- **Core import change**: relative imports in `src/`/`tests/`/`lib/` are now extensionless (was `.js`). Turbopack doesn't do `.js`→`.ts` resolution the way tsx/vitest/tsc do; extensionless works across all four. No behaviour change.
+- **Orchestrator fix**: after `save_actual_session`, the context's `current_plan` is repointed to the plan the actual was actually linked to, so the composer speaks about "the plan" correctly even with multiple same-day plans (previously it assumed the generic "next upcoming plan").
+- `next.config.ts` sets `agentRules: false` so `next dev` does not append its managed block to `CLAUDE.md` (that file is the product spec). Flip to `true` to opt into Next's bundled-docs pointer.
+- 38 tests still green; `typecheck`, `lint`, `next build` all clean.
+
+### M6 — Weekly multi-day planning ✅
+- `WeeklyPlan` domain type + `weekly_plan_id` on `PlannedSession` (week membership is derived from that link, so actual-vs-planned comparison works unchanged).
+- `src/engine/week.ts` — `analyzeWeek()`: groups sessions by day, flags double-session days (`multi_session`) and longer/harder "key" sessions, and emits day-before `preparation` recommendations. Sessions it can't classify (gym/swim with no distance or duration) are treated as routine days — **no guessed durations**. Numbers still come only from `calculateFuelingTargets`; the double-session prep line is deliberately number-free (matches PRODUCT_VISION's example).
+- `src/agent/parse.ts` — `parseWeeklyPlan()` (weekday spans → per-day sessions, "rest", "bike + run", "long run"), `resolveWeekStart()` (Monday of the week, `+7` for "next week"), `dateForWeekday()`.
+- Repository: `saveWeeklyPlan` (replaces by `(user, week_start)`), `getWeeklyPlan`, `listWeeklyPlans`, `listPlannedSessionsForWeeklyPlan`.
+- Tools: `save_weekly_plan` (persists the week as linked planned sessions with per-day `session_group_id`/`sequence_index`, then returns the analysis — no separate `calculate_fueling_targets` call) and `get_weekly_plan`.
+- Deterministic interpreter: `plan_week` intent when ≥2 weekday names are present. Anthropic client: `save_weekly_plan → plan_week` + a system-prompt bullet.
+- Responder: `composeWeekPlan` — week date range, day-by-day list (incl. rest days), the top 1–2 key-day prep lines, and a "remembered this" close.
+- Tests: +18 (`tests/engine/week.test.ts` ×5, `tests/agent/week-plan.test.ts` ×5 incl. the exact PRODUCT_VISION sentence and a later actual-session linking to the week's Tuesday plan, +8 repo). **49 total**, all green; typecheck + lint clean; verified in the browser.
+
+### M10.1 — Advice for every day + option-button prompts ✅
+- `analyzeWeek` now emits a `recommendation_inputs` line for **every** session day (key days keep the detailed prep; routine days get a low-priority "nothing special to prepare" line). No more top-3 cap.
+- New `session_prompts: SessionPrompt[]` — one per under-specified session, each carrying `intensity_options` (easy/moderate/hard) and `size_options` (~30 min … ~2 hr). `Chat.tsx` renders them as an inline option-button panel; picking options + "Save N sessions" builds a parseable message (`"Wed gym: hard, ~60 min. …"`) that flows through the existing clarification path. Remaining gaps get a fresh panel.
+- Responder: `planAdviceLines()` shared by the plan and clarify composers — lists every day, then nudges to the buttons (or, for CLI, the free-text `open_questions`).
+- `POST /api/chat` returns `session_prompts` extracted from the turn's tool results.
+- Fix: a message framed as a whole new week ("Next week: …", "new plan", "my week is …") is no longer misread as clarifications to an existing plan — `newPlanFraming` bails out of the clarify path so `plan_week` replaces the week.
+- Tests: +3, updated 4 for the new behavior. **82 total**, all green; `next build` clean; full flow (plan → day-by-day advice → option panel → save → updated) verified in the browser.
+
+### M10.3 — Weekly fueling dashboard ✅
+- `src/agent/dashboard.ts` — `buildDashboard({ profile, weeklyPlan, sessions })`: per-day carb / fluid / sodium targets from the engine's per-session `calc`, plus the daily protein baseline. Unclassifiable days carry `null` (no guess). `GET /api/dashboard`, `getDashboard()` in `lib/kona-server.ts`.
+- `app/dashboard/page.tsx` — a **Dashboard** link in the chat header opens it. Follows the `dataviz` skill: form picked by the data's job — daily protein is a **stat tile** (constant, weight-based), carb & fluid are **small-multiple range-bar charts** (one bar per training day, no dual axis), sodium is a **callout** (a per-litre reference, not a per-day quantity). Validated sequential blue (`#2a78d6` / `#3987e5`, passes contrast + band in both modes), thin marks with 4px rounded ends, recessive gridlines, no legend (single series), value labels at the bar tip only, `<title>` hover, a **Table view** `<details>`, and a methodology-version footer. Short/easy days show "not needed for this session".
+- Tests: +3 (`tests/agent/dashboard.test.ts`). **86 total**, all green; `next build` clean; rendered + eyeballed in the browser (light and dark).
+
+### M10.2 — Conversation history sidebar ✅
+- `ConversationSummary` type + `repo.listConversations()` (derives one row per conversation from stored messages: title = first user message, newest activity first). `GET /api/conversations`.
+- New client layout: `Workspace` (sidebar + chat, owns `conversationId` + the list) → `Sidebar` (list, "+ New chat", active highlight, relative times) + `Chat` (now takes `conversationId` as a prop and reloads on change; calls `onActivity` to refresh the list). `page.tsx` renders `Workspace` for the chat view.
+- "New chat" makes a fresh id; selecting a row loads that thread; continuing just sends more messages. On mobile the sidebar is a slide-over (`☰` in the header + scrim).
+- Tests: +1 repo test (84 total); `next build` clean; switch / new / continue verified in the browser.
+
+### M9 — Chat starter + typing indicator ✅
+- `src/engine/profile-baseline.ts` — `profileDailyBaseline({ body_weight_kg })`: daily protein range from body weight + the post-session serving, both from the rules table. Deliberately reports fluid/sodium as **per-session training references, not daily totals** (the spec has no daily fluid/sodium formula — not invented).
+- `src/agent/starter.ts` — `buildStarter(profile)`: the one-time opener ("Hi &lt;name&gt;, I'm Kona … here's what I've got from your form … a rough daily protein target is …") + three conversation prompts that pre-fill a parseable stub in the composer ("My typical training week is: ", "Tomorrow I'm doing ", "My next race is ").
+- `GET /api/chat` returns `starter` when the conversation is empty; `app/Chat.tsx` renders it as the intro bubble + clickable chips (chip → pre-fills + focuses the input).
+- **Replies become memory**: `plan_week` now also proposes a `typical_week` memory; a new `note_race` intent (race/marathon/10k/… keywords) saves a `next_race` memory instead of trying to plan it (race planner stays out of scope). Anthropic system prompt updated to `propose_memory_update` for durable facts.
+- Typing indicator: the `…` bubble is now three dots doing a staggered wave (`.bubble.typing`, `@keyframes kona-wave`, with a `prefers-reduced-motion` fade fallback).
+- Tests: +11 (`profile-baseline` ×3, `starter` ×4, `note_race` + `typical_week` memory, updated week-plan assertion). **80 total**, all green; `next build` clean; full flow verified in the browser.
+
+### M8 — Onboarding ✅
+- `Get Started` landing → profile form → chat. `app/page.tsx` orchestrates three views (`loading | onboarding | chat`); `app/Onboarding.tsx` (landing hero + form), `app/Chat.tsx` (the chat, extracted from `page.tsx`, now greets by name).
+- Form fields: username, gender, age, **body weight (kg)** — added because the calc engine needs it for protein targets (CALCULATION_ENGINE_SPEC.md §3.1) — multi-select workout types (running/swimming/cycling/gym/**climbing**, new `Sport` value), sessions/week, an optional recent-injuries note, and three 1–5 self-ratings (sleep, hydration, sweat).
+- `Profile` type gained `username / gender / age / recent_injuries_note / self_perception / onboarded_at` (all optional except the pre-existing `body_weight_kg`). `Gender` + `SelfPerception` types added.
+- `src/domain/profile-input.ts` — pure `validateProfileInput()` (boundary validation, ranges, sport whitelist, dedup) reused by the API route. 16 tests.
+- `app/api/profile/route.ts` — `GET` (returns `{ profile }` or null) + `POST` (validate → `upsertProfile`). `lib/kona-server.ts` no longer seeds a demo profile for the web app — the user onboards first; chat is unreachable until then (the calc tool requires a profile).
+- Self-perception and the injury note are passed to the LLM as **context, not calc inputs** — a high self-rated sweat level is not a sweat-rate measurement, so the engine stays in reference-range mode. `contextForPrompt` + `COMPOSE_SYSTEM` updated.
+- Tests: +17 (`tests/domain/profile-input.test.ts` ×16, +1 repo round-trip). **72 total**, all green; `next build` clean; full landing → form → submit → chat flow verified in the browser.
+
+### M7 — Weekly plan asks for missing detail ✅
+_Prompted by user feedback: Kona was silently defaulting unstated intensity to "easy" and showing it as fact; gym/swim/long-run days got no fueling treatment._
+- `MissingDetail` type + `needs_detail` / `is_long` on `SessionInputCore`. `save_weekly_plan` records, per session, what the user didn't state (`intensity` when no effort word; `duration_or_distance` when neither given). A "long" session is exempt from the effort question (conventionally easy/steady).
+- `analyzeWeek` now returns `open_questions` (grouped by sport) and always keeps a long-session day in the recommendations. `describeWeekSession` shows a stated effort only — never a defaulted "easy" — and flags "(effort / distance/time not set)".
+- Long-session prep line rewritten to the fuller day-before advice the user asked for: normal carb meals + steady hydration *the day before* (not right before), a recovery meal with protein (~20–40 g from the rules table), and a conditional warm-weather sodium note kept non-diagnostic about cramps. Gym key days get an explicit post-session protein note (`resistance_training` is now passed to the engine).
+- New tool `update_planned_sessions` + intent `clarify_plan_detail`: fills effort/duration/distance for pending sessions, matched by day and/or sport, then re-runs the analysis. Parser gained `parsePerceivedIntensity` (RPE language → easy/moderate/hard), worded durations ("about an hour" → 60; "15 minutes in" is *not* a duration), and `parseClarificationAnswer`. `buildContext` exposes `pending_plan_details`; the deterministic and Anthropic interpreters route single-answer and multi-day ("Sunday's long run is 22km, and the Saturday swim is 2km") replies to it.
+- Tests: `tests/agent/week-plan.test.ts` ×10: questions asked, plain-language answer fills gym, single-day fill, multi-day answer not mis-read as a new plan, compound "only"/"because" answer not logged as a workout, "Wed and Fri sessions feel hard" fills both days.
+
+#### M7 routing fixes (same milestone, from user testing)
+1. **A clarification answer was being logged as a modified workout.** Words like "only" ("I only ride 20km") and "because" tripped the modification/actual-log detection. Replaced the blunt `strongModification` gate with a precise `genuineActualLog` check (past-tense "I ran/did/…", "instead of", "cut short", "actually"); when a pending weekly plan exists and the message is an answer, it now routes to `clarify_plan_detail` — and if the specifics can't be pinned to sessions it asks for a per-session breakdown rather than misrouting.
+2. **`parseWeeklyPlan` only saw the first mention of each weekday**, so "For Thu … Thu cycling …" merged the second clause into the wrong span. Now finds every occurrence (global match); `plan_week` requires ≥2 *distinct* days.
+3. **"Wed and Fri sessions feel hard"** — an empty/connective span before another day now shares that day's parsed sessions; a shared detail across ≥2 named days emits one `update_planned_sessions` per day (sport inferred per day).
+4. `extractDistanceKm` reads ranges ("5-7km", "12km to 18km") as the midpoint; `update_planned_sessions` reports only the fields a call actually changed (no re-asserting a defaulted "easy").
+#### M7 fixes from a simulated conversation round
+5. **Comma-split dropped detail**: "gym is hard, about an hour" was split into two pieces and the duration lost. Session splitting now only breaks on `+ & / then plus` always; a comma / "and" splits only when it yields ≥2 sport-bearing pieces (so "swim, gym" still becomes two).
+6. **One intensity smeared across a mixed-effort sentence**: "Wed gym is hard … Thu bike is easy" applied one global intensity. The span path no longer needs *every* clause to match a pending sport — it fills the matching ones and ignores the rest; `parsePerceivedIntensity` returns `undefined` when a sentence contains both easy- and hard-family words.
+7. Recovery reflection now distinguishes soreness ("sounds like some soreness, but you're moving okay") from generic tiredness. `calculate.ts`'s day-before prep line uses the same concrete carb examples as `week.ts`.
+- **Known limitation**: still a rule-based parser — very tangled phrasing may need a follow-up; the real `AnthropicLlmClient` handles compound answers natively.
+- **55 tests** total, all green; typecheck + lint clean; an 8-turn simulated conversation (weekly plan → clarify → single session → modification → fuel → recovery → safety escalation) runs correctly end to end.
+
+## Known issues / deliberate deferrals
+- **Fluid range**: rules table uses §5.2 (400–800 ml/h); §20's example JSON shows 500. Reconciliation noted in `CALCULATION_ENGINE_SPEC.md` §20.
+- All v0.1.0 numbers are spec placeholders — **require expert review before public launch**.
+- Deterministic interpreter handles the canonical phrasings and close variants; it is not a general NL parser. The real `AnthropicLlmClient` covers open-ended phrasing; the deterministic one stays the default for tests and no-key runs.
+- `AnthropicLlmClient` has no automated test against the live API (non-deterministic, needs a key). `compose()` trusts its system prompt to keep numbers sourced from tool results — no post-hoc numeric guard yet.
+- No food-estimation ranges (§14 B14/B15), no historical pattern surfacing (B12).
+- `higher_option_g_per_hour` (60–90 g/h) configured but not yet surfaced as a note for very-long sessions.
+- Node 20.12 vs eslint-visitor-keys / `@supabase/*` wanting 20.19+ — warning only.
+- `npm audit`: 3 moderate + 1 high + 1 critical, **all** in the dev-only
+  `vitest`/`vite`/`esbuild` toolchain (not Supabase, not shipped). Fix is a
+  breaking `vitest` major bump — deferred.
+- **M23.1 residual limitations** (documented, acceptable for alpha —
+  `ARCHITECTURE.md` §6b): a memory *updated* (not first created) by an edited
+  turn reverts to unset, not its earlier value (no revision history); chat-set
+  profile facts (weight, bottle, goal) are one row per user with no per-fact
+  provenance, so an edit doesn't revert them; `update_planned_sessions` field
+  changes aren't reverted; the linear transcript model means "preserve a later
+  dependent record" only ever exercises as the FK-null safety net, never a real
+  branch.
+- **M23 — live Supabase verification** (real account, come back tomorrow) needs a
+  Supabase project; done as the founder-review step per `DEPLOYMENT.md`. Local
+  verification covered the dev-fallback journey + mocked auth + the
+  env-guarded live suite.
+- **M23.2 is a hypothesis, not a proven result.** The product memos (01/02) argue
+  visible "because" moments are the emotional hook worth testing; alpha testing
+  is what actually validates or kills that. If alpha athletes don't notice or
+  remark on these moments, that's a real signal — see the memos' "what would
+  change this call" sections before building anything further on top.
+
+## Next recommended task
+**Hold for alpha.** M14.1–M23.2 + the UI/product experience pass are done. The
+founder is deploying to Vercel (Supabase already set up) to run a 10–20 person
+alpha — see `DEPLOYMENT.md`. Once live: walk the M23 journey once for sanity
+(sign up → onboard → plan → chat → log → close → return → still remembered) on
+the new UI on an actual phone, then specifically watch for M23.2's "because"
+moments landing naturally per the manual test notes given when M23.2 was
+implemented. Do not start another milestone before that feedback is in.
+
+If the founder wants the "last N check-ins" trend strip from the reference
+screens after all, that's the one piece of the approved direction deliberately
+not built this pass (see the UI pass notes above) — it needs a small new
+derivation (a pass/mixed/fail read per recent day) that doesn't exist yet.
+
+Candidates to raise at the review (not started): "Week X of Y" once a
+periodised-block model exists; the chat *proactively* posting into an existing
+thread; polish pass (transitions, type hierarchy, Kona personality) that the
+founder explicitly deferred; `vitest` major bump to clear the dev-toolchain
+audit findings; memory revision history if the M23.1 "reverts to unset" limit
+turns out to matter in practice; the fuller personal-rule lifecycle from
+product memo 02 (tentative → confirmed → contradicted → retired), only if
+M23.2's minimal version proves the hook is real.
+
+M21 follow-ups worth a mention: the real model's prose can name a third key
+session the button prompts don't (`FOCUS_PROMPT_LIMIT` = 2) — harmless but worth
+a decision; the contextual opener says "your cycling" with no descriptor when the
+session is still undetailed.
+
+M22 deliberate deferrals: `offPlanRun` (cross-sport, status-only) and the new
+sport-scoped `repeated-trouble` read can both fire for a single-sport history —
+two honest but overlapping "things went wrong" facts; left as-is rather than
+adding suppression coupling. Condition detection covers fed/fasted · time of day
+· a coarse heat flag (temp ≥ 24 °C or humidity ≥ 70 %); richer environment
+splits (sleep, terrain, pacing) are out of scope. The deterministic chat client
+tends to log past sessions as `modified`, so the outcome reads are best
+exercised through the real model or seeded history (the unit tests seed directly).
