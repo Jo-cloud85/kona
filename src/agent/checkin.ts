@@ -21,6 +21,10 @@ export interface CheckinInput {
   legs: 'fresh' | 'normal' | 'heavy';
   went_as_planned: boolean;
   pains: boolean;
+  /** How the effort felt relative to the plan — optional, since it's asked
+   *  every check-in but nothing downstream requires an answer. Feeds
+   *  Rhythm's consistency grid (M28.1); see RecoveryLog for the full story. */
+  felt_vs_planned?: 'easier' | 'as_expected' | 'harder';
   sleep_quality?: 'poor' | 'ok' | 'good';
   mood?: 'low' | 'ok' | 'good';
   elaborate?: string;
@@ -45,6 +49,7 @@ export interface CheckinLog {
   followed_category?: string;
   followed_outcome?: 'better' | 'worse' | 'same';
   went_as_planned: boolean;
+  felt_vs_planned?: 'easier' | 'as_expected' | 'harder';
 }
 
 const SEVERITY_ORDER: RecoverySeverity[] = ['none', 'low', 'moderate', 'high'];
@@ -67,6 +72,9 @@ export function buildCheckinLog(input: CheckinInput): CheckinLog {
     `Went as planned: ${input.went_as_planned ? 'yes' : 'no'}.`,
     `Injuries / cramps / pains: ${input.pains ? 'yes' : 'no'}.`,
   ];
+  if (input.felt_vs_planned && input.felt_vs_planned !== 'as_expected') {
+    parts.push(`Felt ${input.felt_vs_planned === 'harder' ? 'harder' : 'easier'} than planned.`);
+  }
   if (input.sleep_quality) parts.push(`Sleep: ${input.sleep_quality}.`);
   if (input.mood) parts.push(`Mood: ${input.mood}.`);
   if (elaborate) parts.push(`Notes: ${elaborate}`);
@@ -103,6 +111,7 @@ export function buildCheckinLog(input: CheckinInput): CheckinLog {
     free_text,
     overall_severity: severity,
     went_as_planned: input.went_as_planned,
+    ...(input.felt_vs_planned ? { felt_vs_planned: input.felt_vs_planned } : {}),
     ...(symptoms.length ? { reported_symptoms: symptoms } : {}),
     ...(input.sleep_quality ? { sleep_quality: input.sleep_quality } : {}),
     ...(input.mood ? { mood: input.mood } : {}),

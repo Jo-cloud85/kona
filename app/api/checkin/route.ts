@@ -8,6 +8,7 @@ const LEGS = ['fresh', 'normal', 'heavy'];
 const SLEEP_LEVELS = ['poor', 'ok', 'good'];
 const MOOD_LEVELS = ['low', 'ok', 'good'];
 const OUTCOMES = ['better', 'worse', 'same'];
+const FEEL_LEVELS = ['easier', 'as_expected', 'harder'];
 
 export async function POST(req: Request): Promise<Response> {
   const c = await requireContext();
@@ -33,6 +34,10 @@ export async function POST(req: Request): Promise<Response> {
       ? (b.sleep_quality as 'poor' | 'ok' | 'good')
       : undefined;
   const mood = typeof b.mood === 'string' && MOOD_LEVELS.includes(b.mood) ? (b.mood as 'low' | 'ok' | 'good') : undefined;
+  const felt_vs_planned =
+    typeof b.felt_vs_planned === 'string' && FEEL_LEVELS.includes(b.felt_vs_planned)
+      ? (b.felt_vs_planned as 'easier' | 'as_expected' | 'harder')
+      : undefined;
   const elaborate =
     typeof b.elaborate === 'string' && b.elaborate.trim() ? b.elaborate.trim().slice(0, 500) : undefined;
 
@@ -53,6 +58,7 @@ export async function POST(req: Request): Promise<Response> {
       pains: b.pains,
       sleep_quality,
       mood,
+      felt_vs_planned,
       elaborate,
       followed_recommendation,
       recommendation_outcome,

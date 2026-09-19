@@ -265,7 +265,7 @@ export async function respondToRecommendation(
 
 export interface RhythmView {
   greeting_name: string | null;
-  /** Last 24 weeks, oldest first — a plain-language read, not a score
+  /** Next 24 weeks, this week first — a plain-language read, not a score
    *  (PRODUCT_VISION.md "not a metrics dashboard"; a deliberate, considered
    *  exception for this one visual, per founder direction, M27). "Worth
    *  watching" reuses the exact same trailing-window threshold as Today's
@@ -298,8 +298,9 @@ export interface RhythmView {
 export async function getRhythm(ctx: KonaContext, tz: string = DEFAULT_TZ): Promise<RhythmView | null> {
   const profile = await ctx.repo.getProfile(ctx.userId);
   if (!profile?.onboarded_at) return null;
-  const [actualSessions, recoveryLogs, fuelLogs, memories, events] = await Promise.all([
+  const [actualSessions, plannedSessions, recoveryLogs, fuelLogs, memories, events] = await Promise.all([
     ctx.repo.listActualSessions(ctx.userId),
+    ctx.repo.listPlannedSessions(ctx.userId),
     ctx.repo.listRecoveryLogs(ctx.userId),
     ctx.repo.listFuelLogs(ctx.userId),
     ctx.repo.listMemories(ctx.userId),
@@ -313,15 +314,27 @@ export async function getRhythm(ctx: KonaContext, tz: string = DEFAULT_TZ): Prom
     return { name: gc.short_text ?? g.text, countdown: gc.countdown };
   });
 
-  // A check-in alone (M27.8) — pain/injury reported, or the athlete
-  // explicitly said the day didn't go as planned — flags the day even when
-  // nothing was separately logged as an ActualSession that date.
-  const offPlanDates = new Set(
-    recoveryLogs
-      .filter((l) => (l.reported_symptoms?.length ?? 0) > 0 || l.went_as_planned === false)
-      .map((l) => localDateOf(l.logged_at, tz)),
+  // Rhythm's per-day color is always "how hard did it actually feel" (M28.1)
+  // — these three, each keyed by the check-in's own local date, are the only
+  // things a check-in can contribute to that: an explicit felt-vs-planned
+  // answer (shifts the color), confirmation the plan happened at all (lets a
+  // day with no separately-logged ActualSession still get a color), and a
+  // reported symptom (the independent pain/injury ring, not a color).
+  const feltVsPlanned = new Map(
+    recoveryLogs.filter((l) => l.felt_vs_planned).map((l) => [localDateOf(l.logged_at, tz), l.felt_vs_planned!] as const),
   );
-  const consistencyDays = buildConsistencyDays(actualSessions, offPlanDates, now);
+  const confirmedAsPlanned = new Set(
+    recoveryLogs.filter((l) => l.went_as_planned === true).map((l) => localDateOf(l.logged_at, tz)),
+  );
+  const painDates = new Set(
+    recoveryLogs.filter((l) => (l.reported_symptoms?.length ?? 0) > 0).map((l) => localDateOf(l.logged_at, tz)),
+  );
+  const consistencyDays = buildConsistencyDays(
+    actualSessions,
+    plannedSessions,
+    { feltVsPlanned, confirmedAsPlanned, pain: painDates },
+    now,
+  );
   const recentHard = recentHardSessions(actualSessions, ymdLocal(now), CLUSTER_WINDOW_DAYS);
   const consistency = { days: consistencyDays, ...describeConsistency(recentHard, ymdLocal(now)) };
 
@@ -409,6 +422,7 @@ export async function submitCheckin(ctx: KonaContext, input: CheckinInput): Prom
     followed_category: log.followed_category,
     followed_outcome: log.followed_outcome,
     went_as_planned: log.went_as_planned,
+    felt_vs_planned: log.felt_vs_planned,
   });
   await ctx.repo.appendActivityEvent({
     user_id: ctx.userId,

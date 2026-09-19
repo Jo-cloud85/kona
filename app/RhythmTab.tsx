@@ -13,8 +13,11 @@ interface Milestone {
 }
 interface RhythmDay {
   date: string;
-  state: 'empty' | 'easy' | 'moderate' | 'off_plan' | 'hard';
+  state: 'empty' | 'easy' | 'moderate' | 'hard';
   is_today: boolean;
+  /** A same-day check-in reported a symptom — rendered as a ring around the
+   *  dot, independent of `state` (M28.1: effort and pain are different axes). */
+  pain: boolean;
 }
 interface Insight {
   kind: 'fact' | 'pattern' | 'hypothesis' | 'recommendation';
@@ -295,23 +298,27 @@ export default function RhythmTab({ profileVersion }: { profileVersion: number }
           {consistencyWeeks.map((week, wi) => (
             <div key={wi} className="rhythm-week-col">
               {week.map((d) => (
-                <span key={d.date} className={`rhythm-dot ${d.state}${d.is_today ? ' is-today' : ''}`} title={d.date} />
+                <span
+                  key={d.date}
+                  className={`rhythm-dot ${d.state}${d.pain ? ' pain' : ''}${d.is_today ? ' is-today' : ''}`}
+                  title={d.pain ? `${d.date} — pain/injury reported` : d.date}
+                />
               ))}
             </div>
           ))}
         </div>
         <div className="rhythm-legend">
           <span className="rhythm-legend-item">
-            <span className="rhythm-dot moderate" aria-hidden /> Moderate
-          </span>
-          <span className="rhythm-legend-item">
             <span className="rhythm-dot easy" aria-hidden /> Easy
           </span>
           <span className="rhythm-legend-item">
-            <span className="rhythm-dot off_plan" aria-hidden /> Off-plan
+            <span className="rhythm-dot moderate" aria-hidden /> Moderate
           </span>
           <span className="rhythm-legend-item">
             <span className="rhythm-dot hard" aria-hidden /> Hard
+          </span>
+          <span className="rhythm-legend-item">
+            <span className="rhythm-dot easy pain" aria-hidden /> Pain/injury reported
           </span>
         </div>
       </section>

@@ -256,12 +256,19 @@ export interface RecoveryLog {
   followed_category?: string;
   followed_outcome?: 'better' | 'worse' | 'same';
   /** The check-in's own "did today go as planned?" answer, as a structured
-   *  field (M27.8) — previously only folded into `free_text` prose, which
-   *  meant a day with a check-in but no separately-logged ActualSession had
-   *  no queryable "this was off-plan" signal at all (Rhythm's grid showed
-   *  it as empty/nothing-happened, which was wrong when the athlete had in
-   *  fact checked in and said it didn't go as planned). */
+   *  field (M27.8) — previously only folded into `free_text` prose. When
+   *  true and no ActualSession was separately logged that day, Rhythm's
+   *  grid falls back to the planned session's intensity (M28.1) — a check-
+   *  in alone is real signal; it shouldn't take a full session log for a
+   *  day to get a color. */
   went_as_planned?: boolean;
+  /** How the effort actually felt relative to what was planned (M28.1) —
+   *  the plan's own intensity is a prediction; this is the athlete's report
+   *  of what it actually turned out to be (ran an "easy" session too fast,
+   *  or the heat made it harder than the pace alone would suggest).
+   *  Rhythm's consistency grid shifts the planned/logged intensity by this
+   *  answer, since a check-in is the most current truth available for a day. */
+  felt_vs_planned?: 'easier' | 'as_expected' | 'harder';
 }
 
 // ---------------------------------------------------------------------------

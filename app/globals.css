@@ -2499,10 +2499,11 @@ button.cta:disabled {
 /* Five states, not a plain trained/not (see buildConsistencyDays,
    src/agent/rhythm.ts, for exactly what each means). Gradient fills, not
    flat colors (M27.3 — flat read as missing the app's gradient language).
-   Blue-violet (dark #3B33C7, light #7C8CF0) for moderate/easy effort,
-   orange-red (var(--grad-performance)) for the two "worth a second look"
-   states — off_plan translucent, hard solid, so they read as a pair but
-   stay distinguishable (M27.5). */
+   Blue-violet (dark #3B33C7, light #7C8CF0) for easy/moderate effort,
+   orange-red (var(--grad-performance)) for hard — the fill is always just
+   effort, nothing else (M28.1, dropping the old "off_plan" fill entirely).
+   Pain/injury is a separate `.pain` ring via outline, not border, so it
+   never collides with `.is-today`'s border ring — the two can co-occur. */
 .rhythm-dot {
   width: 10px;
   height: 10px;
@@ -2520,17 +2521,16 @@ button.cta:disabled {
   background: linear-gradient(135deg, #3b33c7, #7c8cf0);
   border: none;
 }
-.rhythm-dot.off_plan {
-  background: var(--grad-performance);
-  opacity: 0.45;
-  border: none;
-}
 .rhythm-dot.hard {
   background: var(--grad-performance);
   border: none;
 }
 .rhythm-dot.is-today {
   border: 2px solid var(--text);
+}
+.rhythm-dot.pain {
+  outline: 2px solid #f62b0a;
+  outline-offset: 1px;
 }
 
 .rhythm-legend {

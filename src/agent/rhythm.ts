@@ -1,103 +1,114 @@
-import type { ActualSession } from '../domain/types';
-import { CLUSTER_SOFTEN_MIN, CLUSTER_WINDOW_DAYS, describeRecentDay } from './briefing';
+import type { ActualSession, Intensity, PlannedSession } from '../domain/types';
+import { CLUSTER_SOFTEN_MIN, describeRecentDay } from './briefing';
 import { addDays, isoDate, joinList, mondayOf } from './home';
 
 /**
- * Rhythm's 24-week consistency grid. Five states, not a plain trained/not —
- * the same rough read a coach would give at a glance (M27.5 — split the
- * original single "flag" state into "off_plan" and "hard", each with its
- * own color, per founder direction):
- *  - empty:    nothing logged that day at all — no session, no check-in
- *  - easy:     an easy session, went fine
- *  - moderate: a moderate/hard session, followed as planned, pain-free
- *  - off_plan: didn't go as planned, or pain/injury reported that day —
- *              from a logged session's own status, OR from a check-in
- *              alone, even with no matching session log (M27.8)
- *  - hard:     part of a run of hard days close together — the exact same
- *              load-clustering threshold Today's own judgment cascade uses
- *              (briefing.ts's CLUSTER_WINDOW_DAYS/CLUSTER_SOFTEN_MIN), so
- *              the two screens never disagree about what counts as "too
- *              hard". Checked only once a day isn't already off_plan.
+ * Rhythm's 24-week consistency grid. The dot's fill is always "how hard did
+ * the day actually feel" — never a judgment about whether the plan was
+ * followed (M28.1, replacing the M27.5 model, which had a dedicated
+ * "off_plan" color): a double session that felt fine isn't hard just for
+ * being two sessions, and doing fewer sessions than planned, or shifting one
+ * to another day, isn't a problem worth flagging on its own — it's just
+ * training. Pain/injury is a separate, independent signal (`pain`, rendered
+ * as a ring around the dot, not a color) — a hard day with pain and an easy
+ * day with pain both deserve the same flag, which a single shared "off_plan"
+ * bucket couldn't express.
+ *  - empty:    nothing happened that day — no logged session, and no
+ *              check-in confirming the plan happened either
+ *  - easy / moderate / hard: the effort that actually happened, sourced in
+ *              priority order — a check-in's own "how did it feel vs
+ *              planned" answer (the most current truth available) shifts
+ *              whatever intensity the logged session (or, lacking one, a
+ *              check-in-confirmed plan) already implied
  */
-export type RhythmDayState = 'empty' | 'easy' | 'moderate' | 'off_plan' | 'hard';
+export type RhythmDayState = 'empty' | 'easy' | 'moderate' | 'hard';
 
 export interface RhythmDay {
   date: string;
   state: RhythmDayState;
   is_today: boolean;
+  /** A same-day check-in reported a symptom — independent of `state`; a
+   *  day's effort and whether something hurt are different questions. */
+  pain: boolean;
 }
+
+/** What a check-in can add on top of a day's logged/planned intensity. */
+export type FeltVsPlanned = 'easier' | 'as_expected' | 'harder';
 
 const RHYTHM_WEEKS = 24;
 
-function isHardCompleted(s: ActualSession): boolean {
-  return s.status === 'completed' && (s.intensity === 'hard' || s.intensity === 'race');
+const INTENSITY_RANK: Record<Intensity, number> = { easy: 0, moderate: 1, hard: 2, race: 2 };
+const RANK_STATE: ('easy' | 'moderate' | 'hard')[] = ['easy', 'moderate', 'hard'];
+
+function shiftByFeel(rank: number, felt: FeltVsPlanned | undefined): number {
+  if (felt === 'easier') return Math.max(0, rank - 1);
+  if (felt === 'harder') return Math.min(RANK_STATE.length - 1, rank + 1);
+  return rank;
 }
 
-/** 24 weeks of daily dots. `offPlanDates` is a set of YYYY-MM-DD dates the
- *  caller has already resolved (tz-aware — see localDateOf) from that day's
- *  check-in reporting a symptom OR saying the day didn't go as planned —
- *  kept out of this module so it stays a pure function of already-local
- *  dates, same as every other agent-layer builder. Checked even on a day
- *  with no separately-logged ActualSession (M27.8) — a check-in alone is
- *  real signal; it shouldn't take a full session log to register as
- *  off-plan. */
-export function buildConsistencyDays(actualSessions: ActualSession[], offPlanDates: ReadonlySet<string>, now: Date): RhythmDay[] {
-  const byDate = new Map<string, ActualSession[]>();
+/** 24 weeks of daily dots, this week first, running forward. All three
+ *  per-day inputs are keyed by already-local (tz-resolved) YYYY-MM-DD dates,
+ *  same discipline as every other agent-layer builder:
+ *  - `feltVsPlanned`: that day's check-in "how did it feel" answer, if any.
+ *  - `confirmedAsPlanned`: dates where a check-in said the day went as
+ *    planned — the only case a day with NO logged session still gets a
+ *    color, falling back to the planned intensity (otherwise a normal,
+ *    uneventful check-in with nothing separately logged left the dot empty,
+ *    indistinguishable from a day the athlete never opened the app —
+ *    founder report, 2026-09-18).
+ *  - `pain`: dates a check-in reported a symptom. */
+export function buildConsistencyDays(
+  actualSessions: ActualSession[],
+  plannedSessions: PlannedSession[],
+  checkins: {
+    feltVsPlanned: ReadonlyMap<string, FeltVsPlanned>;
+    confirmedAsPlanned: ReadonlySet<string>;
+    pain: ReadonlySet<string>;
+  },
+  now: Date,
+): RhythmDay[] {
+  const actualsByDate = new Map<string, ActualSession[]>();
   for (const s of actualSessions) {
     const d = s.start_at.slice(0, 10);
-    const list = byDate.get(d);
+    const list = actualsByDate.get(d);
     if (list) list.push(s);
-    else byDate.set(d, [s]);
+    else actualsByDate.set(d, [s]);
   }
-  const hardDates = new Set([...byDate.entries()].filter(([, list]) => list.some(isHardCompleted)).map(([d]) => d));
-
-  // Checks every CLUSTER_WINDOW_DAYS-long window that includes `date` (not
-  // just the one trailing it) — so both days of a tight pair flag, not only
-  // the later one.
-  function clustered(date: string): boolean {
-    if (!hardDates.has(date)) return false;
-    const base = new Date(`${date}T00:00:00`);
-    for (let offset = -(CLUSTER_WINDOW_DAYS - 1); offset <= 0; offset++) {
-      let count = 0;
-      for (let i = 0; i < CLUSTER_WINDOW_DAYS; i++) {
-        if (hardDates.has(isoDate(addDays(base, offset + i)))) count++;
-      }
-      if (count >= CLUSTER_SOFTEN_MIN) return true;
-    }
-    return false;
+  const plannedByDate = new Map<string, PlannedSession[]>();
+  for (const s of plannedSessions) {
+    const d = s.start_at.slice(0, 10);
+    const list = plannedByDate.get(d);
+    if (list) list.push(s);
+    else plannedByDate.set(d, [s]);
   }
 
   function stateFor(date: string): RhythmDayState {
-    const sessions = byDate.get(date);
-    if (!sessions?.length) return offPlanDates.has(date) ? 'off_plan' : 'empty';
-    const notFollowed = sessions.some((s) => s.status !== 'completed');
-    if (notFollowed) return 'off_plan';
-    const completed = sessions.filter((s) => s.status === 'completed');
-    // A double-session day is a demanding day regardless of each session's
-    // own intensity — the same "key day" reading engine/week.ts's
-    // is_key_day already gives it (multi-session, not just a single hard/
-    // long session). Checked ahead of a same-day check-in symptom report:
-    // a fully-completed, as-planned double session with some expected
-    // soreness after is a hard day, not a deviation (founder report,
-    // 2026-09-18 — a double-session day with mild soreness was showing as
-    // off_plan, indistinguishable from a genuinely skipped/modified day).
-    if (clustered(date) || completed.length > 1) return 'hard';
-    if (offPlanDates.has(date)) return 'off_plan';
-    return completed.every((s) => s.intensity === 'easy') ? 'easy' : 'moderate';
+    // A skipped session didn't happen — it shouldn't set the day's effort,
+    // but a day with only skipped sessions still falls through to the
+    // planned-intensity fallback below, same as a day with nothing logged.
+    const actuals = (actualsByDate.get(date) ?? []).filter((s) => s.status !== 'skipped');
+    let rank: number | null = null;
+    if (actuals.length > 0) {
+      rank = Math.max(...actuals.map((s) => INTENSITY_RANK[s.intensity]));
+    } else if (checkins.confirmedAsPlanned.has(date)) {
+      const planned = plannedByDate.get(date) ?? [];
+      if (planned.length > 0) rank = Math.max(...planned.map((s) => INTENSITY_RANK[s.intensity]));
+    }
+    if (rank === null) return 'empty';
+    return RANK_STATE[shiftByFeel(rank, checkins.feltVsPlanned.get(date))]!;
   }
 
   const todayIso = isoDate(now);
   // Monday-aligned so row 0 of the grid is always Monday, row 6 always
-  // Sunday (M27.5). The window starts at the current week and runs forward
-  // (founder direction, 2026-09-18: this week is column 1, next week is
-  // column 2, and so on) rather than looking back — not-yet-happened days,
-  // which is most of the window, render as "empty", which is honest
-  // (nothing logged there yet), not a bug.
+  // Sunday. The window starts at the current week and runs forward (founder
+  // direction, 2026-09-18: this week is column 1, next week is column 2, and
+  // so on) — not-yet-happened days, which is most of the window, render as
+  // "empty", which is honest (nothing logged there yet), not a bug.
   const start = mondayOf(now);
   const days: RhythmDay[] = [];
   for (let i = 0; i < RHYTHM_WEEKS * 7; i++) {
     const date = isoDate(addDays(start, i));
-    days.push({ date, state: stateFor(date), is_today: date === todayIso });
+    days.push({ date, state: stateFor(date), is_today: date === todayIso, pain: checkins.pain.has(date) });
   }
   return days;
 }
@@ -115,7 +126,7 @@ export function describeConsistency(recentHard: ActualSession[], today: string):
   if (recentHard.length < CLUSTER_SOFTEN_MIN) {
     return {
       headline: 'Aligned with your normal',
-      detail: 'No unusual clustering of hard or off-plan days recently — pace, spacing and recovery all look steady.',
+      detail: 'No unusual clustering of hard days recently — pace, spacing and recovery all look steady.',
     };
   }
   const dayLabels = recentHard.map((s) => describeRecentDay(today, s.start_at.slice(0, 10)));

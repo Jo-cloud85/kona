@@ -2,6 +2,11 @@
 
 import { useState } from 'react';
 
+const FEEL: { value: 'easier' | 'as_expected' | 'harder'; label: string }[] = [
+  { value: 'easier', label: 'Easier than planned' },
+  { value: 'as_expected', label: 'About right' },
+  { value: 'harder', label: 'Harder than planned' },
+];
 const LEGS: { value: 'fresh' | 'normal' | 'heavy'; label: string }[] = [
   { value: 'fresh', label: 'Fresh' },
   { value: 'normal', label: 'Normal' },
@@ -18,8 +23,8 @@ const MOOD: { value: 'low' | 'ok' | 'good'; label: string }[] = [
   { value: 'good', label: 'Good' },
 ];
 
-type StepId = 'legs' | 'asPlanned' | 'pains' | 'sleep' | 'mood' | 'elaborate' | 'followed';
-const BASE_STEPS: StepId[] = ['legs', 'asPlanned', 'pains', 'sleep', 'mood', 'elaborate'];
+type StepId = 'feel' | 'legs' | 'asPlanned' | 'pains' | 'sleep' | 'mood' | 'elaborate' | 'followed';
+const BASE_STEPS: StepId[] = ['feel', 'legs', 'asPlanned', 'pains', 'sleep', 'mood', 'elaborate'];
 
 export default function CheckinDialog({
   onClose,
@@ -41,6 +46,7 @@ export default function CheckinDialog({
    *  plan-change proposal — that closes its own loop via Accept/Decline). */
   konaBriefing?: { action: string; why: string | null; category: string | null };
 }) {
+  const [feel, setFeel] = useState<'easier' | 'as_expected' | 'harder' | null>(null);
   const [legs, setLegs] = useState<'fresh' | 'normal' | 'heavy' | null>(null);
   const [asPlanned, setAsPlanned] = useState<boolean | null>(null);
   const [pains, setPains] = useState<boolean | null>(null);
@@ -87,6 +93,7 @@ export default function CheckinDialog({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          felt_vs_planned: feel ?? undefined,
           legs,
           went_as_planned: asPlanned,
           pains,
@@ -144,6 +151,28 @@ export default function CheckinDialog({
 
             <h2>How did {contextLabel ?? 'today'} go?</h2>
             {step === 0 && <p className="dialog-sub">A quick end-of-day check-in. Kona logs it — nothing gets diagnosed.</p>}
+
+            {current === 'feel' && (
+              <div className="field">
+                <label>
+                  How did it feel vs. the plan? <span className="hint">optional</span>
+                </label>
+                <div className="choice-row">
+                  {FEEL.map((f) => (
+                    <button
+                      key={f.value}
+                      className={`choice${feel === f.value ? ' on' : ''}`}
+                      onClick={() => pickAndAdvance(setFeel, f.value)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="checkin-skip" onClick={goNext}>
+                  Skip →
+                </button>
+              </div>
+            )}
 
             {current === 'legs' && (
               <div className="field">

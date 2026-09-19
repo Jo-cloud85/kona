@@ -148,6 +148,7 @@ function rowToRecoveryLog(r: Row): RecoveryLog {
     followed_category: (r.followed_category as string | null) ?? undefined,
     followed_outcome: (r.followed_outcome as RecoveryLog['followed_outcome']) ?? undefined,
     went_as_planned: (r.went_as_planned as boolean | null) ?? undefined,
+    felt_vs_planned: (r.felt_vs_planned as RecoveryLog['felt_vs_planned']) ?? undefined,
   }) as RecoveryLog;
 }
 
@@ -437,6 +438,7 @@ export class SupabaseRepository implements Repository {
       followed_category: input.followed_category ?? null,
       followed_outcome: input.followed_outcome ?? null,
       went_as_planned: input.went_as_planned ?? null,
+      felt_vs_planned: input.felt_vs_planned ?? null,
       origin_message_id: input.origin_message_id ?? null,
       logged_at: new Date().toISOString(),
     };

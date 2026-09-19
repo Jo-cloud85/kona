@@ -62,6 +62,7 @@ export {
   buildConsistencyDays,
   describeConsistency,
   type ConsistencyRead,
+  type FeltVsPlanned,
   type RhythmDay,
   type RhythmDayState,
 } from './rhythm';
