@@ -12,9 +12,16 @@ describe('buildCheckinLog', () => {
     });
     expect(log.free_text).toContain('legs felt normal');
     expect(log.free_text).toContain('Went as planned: yes');
-    expect(log.free_text).toContain('pains: no');
+    expect(log.free_text).toContain('Pains or injuries: no');
     expect(log.overall_severity).toBe('low');
     expect(log.reported_symptoms).toBeUndefined();
+  });
+
+  it('never mentions cramping in free_text just from answering "pains: yes" about something else (2026-09-19 regression — the old "Injuries / cramps / pains" boilerplate falsely tripped every cramp-keyword scanner on every Yes answer)', () => {
+    const log = buildCheckinLog({ legs: 'heavy', went_as_planned: true, pains: true, elaborate: 'left knee ached a bit' });
+    expect(log.free_text).not.toMatch(/cramp/i);
+    expect(log.reported_symptoms).toEqual(expect.arrayContaining(['knee']));
+    expect(log.reported_symptoms).not.toEqual(expect.arrayContaining(['cramp']));
   });
 
   it('raises severity and records a symptom when pains are reported', () => {

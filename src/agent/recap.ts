@@ -60,7 +60,7 @@ function parseCheckin(free_text: string): ParsedCheckin | null {
   if (!free_text.startsWith('End-of-day check-in')) return null;
   const feel = /legs felt (\w+)/.exec(free_text)?.[1];
   const plannedMatch = /Went as planned: (yes|no)/.exec(free_text)?.[1];
-  const painsMatch = /Injuries \/ cramps \/ pains: (yes|no)/.exec(free_text)?.[1];
+  const painsMatch = /Pains or injuries: (yes|no)/.exec(free_text)?.[1];
   if (!feel || !plannedMatch || !painsMatch) return null;
   const notes = /Notes: (.+)$/.exec(free_text)?.[1] ?? null;
   return { feel, went_as_planned: plannedMatch === 'yes', pains: painsMatch === 'yes', notes };

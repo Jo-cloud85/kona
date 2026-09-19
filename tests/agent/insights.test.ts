@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { deriveInsights, learnedCategoryInsights, recentSessionRead, similarSessionFlag, type InsightInput } from '../../src/agent/index';
+import {
+  buildCheckinLog,
+  deriveInsights,
+  learnedCategoryInsights,
+  recentSessionRead,
+  similarSessionFlag,
+  type InsightInput,
+} from '../../src/agent/index';
 import type { ActualSession, FuelLog, PersistedMemory, RecoveryLog } from '../../src/domain/types';
 
 let n = 0;
@@ -87,6 +94,19 @@ describe('deriveInsights', () => {
     expect(fact?.evidence.some((e) => /felt significant/.test(e))).toBe(true);
     // a moderate+ severity also yields a gentle recommendation
     expect(out.some((i) => i.kind === 'recommendation' && /get it assessed/i.test(i.text))).toBe(true);
+  });
+
+  it('does not fabricate a "cramping" pattern from ordinary check-ins about unrelated symptoms (2026-09-19 regression — the old free_text boilerplate contained the literal word "cramps" on every "pains: yes" answer)', () => {
+    const knee = buildCheckinLog({ legs: 'heavy', went_as_planned: true, pains: true, elaborate: 'left knee ached a bit' });
+    const soreness = buildCheckinLog({ legs: 'heavy', went_as_planned: true, pains: true, elaborate: 'general soreness, nothing specific' });
+    const out = deriveInsights({
+      ...EMPTY,
+      recoveryLogs: [
+        recovery({ logged_at: '2026-09-16T20:00:00Z', free_text: knee.free_text, reported_symptoms: knee.reported_symptoms }),
+        recovery({ logged_at: '2026-09-17T20:00:00Z', free_text: soreness.free_text, reported_symptoms: soreness.reported_symptoms }),
+      ],
+    });
+    expect(out.some((i) => /cramp/i.test(i.text))).toBe(false);
   });
 
   it('FACT when recent sessions repeatedly did not go to plan (no cause implied)', () => {

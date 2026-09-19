@@ -70,7 +70,15 @@ export function buildCheckinLog(input: CheckinInput): CheckinLog {
   const parts = [
     `End-of-day check-in — legs felt ${input.legs}.`,
     `Went as planned: ${input.went_as_planned ? 'yes' : 'no'}.`,
-    `Injuries / cramps / pains: ${input.pains ? 'yes' : 'no'}.`,
+    // Not "Injuries / cramps / pains" — that literal boilerplate contained
+    // the word "cramps" on every single Yes answer, which insights.ts's
+    // SYMPTOMS/CRAMP_RE scanners (they read the raw free_text, not just
+    // reported_symptoms, since chat-originated recovery logs have no
+    // structured field to fall back on) then matched as a real report of
+    // cramping regardless of what the actual pain was (founder report,
+    // 2026-09-19 — three straight check-ins for knee pain/soreness/stitches
+    // all surfaced as "you've noted cramping").
+    `Pains or injuries: ${input.pains ? 'yes' : 'no'}.`,
   ];
   if (input.felt_vs_planned && input.felt_vs_planned !== 'as_expected') {
     parts.push(`Felt ${input.felt_vs_planned === 'harder' ? 'harder' : 'easier'} than planned.`);
